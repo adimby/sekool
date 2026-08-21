@@ -38,6 +38,35 @@ Le document fonctionnel de référence est [`FANABE_Cahier_des_charges_SchoolOS_
 
 Justifications détaillées dans [`docs/architecture.md`](./docs/architecture.md#13-choix-techniques-et-justifications).
 
+## Démarrage local (phase 0)
+
+Prérequis : PHP 8.3+, Composer, PostgreSQL, Redis, Node 22+.
+
+```bash
+# Base et rôle applicatif (non-superuser, sans BYPASSRLS)
+createdb fanabe && createdb fanabe_test
+# ou : make up  (PostgreSQL / Redis / MinIO / Mailpit)
+
+cp api/.env.example api/.env
+# renseigner DB_* puis :
+cd api && composer install && php artisan key:generate && php artisan migrate --seed
+
+cd ../web && npm install && npm run dev
+# API : cd api && php artisan serve
+```
+
+Comptes de démonstration (mot de passe `password`) :
+
+- `direction.antsahabe@fanabe.test` — École Antsahabe
+- `direction.ambohipo@fanabe.test` — École Ambohipo
+
+```bash
+make test              # unitaires, fonctionnels, isolation, architecture
+make test-isolation    # école A ne lit jamais l'école B
+```
+
+Les tests d'isolation s'exécutent sur PostgreSQL réel (jamais SQLite) : Row Level Security n'existe pas ailleurs.
+
 ## Principes non négociables
 
 1. **L'isolation des dossiers ne se négocie pas.** Cloisonnement par établissement à tous les niveaux — jamais un masquage côté interface.

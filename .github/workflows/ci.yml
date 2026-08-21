@@ -1,0 +1,49 @@
+name: FANABE CI
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fanabe_test
+          POSTGRES_USER: fanabe
+          POSTGRES_PASSWORD: fanabe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pgsql, redis, mbstring, xml, curl, zip, intl, bcmath, pcntl
+          coverage: none
+
+      - name: Install API dependencies
+        working-directory: api
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Tests
+        working-directory: api
+        env:
+          APP_KEY: base64:2fl+KtvkbmTNcJSbdBuI2Yv22X7jfp0igpBGUd8E2EI=
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: fanabe_test
+          DB_USERNAME: fanabe
+          DB_PASSWORD: fanabe
+        run: php artisan test --testsuite=Unit,Feature,Isolation,Architecture
