@@ -1,1 +1,54 @@
-# sekool
+# FANABE
+
+**L'école, la famille, connectées.**
+
+Plateforme de pilotage scolaire et familial pour Madagascar : identité portable, recouvrement intelligent, suivi de la relation école-famille, intelligence opérationnelle et School Kit.
+
+FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance et de pilotage reliant établissement, famille et élève, conçue pour un environnement où la digitalisation est hétérogène.
+
+---
+
+## État du projet
+
+**Phase de conception. L'implémentation n'a pas commencé.**
+
+La séquence de travail est bloquante : audit du cahier des charges → ambiguïtés → architecture → modèle de données → périmètre du MVP → **validation explicite** → implémentation incrémentale.
+
+Les livrables de conception sont dans [`docs/`](./docs/README.md) et attendent validation. Six questions bloquent le démarrage : voir [`docs/open-questions.md`](./docs/open-questions.md).
+
+## Documentation
+
+| Document | Objet |
+|---|---|
+| [`docs/README.md`](./docs/README.md) | Index et ordre de lecture |
+| [`docs/spec-audit.md`](./docs/spec-audit.md) | Audit de cohérence du cahier des charges |
+| [`docs/open-questions.md`](./docs/open-questions.md) | Ambiguïtés à trancher |
+| [`docs/architecture.md`](./docs/architecture.md) | Architecture et choix techniques |
+| [`docs/identity-model.md`](./docs/identity-model.md) | Identité portable et FANABE Person ID |
+| [`docs/domain-model.md`](./docs/domain-model.md) | Modèle de domaine et schéma de données |
+| [`docs/security-model.md`](./docs/security-model.md) | Sécurité, confidentialité, conformité |
+| [`docs/mvp-scope.md`](./docs/mvp-scope.md) | Périmètre du MVP et plan de phases |
+
+Le document fonctionnel de référence est [`FANABE_Cahier_des_charges_SchoolOS_Madagascar.docx`](./FANABE_Cahier_des_charges_SchoolOS_Madagascar.docx). En cas de conflit, il fait foi.
+
+## Pile technique cible
+
+**Backend** — Laravel 13, PHP 8.4, API REST, PostgreSQL 18 (avec Row Level Security), Redis, stockage objet S3-compatible.
+**Frontend** — React 19, TypeScript, Vite, Tailwind CSS, PWA, React Router, TanStack Query, Zod.
+**Architecture** — Monolithe modulaire organisé par domaine métier, multi-tenant strict, intégrations externes derrière des adaptateurs.
+
+Justifications détaillées dans [`docs/architecture.md`](./docs/architecture.md#13-choix-techniques-et-justifications).
+
+## Principes non négociables
+
+1. **L'isolation des dossiers ne se négocie pas.** Cloisonnement par établissement à tous les niveaux — jamais un masquage côté interface.
+2. **Les faits avant les états.** On enregistre ce qui s'est produit ; les états dérivés sont recalculables.
+3. **Le cœur fonctionne seul.** Aucune fonctionnalité essentielle ne dépend d'une API externe payante.
+4. **Tout score est explicable.** Un indice qu'on ne peut pas décomposer en faits datés n'est pas livrable.
+5. **Rien d'automatique ne restreint un droit.** L'automatisation informe et priorise ; elle ne sanctionne jamais.
+6. **L'action avant le rapport.** Chaque écran répond à « que dois-je faire maintenant, et pourquoi ».
+7. **L'identité n'est jamais une clé d'accès.** Le FANABE Person ID identifie ; il n'authentifie pas.
+
+## Licence
+
+Non déterminée.
