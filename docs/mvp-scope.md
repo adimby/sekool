@@ -1,6 +1,6 @@
 # FANABE — Périmètre du MVP et plan de phases
 
-> **Statut : proposition — en attente de validation.**
+> **Statut : validé le 21 août 2026** — voir [`decisions.md`](./decisions.md).
 > Étape 6 de la séquence bloquante. Concilie §20 du cahier des charges (priorités P0/P1/P2), la roadmap §22, et la roadmap en 8 phases du brief §6.
 
 ## Sommaire
@@ -102,8 +102,8 @@ Ordre du brief §6 respecté, sans parallélisation ni saut d'étape. Chaque pha
 
 | Phase | Contenu | Dans le MVP | Bloqué par |
 |---|---|---|---|
-| **0 — Architecture** | Structure, conventions, auth, multi-tenancy, DB, design system | Oui | `Q-01`, `Q-02`, `Q-07`, `Q-12` |
-| **1 — Identity Foundation** | Person, FANABE ID, comptes, foyer, relations, inscription, permissions, audit | Oui | `Q-01`, `Q-15`, `Q-05` |
+| **0 — Architecture** | Structure, conventions, auth, multi-tenancy, DB, design system | Oui | **levé** |
+| **1 — Identity Foundation** | Person, FANABE ID, comptes, foyer, relations, inscription, permissions, audit, lien parent, transferts | Oui | **levé** (`Q-05` avis juridique en parallèle) |
 | **2 — School Core** | Écoles, classes, élèves, inscriptions, présence, frais, paiements | Oui | `Q-06`, `Q-11`, `Q-14` |
 | **3 — Collection Intelligence** | Moteur de risque, dashboard, alertes, workflows | Oui | `Q-08`, `Q-13` |
 | **4 — Reliability** | TrustEvent, Family / School Reliability, Relationship Health | Family Reliability | — |
@@ -111,7 +111,7 @@ Ordre du brief §6 respecté, sans parallélisation ni saut d'étape. Chaque pha
 | **6 — School Kit** | Catalogue, packs, fournisseurs, commandes | Non | `Q-03` |
 | **7 — Intelligence avancée** | Early Warning, cockpit enrichi, recommandations | Non | — |
 
-La colonne « bloqué par » est la raison d'être de [`open-questions.md`](./open-questions.md) : la phase 0 ne peut pas démarrer avant les réponses à `Q-01`, `Q-02`, `Q-07` et `Q-12`.
+Les questions bloquantes sont tranchées — voir [`decisions.md`](./decisions.md). La phase 0 démarre.
 
 ---
 

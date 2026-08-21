@@ -2,8 +2,8 @@
 
 > **FANABE — L'école, la famille, connectées.**
 >
-> **État du projet : conception. Aucune implémentation n'a démarré.**
-> La séquence de travail est bloquante : l'implémentation ne commence qu'après validation explicite des documents ci-dessous.
+> **État du projet : conception validée le 21 août 2026. Implémentation ouverte (phase 0).**
+> Décisions figées dans [`decisions.md`](./decisions.md).
 
 ## Source de vérité
 
@@ -14,14 +14,15 @@ Le document fonctionnel de référence est [`FANABE_Cahier_des_charges_SchoolOS_
 | # | Document | Objet | Étape |
 |---|---|---|---|
 | 1 | [`spec-audit.md`](./spec-audit.md) | Audit de cohérence du cahier des charges : tensions structurelles, divergences avec le brief, lacunes | 2 |
-| 2 | [`open-questions.md`](./open-questions.md) | 20 ambiguïtés à trancher, avec options et défauts recommandés | 3 |
+| 2 | [`open-questions.md`](./open-questions.md) | 20 ambiguïtés (historique) | 3 |
+| 2b | [`decisions.md`](./decisions.md) | Réponses actées — **lire en priorité** | 8 |
 | 3 | [`architecture.md`](./architecture.md) | Modèle à deux plans, découpage modulaire, isolation multi-tenant, ports et adaptateurs, choix techniques justifiés | 4 et 7 |
 | 4 | [`identity-model.md`](./identity-model.md) | FANABE Person ID, checksum, rattachement, données externes, Consent Center | 4 |
 | 5 | [`domain-model.md`](./domain-model.md) | Entités, schéma de données, contraintes, index, invariants | 5 |
 | 6 | [`security-model.md`](./security-model.md) | Menaces, isolation, authentification, autorisation, gouvernance des indices, conformité | 4 |
 | 7 | [`mvp-scope.md`](./mvp-scope.md) | Périmètre du MVP, plan de phases, définition de terminé, jeu de démonstration | 6 |
 
-Pour une lecture rapide : commencer par `spec-audit.md` §1 et §6 (le verdict et les points bloquants), puis `open-questions.md` (les six questions bloquantes), puis `architecture.md` §3 (le modèle à deux plans, qui conditionne tout le reste).
+Pour une lecture rapide : [`decisions.md`](./decisions.md), puis `architecture.md` §3 (le modèle à deux plans).
 
 ## Les trois idées à retenir
 
@@ -31,18 +32,9 @@ Pour une lecture rapide : commencer par `spec-audit.md` §1 et §6 (le verdict e
 
 **3. Aucun automatisme ne restreint un droit.** Les indices informent et priorisent ; ils ne refusent, ne bloquent et ne sanctionnent jamais. Traduit en code par un invariant testé : aucune politique d'autorisation ne lit un score. Voir [`security-model.md`](./security-model.md#12-gouvernance-des-indices).
 
-## Décisions en attente de validation
+## Décisions
 
-Six questions bloquent le démarrage de la phase 0. Elles sont détaillées dans [`open-questions.md`](./open-questions.md) :
-
-| Question | Sujet |
-|---|---|
-| `Q-01` | Frontière entre données globales et données cloisonnées |
-| `Q-02` | Mécanismes d'authentification sans dépendance payante |
-| `Q-03` | FANABE encaisse-t-il de l'argent ? |
-| `Q-04` | Portée réelle du Consent Center |
-| `Q-06` | Cible de la facturation : élève ou famille |
-| `Q-13` | Qui écrit les règles de workflow |
+Toutes les questions bloquantes sont tranchées. Voir [`decisions.md`](./decisions.md).
 
 ## Conventions
 

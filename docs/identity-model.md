@@ -1,6 +1,6 @@
 # FANABE — Modèle d'identité
 
-> **Statut : proposition — en attente de validation.**
+> **Statut : validé le 21 août 2026** — voir [`decisions.md`](./decisions.md) (`D-18`, `D-19`, `D-22`).
 > Traduit les §6.1 à §6.7 du cahier des charges, et tranche les décisions §27 relatives à l'identité.
 > Concepts d'architecture supposés connus : le modèle à deux plans de [`architecture.md`](./architecture.md#3-le-modèle-à-deux-plans).
 
@@ -195,29 +195,55 @@ Une même personne cumule les deux dimensions sans conflit : Mme R. est `teacher
 
 ## 5. Inscription et mobilité
 
-### 5.1 Changement d'école
+### 5.1 Une seule inscription active
+
+Décision `D-19` : au MVP, un élève a **au plus une inscription `active` à la fois** dans tout le réseau FANABE. Un parent peut avoir *plusieurs enfants* dans *plusieurs écoles* ; un même enfant ne peut pas figurer simultanément à l'effectif de deux écoles FANABE.
+
+La contrainte est exprimée en base :
+
+```sql
+CREATE UNIQUE INDEX enrollments_one_active_per_person
+  ON enrollments (person_id)
+  WHERE status = 'active';
+```
+
+Elle est globale (pas par `school_id`) : c'est l'une des rares contraintes qui traverse les tenants, et c'est volontaire.
+
+### 5.2 Transfert entre écoles FANABE
+
+Le changement d'école n'est plus un simple changement de statut local. C'est un objet `EnrollmentTransfer` qui exige **deux validations indépendantes** (`D-18`) :
+
+1. le parent autorise l'intégration dans l'école d'accueil ;
+2. l'école d'origine autorise le détachement de son effectif.
 
 ```
-Année N     École A   Enrollment #1  active
-Juillet N+1 École A   Enrollment #1  → transferred_out (motif, date, auteur)
-Septembre   École B   Enrollment #2  active
+École A  Enrollment #1  active
+                │
+                │  EnrollmentTransfer créé par l'école B
+                │    parent_approved_at     = …
+                │    origin_school_approved_at = …
+                ▼
+École A  Enrollment #1  transferred_out
+École B  Enrollment #2  active
 ```
 
-Le `Person` est inchangé — même identifiant, même clé primaire. L'école B ne voit **rien** de l'école A, sauf consentement (`R3`). C'est un test obligatoire du brief §5.
+Un refus ou un silence de l'école d'origine **laisse l'élève dans son effectif**. L'école B ne peut pas « prendre » un élève. Le `Person` est inchangé. L'école B ne voit **rien** de l'école A, sauf consentement (`R3`). Test obligatoire du brief §5.
 
-### 5.2 Élève devenu parent
+Si l'élève existe mais n'a **pas** d'inscription active (ancien élève, période externe) : validation du parent uniquement, pas d'école d'origine à consulter.
+
+### 5.3 Élève devenu parent
 
 Aucune nouvelle identité (§6.7). L'ancien élève acquiert le rôle `parent` et des relations `parent_of`. Sa propre inscription passée subsiste, et son rôle `student` est clos par `ended_at` sans être supprimé. Test obligatoire du brief §5.
 
-### 5.3 Multi-écoles pour un même parent
+### 5.4 Multi-écoles pour un même parent
 
 Un parent, un compte, plusieurs enfants dans plusieurs écoles (§6.5). Son espace agrège les établissements auxquels il a **droit d'accès** ; chaque bloc est cloisonné et étiqueté par école. Aucune école ne voit les autres, et le parent voit clairement où chaque information s'arrête.
 
 ---
 
-## 6. Rattachement d'une personne existante
+## 6. Parcours d'inscription et rattachement
 
-Le point le plus délicat du modèle. §6.5 exige la « réutilisation de la même identité **si la relation est confirmée** ». Tout le poids repose sur ce « si ».
+Source de vérité : [`decisions.md`](./decisions.md) (`D-18`, `D-22`). §6.5 exige la « réutilisation de la même identité **si la relation est confirmée** ». Le parcours ci-dessous est ce « si ».
 
 ### 6.1 Le risque
 
@@ -227,45 +253,53 @@ Si une école peut saisir un identifiant public et obtenir une fiche, alors :
 - une école concurrente vérifie si un élève est inscrit ailleurs ;
 - l'identifiant public devient de fait un mécanisme d'accès, ce que §6.4 interdit explicitement.
 
-### 6.2 Le flux retenu
+Les contacts (téléphone, email) ne sont **pas** dans le plafond `R2`. Une école ne les voit qu'après établissement d'un lien.
 
-```
-1. L'école saisit un identifiant public + au moins DEUX attributs concordants
-   (nom + date de naissance exacte, ou nom + téléphone du responsable)
-   → la date approximative (§2.1) n'est PAS un facteur valable
+### 6.2 Étape 1 — le parent a-t-il déjà un compte ?
 
-2. Le serveur crée une demande de rattachement et renvoie un identifiant
-   de demande opaque. Il ne dit JAMAIS si l'identifiant existe.
-   Réponse identique dans tous les cas.
+**Non.** L'école *crée* le compte parent (état civil + contacts saisis au comptoir). Ce n'est pas une consultation du plan plateforme : ce sont des données que l'école produit. Puis enchaînement sur l'élève (§6.3).
 
-3. Si les attributs concordent, la personne ou son responsable reçoit une
-   demande d'approbation sur son canal existant (application, SMS, ou code
-   imprimé remis par l'école).
+**Oui.** L'école ne cherche pas par téléphone. Elle demande l'un des deux :
 
-4. Approbation → création du lien + du consentement correspondant.
-   Refus ou silence → expiration à 14 jours, sans jamais confirmer l'existence.
+| Voie | Nature | Effet |
+|---|---|---|
+| **Lien généré par le parent** | Consentement consommable (`D-22`) | Rédemption → relation + consentement. L'école voit alors les attributs autorisés, contacts compris. |
+| **FANABE Person ID** | Identifiant, **pas** un secret | Demande de rattachement, **réponse uniforme** (aucune confirmation d'existence). Le parent doit confirmer (application ou code imprimé). Tant que ce n'est pas fait, l'école ne voit aucune coordonnée. |
 
-5. Toute tentative est journalisée : agent, établissement, IP, résultat.
-   Débit limité par agent, par école et par IP.
-```
+Le lien parent (`FamilyShareToken`) :
 
-L'étape 2 est ce qui distingue un rattachement d'un accès. L'école n'apprend rien tant que la famille n'a pas confirmé — la confirmation est la donnée, pas l'existence de l'identifiant.
+- généré par le parent dans son espace ;
+- jeton 160 bits, **stocké haché** ;
+- portée : quels enfants, quelles catégories de données, éventuellement quelle école ;
+- durée de vie courte (défaut 7 jours) ;
+- usage unique (consommé à la rédemption) ;
+- journalisé.
 
-### 6.3 La famille sans accès numérique
+L'identifiant public **n'est jamais un consentement**. Le saisir pointe ; il n'autorise rien.
 
-Le cas majoritaire du contexte cible, et celui qui ferait échouer le flux ci-dessus s'il n'était pas traité. Voie **hors ligne attestée** :
+### 6.3 Étape 2 — l'élève existe-t-il déjà ?
 
-- Un agent identifié de l'école déclare avoir vu un justificatif (ancien bulletin, carnet, acte de naissance).
-- Il téléverse la preuve numérisée et engage sa responsabilité nominative.
-- Le lien est créé avec `verification_method = staff_attested`, distinct d'une approbation par la famille.
-- La famille est notifiée par le canal disponible, impression incluse, et peut contester.
-- Ces rattachements sont dénombrés et exposés dans un tableau de contrôle plateforme : un pic d'attestations hors ligne dans une école est un signal d'abus à examiner.
+**Non.** L'école crée l'identité élève, la relation `parent_of`, et l'inscription.
 
-**Règle qui borne le risque, et qui vaut plus que toutes les vérifications ci-dessus :**
+**Oui.**
+
+1. Validation du parent pour intégrer l'élève dans *cette* école.
+2. Si l'élève a une inscription `active` dans une autre école FANABE → `EnrollmentTransfer` : l'école d'origine doit valider le détachement. Les deux validations sont obligatoires.
+3. Sinon (pas d'inscription active) → validation du parent seule.
+4. Puis création de l'inscription dans l'école d'accueil.
+
+Toute tentative est journalisée (agent, établissement, IP hachée, résultat) et limitée en débit par agent, par école et par IP. Les réponses restent uniformes : un identifiant inexistant et un identifiant hors périmètre produisent la même réponse.
+
+### 6.4 La famille sans accès numérique
+
+Deux cas distincts :
+
+- **Pas de compte** : l'école le crée au comptoir (§6.2). C'est le chemin principal hors ligne.
+- **Compte existant, ni identifiant ni lien sous la main** : voie exceptionnelle `staff_attested`. Un agent identifié déclare avoir vu un justificatif, téléverse la preuve, engage sa responsabilité nominative. La famille est notifiée par impression et peut contester. Ces rattachements sont dénombrés dans un tableau de contrôle plateforme.
+
+**Règle qui borne le risque :**
 
 > Un rattachement, quel que soit son mode, ouvre l'accès **aux seules données que la nouvelle école produira elle-même**. Il ne donne accès à **aucune** donnée d'un autre établissement (`R3`). Un rattachement frauduleux ne révèle donc rien d'historique.
-
-C'est cette règle qui rend le compromis acceptable : elle transforme une faille potentielle d'accès aux données en une simple erreur d'état civil, réversible.
 
 ---
 
@@ -425,3 +459,7 @@ Chaque ligne devient un test nommé. Les sept premiers correspondent aux tests o
 | `I-13` | Une révocation coupe les lectures futures et ne touche pas l'audit | `Consent/RevocationEffectTest` |
 | `I-14` | Un consentement expiré ne donne plus accès, sans intervention manuelle | `Consent/ExpiryEnforcementTest` |
 | `I-15` | Une fusion conserve les deux identifiants publics résolvables | `Identity/MergeKeepsPublicIdsTest` |
+| `I-16` | Un élève n'a qu'une inscription `active` à la fois dans tout FANABE | `Enrollment/SingleActiveEnrollmentTest` |
+| `I-17` | Un transfert n'est pas effectif sans validation parent **et** école d'origine | `Enrollment/TransferDualApprovalTest` |
+| `I-18` | Un lien parent est un consentement consommable ; un ID public n'en est pas un | `Identity/ShareTokenIsConsentTest` |
+| `I-19` | Les contacts d'un parent ne sont pas visibles avant établissement d'un lien | `Isolation/ParentContactVisibilityTest` |

@@ -1,6 +1,6 @@
 # FANABE — Modèle de sécurité et de conformité
 
-> **Statut : proposition — en attente de validation.**
+> **Statut : validé le 21 août 2026** — voir [`decisions.md`](./decisions.md).
 > Traduit §17 et §18 du cahier des charges, et les exigences de sécurité du brief §3.
 > Prérequis : [`architecture.md`](./architecture.md#7-multi-tenancy) et [`identity-model.md`](./identity-model.md).
 
@@ -109,9 +109,9 @@ Décision `Q-02` / `A-11` : aucune dépendance à une API payante sur le chemin 
 
 ### 3.2 Parent
 
-- Rattachement par **code d'invitation** émis par l'école (papier ou message), à usage unique, expirant.
+- Rattachement par **code d'invitation** émis par l'école (papier ou in-app), à usage unique, expirant.
 - Puis mot de passe ou code PIN long.
-- OTP SMS **optionnel**, uniquement si une passerelle est configurée, et jamais unique voie d'accès : une famille ne doit pas se retrouver enfermée hors de son compte parce que le crédit SMS de l'école est épuisé.
+- **Pas de SMS** (`D-20`) : ni comme second facteur, ni comme voie de récupération. Récupération par code imprimé remis par l'école, ou par email si un email est enregistré.
 - Session 30 jours (usage mobile occasionnel), révocable depuis l'appareil et par l'école.
 
 ### 3.3 Jetons

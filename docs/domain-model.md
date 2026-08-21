@@ -1,6 +1,6 @@
 # FANABE — Modèle de domaine et schéma de données
 
-> **Statut : proposition — en attente de validation.**
+> **Statut : validé le 21 août 2026** — voir [`decisions.md`](./decisions.md).
 > Étape 5 de la séquence bloquante. Traduit §16 du cahier des charges en un schéma exécutable.
 > Prérequis : [`architecture.md`](./architecture.md) (modèle à deux plans) et [`identity-model.md`](./identity-model.md).
 
@@ -133,9 +133,28 @@ L'index sur `object_person_id` est le chemin d'accès de la question la plus fr�
 
 ### `person_link_requests`
 
-Support du flux de rattachement (`identity-model.md` §6). `school_id`, `submitted_public_id_hash`, `matched_person_id` (**jamais renvoyé au client**), `status`, `attributes_matched`, `requested_by_person_id`, `ip_hash`, `expires_at`, `resolved_at`.
+Support de la voie « identifiant public » (`D-18`, `D-22`). `school_id`, `submitted_public_id_hash`, `matched_person_id` (**jamais renvoyé au client**), `status` (`pending` / `approved` / `denied` / `expired`), `requested_by_person_id`, `ip_hash`, `expires_at`, `resolved_at`.
 
-`submitted_public_id_hash` plutôt que l'identifiant en clair : une base de tentatives en clair constituerait une liste d'identifiants réels exploitable.
+`submitted_public_id_hash` plutôt que l'identifiant en clair : une base de tentatives en clair constituerait une liste d'identifiants réels exploitable. L'école ne reçoit **aucune** coordonnée tant que le parent n'a pas confirmé.
+
+### `family_share_tokens` — plan plateforme
+
+Lien généré par le parent, qui **fait office de consentement** (`D-22`).
+
+| Colonne | Type | Notes |
+|---|---|---|
+| `created_by_person_id` | `uuid` | Le parent |
+| `token_hash` | `bytea` UNIQUE | SHA-256 de 160 bits d'aléa — **jamais le jeton en clair** |
+| `child_person_ids` | `uuid[]` | Enfants concernés |
+| `scopes` | `jsonb` | Portées de consentement accordées |
+| `target_school_id` | `uuid` nullable | Restreint à une école, ou ouvert |
+| `expires_at` | `timestamptz` | Défaut 7 jours |
+| `redeemed_at`, `redeemed_by_school_id`, `redeemed_by_person_id` | | Consommé à la première rédemption |
+| `revoked_at` | | Révoqué par le parent avant usage |
+
+```sql
+CHECK (redeemed_at IS NULL OR redeemed_by_school_id IS NOT NULL)
+```
 
 ### `families` et `family_members`
 
@@ -245,9 +264,29 @@ UNIQUE (school_id, school_year_id, person_id)   -- une inscription par année et
 UNIQUE (school_id, student_number)
 FOREIGN KEY (school_id, classroom_id) REFERENCES classrooms (school_id, id)
 INDEX (school_id, status, school_year_id)
+-- Une seule inscription active à la fois dans TOUT le réseau FANABE (D-19) :
+CREATE UNIQUE INDEX enrollments_one_active_per_person
+  ON enrollments (person_id) WHERE status = 'active';
 ```
 
 `enrollment_status_changes` — **append-only** : `enrollment_id`, `from_status`, `to_status`, `reason`, `occurred_at`, `actor_person_id`. Un statut n'est jamais écrasé sans laisser de trace ; « pourquoi cet élève est-il parti en mars ? » a une réponse.
+
+### `enrollment_transfers`
+
+Objet de premier plan du transfert (`D-18`, `D-19`). Ne porte **pas** de `school_id` unique : il relie deux établissements. Isolation : chaque école ne voit que les transferts où elle est origine ou accueil.
+
+| Colonne | Type | Notes |
+|---|---|---|
+| `person_id` | `uuid` | L'élève |
+| `origin_school_id`, `origin_enrollment_id` | `uuid` | École et inscription à quitter |
+| `destination_school_id` | `uuid` | École d'accueil |
+| `requested_by_person_id` | `uuid` | Agent de l'école d'accueil, ou parent |
+| `parent_approved_at`, `parent_approved_by_person_id` | | Validation parent |
+| `origin_school_approved_at`, `origin_approved_by_person_id` | | Détachement |
+| `status` | `enum` | `pending_parent` / `pending_origin_school` / `approved` / `rejected` / `cancelled` / `completed` |
+| `completed_at`, `rejected_at`, `rejection_reason` | | |
+
+Un transfert ne passe à `approved` que lorsque **les deux** validations sont présentes. L'application à `completed` ferme l'inscription d'origine (`transferred_out`) et ouvre l'inscription d'accueil dans une **même transaction**.
 
 ### `external_education_periods` — plan plateforme
 

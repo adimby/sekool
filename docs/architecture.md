@@ -1,8 +1,7 @@
 # FANABE — Architecture
 
-> **Statut : proposition — en attente de validation.**
-> Étapes 4 et 7 de la séquence bloquante. Aucun code n'est écrit avant validation.
-> Prérequis de lecture : [`spec-audit.md`](./spec-audit.md) et [`open-questions.md`](./open-questions.md).
+> **Statut : validé le 21 août 2026** — voir [`decisions.md`](./decisions.md).
+> Prérequis de lecture : [`spec-audit.md`](./spec-audit.md), [`open-questions.md`](./open-questions.md), [`decisions.md`](./decisions.md).
 
 ## Sommaire
 
@@ -32,7 +31,7 @@ Sept principes qui départagent les décisions en cas de doute, par ordre de pri
 
 1. **L'isolation des dossiers ne se négocie pas.** Toute fonctionnalité qui rendrait l'isolation multi-tenant plus difficile à prouver est refusée, même si elle est utile.
 2. **Les faits avant les états.** On enregistre ce qui s'est produit ; les états dérivés sont recalculables. Un état écrasé est une information perdue (brief §3, cahier des charges §17).
-3. **Le cœur fonctionne seul.** Aucune fonctionnalité essentielle ne dépend d'une API externe payante. SMS, WhatsApp et paiement sont des adaptateurs facultatifs ; le canal papier et la saisie manuelle sont des chemins de premier plan, pas des dégradations.
+3. **Le cœur fonctionne seul.** Aucune fonctionnalité essentielle ne dépend d'une API externe payante. SMS et WhatsApp sont des adaptateurs facultatifs **hors MVP** (`D-20`) ; le canal papier, l'application et l'email sont les chemins de premier plan. FANABE n'encaisse pas (`D-15`, `D-21`).
 4. **Tout score est explicable.** Un indice qu'on ne peut pas décomposer en faits datés n'est pas livrable (§9.1, §18).
 5. **Rien d'automatique ne restreint un droit.** L'automatisation informe et priorise ; elle ne refuse, ne bloque et ne sanctionne jamais (`A-04`).
 6. **L'action avant le rapport.** Chaque écran répond à « que dois-je faire maintenant, et pourquoi ». Un tableau qui n'induit pas d'action est un tableau à refaire.
@@ -97,7 +96,7 @@ Ces trois règles constituent le cœur du modèle de sécurité et sont directem
 
 > **R1 — Règle du lien.** Un établissement ne peut lire une fiche `Person` que s'il détient un **lien actif** : soit une inscription de cette personne, soit une relation entre cette personne et un élève qu'il inscrit. Sans lien, la personne est inexistante de son point de vue — et l'API répond de manière **uniforme**, sans révéler la différence entre « n'existe pas » et « existe mais sans lien ».
 
-> **R2 — Règle du plafond.** Même avec un lien actif, un établissement ne voit du plan plateforme qu'un **jeu d'attributs civils minimal** : nom, prénom, date de naissance, sexe, contacts. Jamais les autres inscriptions, ni les autres écoles, ni la fratrie ailleurs.
+> **R2 — Règle du plafond.** Même avec un lien actif, un établissement ne voit du plan plateforme qu'un **jeu d'attributs civils minimal** : nom, prénom, date de naissance, sexe. **Les contacts (téléphone, email) ne sont visibles qu'après établissement d'un lien** — rédemption d'un lien parent, ou confirmation d'une demande initiée par identifiant public (`D-18`, `D-22`). Jamais les autres inscriptions, ni les autres écoles, ni la fratrie ailleurs.
 
 > **R3 — Règle du consentement.** Tout accès à une donnée produite par un **autre** établissement exige un `Consent` actif, non expiré, non révoqué, dont la portée et la finalité couvrent la lecture demandée. Le rattachement d'une personne ne vaut jamais consentement.
 
@@ -131,7 +130,7 @@ Réconciliation de §15.2 et du brief §2 (voir `A-07`). Trois modules sont **aj
 | `Academic` | Présence, notes, périodes d'évaluation, bulletins | Ne décide pas des alertes |
 | `Finance` | Barèmes de frais, affectation, factures, échéances, paiements, remises, reçus | Ne juge pas le risque |
 | `Collection` | Ancienneté de créance, ponctualité, niveau de risque à 4 paliers, prévision, file de relance | N'envoie pas les messages |
-| `SchoolKit` | Besoins par classe, packs Eco/Standard/Premium, fournisseurs, panier, commandes, commission | N'encaisse pas (`Q-03`) |
+| `SchoolKit` | Besoins par classe, packs Eco/Standard/Premium, fournisseurs, panier, commandes, commission | N'encaisse pas (`D-15`, `D-21`) |
 
 ### 4.3 Moteurs
 
@@ -291,11 +290,11 @@ Application du principe n°3. Tout franchissement de la frontière du système p
 
 | Port | Défaut (aucune dépendance externe) | Adaptateurs ultérieurs |
 |---|---|---|
-| `SmsGateway` | `NullSmsGateway` (journalise, marque `unknown`) | Passerelle locale, opérateurs |
+| `SmsGateway` | `NullSmsGateway` — **aucun parcours MVP ne l'appelle** (`D-20`) | Passerelle locale, plus tard |
 | `WhatsAppGateway` | Absent — non configuré = canal indisponible | API Cloud officielle |
 | `MailGateway` | SMTP (Mailpit en développement) | Fournisseur transactionnel |
 | `PrintSpooler` | **File d'impression + PDF groupé** — canal de premier plan (§12) | — |
-| `PaymentGateway` | `ManualPaymentRecorder` (saisie caisse) | Mobile money, PSP (`Q-03`) |
+| `PaymentGateway` | `ManualPaymentRecorder` (saisie caisse). School Kit : paiement chez le fournisseur (`D-21`) | Mobile money, PSP — hors MVP |
 | `DocumentSigner` | `PlatformAttestationSigner` (Ed25519 sur l'empreinte, clé identifiée et rotative) | Signature qualifiée conforme 2014-025 |
 | `ObjectStorage` | MinIO en développement, S3 en production | — |
 | `NationalIdentityDirectory` | Absent | PRODIGY, le jour où une API existe |
@@ -483,20 +482,25 @@ Les sept tests critiques exigés par le brief §5 sont tracés vers des fichiers
 
 | # | Décision | Statut |
 |---|---|---|
-| `D-01` | Modèle à deux plans (plateforme / établissement) | **À valider** (`Q-01`) |
-| `D-02` | Base unique, schéma partagé, `school_id` obligatoire | Proposé |
-| `D-03` | Cinq barrières d'isolation, dont RLS et clés composites | Proposé |
-| `D-04` | Trois modules ajoutés : `Academic`, `Consent`, `Platform` | **À valider** (`Q-01`) |
-| `D-05` | Deptrac en CI comme garde des frontières | Proposé |
-| `D-06` | Event sourcing ciblé, non généralisé | Proposé |
-| `D-07` | Sanctum + TOTP ; OIDC repoussé | **À valider** (`Q-02`) |
-| `D-08` | UUID v4 pour les entités exposées, v7 pour le reste | Proposé |
-| `D-09` | Boîte d'envoi obligatoire pour tout message sortant | Proposé |
-| `D-10` | Impression comme adaptateur de premier plan | Proposé |
-| `D-11` | Modèles de lecture pour le cockpit, fraîcheur affichée | Proposé |
-| `D-12` | `bigint` en unités d'Ariary, `Money` obligatoire | Proposé |
-| `D-13` | Aucune politique d'autorisation ne lit un score | Proposé |
-| `D-14` | Hors ligne : lecture + présence uniquement | **À valider** (`Q-07`) |
-| `D-15` | Aucun encaissement par FANABE au MVP | **À valider** (`Q-03`) |
-| `D-16` | Checksum modulo 23, alphabet de 23 lettres | **À valider** (`G-15`) |
-| `D-17` | Templates de workflow plateforme, paramétrés par école | **À valider** (`Q-13`) |
+| `D-01` | Modèle à deux plans (plateforme / établissement) | **Acté** |
+| `D-02` | Base unique, schéma partagé, `school_id` obligatoire | **Acté** |
+| `D-03` | Cinq barrières d'isolation, dont RLS et clés composites | **Acté** |
+| `D-04` | Trois modules ajoutés : `Academic`, `Consent`, `Platform` | **Acté** |
+| `D-05` | Deptrac en CI comme garde des frontières | **Acté** |
+| `D-06` | Event sourcing ciblé, non généralisé | **Acté** |
+| `D-07` | Sanctum + TOTP ; pas de SMS ; OIDC repoussé | **Acté** (`D-20`) |
+| `D-08` | UUID v4 pour les entités exposées, v7 pour le reste | **Acté** |
+| `D-09` | Boîte d'envoi obligatoire pour tout message sortant | **Acté** |
+| `D-10` | Impression comme adaptateur de premier plan | **Acté** |
+| `D-11` | Modèles de lecture pour le cockpit, fraîcheur affichée | **Acté** |
+| `D-12` | `bigint` en unités d'Ariary, `Money` obligatoire | **Acté** |
+| `D-13` | Aucune politique d'autorisation ne lit un score | **Acté** |
+| `D-14` | Hors ligne : lecture + présence uniquement | **Acté** |
+| `D-15` | Aucun encaissement par FANABE au MVP | **Acté** |
+| `D-16` | Checksum modulo 23, alphabet de 23 lettres | **Acté** |
+| `D-17` | Templates de workflow plateforme, paramétrés par école | **Acté** |
+| `D-18` | Parcours d'inscription : ID ou lien parent, puis élève | **Acté** — [`decisions.md`](./decisions.md) |
+| `D-19` | Une inscription active à la fois ; transfert à double validation | **Acté** |
+| `D-20` | Aucun SMS dans le MVP | **Acté** |
+| `D-21` | Paiement School Kit chez le fournisseur | **Acté** |
+| `D-22` | Lien parent = consentement ; identifiant public ≠ consentement | **Acté** |

@@ -1,7 +1,7 @@
 # FANABE — Ambiguïtés et décisions à trancher
 
-> **Statut : en attente de réponses.**
-> Étape 3 de la séquence bloquante. Chaque question propose un **défaut recommandé** : en l'absence de réponse, c'est ce défaut qui sera retenu, mais les questions marquées **BLOQUANTE** ne peuvent pas être tranchées par défaut car une erreur y est structurellement coûteuse.
+> **Statut : tranché le 21 août 2026.** Voir [`decisions.md`](./decisions.md) — ce fichier conserve l'historique des questions.
+> Toutes les questions bloquantes ont une réponse. L'implémentation (étape 9) est ouverte.
 
 ## Comment répondre
 

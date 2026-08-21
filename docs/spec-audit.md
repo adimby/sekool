@@ -1,6 +1,6 @@
 # FANABE — Audit de cohérence du cahier des charges
 
-> **Statut : proposition — en attente de validation.**
+> **Statut : audit clos le 21 août 2026.** Les résolutions proposées ont été tranchées dans [`decisions.md`](./decisions.md).
 > Source de vérité auditée : `FANABE_Cahier_des_charges_SchoolOS_Madagascar.docx` (v0.1, cadrage fonctionnel, 27 sections).
 > Ce document correspond à l'**étape 2** de la séquence bloquante. Il ne contient aucune décision définitive : chaque contradiction est accompagnée d'une **résolution proposée** qui doit être validée.
 

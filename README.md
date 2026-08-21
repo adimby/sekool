@@ -10,17 +10,16 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## État du projet
 
-**Phase de conception. L'implémentation n'a pas commencé.**
+**Conception validée le 21 août 2026. Implémentation en cours — phase 0 (architecture).**
 
-La séquence de travail est bloquante : audit du cahier des charges → ambiguïtés → architecture → modèle de données → périmètre du MVP → **validation explicite** → implémentation incrémentale.
-
-Les livrables de conception sont dans [`docs/`](./docs/README.md) et attendent validation. Six questions bloquent le démarrage : voir [`docs/open-questions.md`](./docs/open-questions.md).
+Décisions figées dans [`docs/decisions.md`](./docs/decisions.md).
 
 ## Documentation
 
 | Document | Objet |
 |---|---|
 | [`docs/README.md`](./docs/README.md) | Index et ordre de lecture |
+| [`docs/decisions.md`](./docs/decisions.md) | Décisions actées |
 | [`docs/spec-audit.md`](./docs/spec-audit.md) | Audit de cohérence du cahier des charges |
 | [`docs/open-questions.md`](./docs/open-questions.md) | Ambiguïtés à trancher |
 | [`docs/architecture.md`](./docs/architecture.md) | Architecture et choix techniques |
