@@ -59,6 +59,50 @@ final class TenantContext
         return new self(null, null, false, true);
     }
 
+    /**
+     * Run a callback under a nested context, then restore the previous one.
+     * Used for the rare cross-tenant reads/writes that the identity model allows
+     * (active-enrollment lookup, transfer completion).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function run(self $context, callable $callback): mixed
+    {
+        $previous = self::$current;
+        self::activate($context);
+
+        try {
+            return $callback();
+        } finally {
+            if ($previous !== null) {
+                self::activate($previous);
+            } else {
+                self::clear();
+            }
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function runWithRlsBypass(callable $callback): mixed
+    {
+        $previous = self::$current;
+
+        return self::run(new self(
+            $previous?->schoolId,
+            $previous?->personId,
+            $previous?->isPlatformAdmin ?? false,
+            true,
+        ), $callback);
+    }
+
     public static function activate(self $context): void
     {
         self::$current = $context;

@@ -32,6 +32,16 @@ class DatabaseSeeder extends Seeder
             adminEmail: 'direction.ambohipo@fanabe.test',
         );
 
+        $this->seedSchool(
+            name: 'École Itaosy',
+            code: 'itaosy',
+            city: 'Antananarivo',
+            plan: 'starter',
+            adminEmail: 'direction.itaosy@fanabe.test',
+        );
+
+        $this->call(PersonaSeeder::class);
+
         TenantContext::clear();
     }
 
