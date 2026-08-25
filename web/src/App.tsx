@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api, clearSession, loadSession, saveSession, type Session } from './session'
 
 type PersonRow = {
