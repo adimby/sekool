@@ -19,13 +19,28 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-# Render generateValue is raw base64; Laravel needs the base64: prefix.
-if [ -n "${APP_KEY:-}" ] && [[ "${APP_KEY}" != base64:* ]]; then
-  export APP_KEY="base64:${APP_KEY}"
+KEY_DIR="/var/fanabe-keys"
+KEY_FILE="${KEY_DIR}/app.key"
+
+normalize_app_key() {
+  if [ -n "${APP_KEY:-}" ] && [[ "${APP_KEY}" != base64:* ]]; then
+    export APP_KEY="base64:${APP_KEY}"
+  fi
+}
+
+if [ -z "${APP_KEY:-}" ] && [ -f "${KEY_FILE}" ]; then
+  export APP_KEY="$(tr -d '[:space:]' < "${KEY_FILE}")"
 fi
+
+normalize_app_key
 
 if [ -z "${APP_KEY:-}" ]; then
   php artisan key:generate --force
+  if [ -d "${KEY_DIR}" ]; then
+    sed -n 's/^APP_KEY=//p' .env | head -1 | tr -d '[:space:]' > "${KEY_FILE}"
+  fi
+elif [ -d "${KEY_DIR}" ] && [ ! -f "${KEY_FILE}" ]; then
+  printf '%s\n' "${APP_KEY}" > "${KEY_FILE}"
 fi
 
 php artisan package:discover --ansi --no-interaction >/dev/null 2>&1 || true

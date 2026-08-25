@@ -1,3 +1,10 @@
+# Infra interne (aucun port hôte).
+# Dev local     : make up     → compose.dev.yaml publie 5432, MinIO, Mailpit
+# Démo sur VPS  : make vps    → service `app` (HTTP), Postgres non exposé
+#
+# Redis n'est PAS publié sur 6379 : un Redis hôte (fréquent sur un VPS)
+# occupe déjà ce port. La démo phase 1 n'en a pas besoin (cache fichier).
+
 services:
   db:
     image: postgres:16-alpine
@@ -5,8 +12,6 @@ services:
       POSTGRES_DB: fanabe
       POSTGRES_USER: fanabe
       POSTGRES_PASSWORD: fanabe
-    ports:
-      - "5432:5432"
     volumes:
       - fanabe_pg:/var/lib/postgresql/data
     healthcheck:
@@ -14,11 +19,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
@@ -26,18 +31,42 @@ services:
     environment:
       MINIO_ROOT_USER: fanabe
       MINIO_ROOT_PASSWORD: fanabes3pass
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     volumes:
       - fanabe_minio:/data
+    restart: unless-stopped
 
   mailpit:
     image: axllent/mailpit:latest
+    restart: unless-stopped
+
+  app:
+    profiles: ["vps"]
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${FANABE_HTTP_PORT:-80}:8000"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${APP_URL:-http://localhost}
+      APP_KEY: ${APP_KEY:-}
+      DB_CONNECTION: pgsql
+      DATABASE_URL: postgres://fanabe:fanabe@db:5432/fanabe
+      DB_SSLMODE: disable
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: sync
+      HASH_DRIVER: bcrypt
+      LOG_CHANNEL: stderr
+    volumes:
+      - fanabe_keys:/var/fanabe-keys
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   fanabe_pg:
   fanabe_minio:
+  fanabe_keys:

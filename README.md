@@ -42,9 +42,35 @@ Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Docker
 | **Railway** | Même `Dockerfile` à la racine, Postgres en un clic. Très proche de Render. |
 | **Fly.io** | `fly launch` sur le Dockerfile, plus de contrôle, un peu plus de CLI. |
 | **Laravel Cloud** | Le plus natif pour Laravel, souvent plus cher pour une simple démo. |
-| **VPS** (Hetzner, OVH, Scaleway) | Meilleur rapport qualité/prix pour la vraie prod à Madagascar, plus tard. |
+| **VPS** (Hetzner, OVH, Contabo, etc.) | `make vps` : Docker construit l’image et sert FANABE sur le port 80. |
 
-Prérequis : PHP 8.3+, Composer, PostgreSQL, Redis, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
+### VPS (`make vps`) — si `make up` échoue sur le port 6379
+
+`make up` ne lance **pas** FANABE : seulement Postgres, Redis, MinIO et Mailpit, pour développer l’API sur la machine. Sur un VPS, le port **6379** est souvent déjà pris par un Redis installé (erreur `Bind for 0.0.0.0:6379 failed: port is already allocated`). Redis n’est pas requis pour la démo phase 1.
+
+```bash
+cd /opt/project/sekool   # ou le chemin du clone
+git fetch origin
+git checkout cursor/fanabe-architecture-docs-3345
+git pull
+
+# Arrêter les conteneurs déjà créés (Mailpit / MinIO ont pu démarrer)
+docker compose down
+
+cp -n .env.example .env
+# Éditer .env : APP_URL=http://VOTRE_IP   (ou https://votre-domaine)
+# Si le port 80 est pris : FANABE_HTTP_PORT=8080
+
+make vps
+```
+
+Ouvrir `http://VOTRE_IP` (ou `:8080`). Comptes : `direction.antsahabe@fanabe.test` / `password`.
+
+Postgres n’est plus exposé sur Internet ; seuls HTTP (et le Redis interne au réseau Docker, sans port hôte) restent. La clé Laravel est persistée dans le volume `fanabe_keys` pour survivre aux rebuilds.
+
+Si 5432 est aussi occupé, `make vps` n’en a pas besoin : l’app parle à Postgres **dans** Docker.
+
+Prérequis local (sans `make vps`) : PHP 8.3+, Composer, PostgreSQL, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
 
 ```bash
 git clone https://github.com/adimby/sekool.git
