@@ -14,7 +14,35 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## Tester sur votre machine (recommandé)
 
-Il n'y a pas encore d'hébergement public FANABE. La machine Cloud Agent n'est pas un site internet. Pour cliquer dans l'interface, lancez la démo **en local** :
+Il n’y a pas encore de domaine `fanabe.mg`. Pour une **URL publique de démo**, Render (Docker) est le plus simple. Vercel n’héberge pas Laravel + PostgreSQL/RLS de façon fiable.
+
+### Pourquoi pas Vercel
+
+Vercel est fait pour du frontend (React) et des fonctions serverless. FANABE a besoin d’un process PHP durable, de PostgreSQL avec Row Level Security, et (plus tard) de Redis. Un runtime PHP communautaire existe, ce n’est pas un socle pour ce produit.
+
+Tu pourras un jour mettre **seulement** le frontend sur Vercel, avec l’API ailleurs. Pour tester aujourd’hui, un seul service qui sert l’interface et l’API est plus simple.
+
+### Render (recommandé pour la démo)
+
+1. Compte sur [render.com](https://render.com), GitHub connecté à `adimby/sekool`.
+2. **New → Blueprint** → ce dépôt, branche `cursor/fanabe-architecture-docs-3345` (`render.yaml`).
+3. Attendre le build Docker. L’URL ressemble à `https://fanabe-xxxx.onrender.com`.
+4. Comptes : `direction.antsahabe@fanabe.test` / `password`, `parent.andry@fanabe.test` / `password`.
+
+Le premier démarrage crée les extensions Postgres, migre, et sème les personas. Les redémarrages ne réécrasent pas les données.
+
+**À savoir :** c’est une démo (mots de passe publics, pas de Redis). Le plan gratuit Render peut s’endormir après inactivité et le Postgres gratuit est purgé au bout de 90 jours. Ce n’est pas la prod FANABE.
+
+Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Dockerfile à la racine, `DATABASE_URL` = Internal Database URL, `APP_ENV=production`, `APP_DEBUG=false`.
+
+### Autres alternatives
+
+| Plateforme | Verdict |
+|---|---|
+| **Railway** | Même `Dockerfile` à la racine, Postgres en un clic. Très proche de Render. |
+| **Fly.io** | `fly launch` sur le Dockerfile, plus de contrôle, un peu plus de CLI. |
+| **Laravel Cloud** | Le plus natif pour Laravel, souvent plus cher pour une simple démo. |
+| **VPS** (Hetzner, OVH, Scaleway) | Meilleur rapport qualité/prix pour la vraie prod à Madagascar, plus tard. |
 
 Prérequis : PHP 8.3+, Composer, PostgreSQL, Redis, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
 

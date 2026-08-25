@@ -30,6 +30,9 @@ class PersonaSeeder extends Seeder
 {
     public function run(): void
     {
+        if (Person::query()->where('email', 'parent.andry@fanabe.test')->exists()) {
+            return;
+        }
         $antsahabe = School::query()->where('code', 'antsahabe')->firstOrFail();
         $ambohipo = School::query()->where('code', 'ambohipo')->firstOrFail();
 

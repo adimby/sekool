@@ -47,15 +47,21 @@ class DatabaseSeeder extends Seeder
 
     private function seedSchool(string $name, string $code, string $city, string $plan, string $adminEmail): void
     {
-        $school = School::query()->create([
-            'name' => $name,
-            'short_name' => explode(' ', $name)[1] ?? $name,
-            'code' => $code,
-            'city' => $city,
-            'region' => 'Analamanga',
-            'plan' => $plan,
-            'status' => 'active',
-        ]);
+        $school = School::query()->firstOrCreate(
+            ['code' => $code],
+            [
+                'name' => $name,
+                'short_name' => explode(' ', $name)[1] ?? $name,
+                'city' => $city,
+                'region' => 'Analamanga',
+                'plan' => $plan,
+                'status' => 'active',
+            ],
+        );
+
+        if (UserAccount::query()->where('email', $adminEmail)->exists()) {
+            return;
+        }
 
         $account = UserAccount::factory()->create([
             'email' => $adminEmail,

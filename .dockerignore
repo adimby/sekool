@@ -1,0 +1,14 @@
+.git
+**/.env
+**/.env.*
+!**/.env.example
+api/vendor
+api/node_modules
+web/node_modules
+web/dist
+**/storage/logs/*
+**/storage/framework/cache/*
+**/storage/framework/sessions/*
+**/storage/framework/views/*
+**/.phpunit.cache
+**/node_modules
