@@ -10,9 +10,44 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## État du projet
 
-**Conception validée le 21 août 2026. Implémentation en cours — phase 0 (architecture).**
+**Conception validée le 21 août 2026. Phases 0 et 1 livrées** (identité, inscriptions, transferts). Phase 2 (classes, présence, frais) pas encore ouverte.
 
-Décisions figées dans [`docs/decisions.md`](./docs/decisions.md).
+## Tester sur votre machine (recommandé)
+
+Il n'y a pas encore d'hébergement public FANABE. La machine Cloud Agent n'est pas un site internet. Pour cliquer dans l'interface, lancez la démo **en local** :
+
+Prérequis : PHP 8.3+, Composer, PostgreSQL, Redis, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
+
+```bash
+git clone https://github.com/adimby/sekool.git
+cd sekool
+git checkout cursor/fanabe-architecture-docs-3345
+
+# PostgreSQL / Redis / MinIO / Mailpit
+make up
+
+cp -n api/.env.example api/.env
+cd api && composer install && php artisan key:generate && php artisan migrate --seed && php artisan serve
+```
+
+Dans un second terminal :
+
+```bash
+cd web && npm install && npm run dev
+```
+
+Ouvrir **http://127.0.0.1:5173**
+
+| Compte | Email | Mot de passe | Ce que vous voyez |
+|---|---|---|---|
+| Direction Antsahabe | `direction.antsahabe@fanabe.test` | `password` | Inscrire une famille, liste des personnes liées |
+| Direction Ambohipo | `direction.ambohipo@fanabe.test` | `password` | Idem, autre école (isolation) |
+| Parent Andry (persona A) | `parent.andry@fanabe.test` | `password` | Ses deux enfants, deux écoles |
+| Parent de Fanja | `parent.d@fanabe.test` | `password` | Espace famille |
+
+Après une inscription, un **code d'invitation** s'affiche : onglet « Code d'invitation » pour activer le compte parent (email + mot de passe choisis).
+
+`make demo` rappelle ces commandes. Les tests : `cd api && php artisan test` (PostgreSQL obligatoire, jamais SQLite).
 
 ## Documentation
 
@@ -37,28 +72,6 @@ Le document fonctionnel de référence est [`FANABE_Cahier_des_charges_SchoolOS_
 **Architecture** — Monolithe modulaire organisé par domaine métier, multi-tenant strict, intégrations externes derrière des adaptateurs.
 
 Justifications détaillées dans [`docs/architecture.md`](./docs/architecture.md#13-choix-techniques-et-justifications).
-
-## Démarrage local (phase 0)
-
-Prérequis : PHP 8.3+, Composer, PostgreSQL, Redis, Node 22+.
-
-```bash
-# Base et rôle applicatif (non-superuser, sans BYPASSRLS)
-createdb fanabe && createdb fanabe_test
-# ou : make up  (PostgreSQL / Redis / MinIO / Mailpit)
-
-cp api/.env.example api/.env
-# renseigner DB_* puis :
-cd api && composer install && php artisan key:generate && php artisan migrate --seed
-
-cd ../web && npm install && npm run dev
-# API : cd api && php artisan serve
-```
-
-Comptes de démonstration (mot de passe `password`) :
-
-- `direction.antsahabe@fanabe.test` — École Antsahabe
-- `direction.ambohipo@fanabe.test` — École Ambohipo
 
 ```bash
 make test              # unitaires, fonctionnels, isolation, architecture

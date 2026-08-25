@@ -19,9 +19,6 @@ final class ClaimInvitationController extends Controller
 
         $result = $claim->execute($data['code'], $data['email'], $data['password']);
 
-        return response()->json([
-            'token' => $result['token'],
-            'person_id' => $result['account']->person_id,
-        ]);
+        return response()->json(SessionPayload::for($result['account'], $result['token']));
     }
 }

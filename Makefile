@@ -4,7 +4,13 @@
 COMPOSE ?= docker compose
 API := cd api
 
-.PHONY: up down migrate seed test test-isolation lint fresh analyse
+.PHONY: up down migrate seed test test-isolation lint fresh analyse demo
+
+demo:
+	@echo "1. PostgreSQL + Redis : make up   (si pas déjà lancés localement)"
+	@echo "2. API :  cd api && composer install && cp -n .env.example .env && php artisan key:generate && php artisan migrate --seed && php artisan serve"
+	@echo "3. Web :  cd web && npm install && npm run dev"
+	@echo "4. Ouvrir http://127.0.0.1:5173"
 
 up:
 	$(COMPOSE) up -d

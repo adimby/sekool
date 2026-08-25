@@ -2,6 +2,7 @@
 
 use App\Http\Api\V1\Auth\ClaimInvitationController;
 use App\Http\Api\V1\Auth\LoginController;
+use App\Http\Api\V1\Auth\MeController;
 use App\Http\Api\V1\ParentPortal\AccessLogController;
 use App\Http\Api\V1\ParentPortal\ChildrenController;
 use App\Http\Api\V1\ParentPortal\ConsentController;
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', LoginController::class);
 Route::post('/auth/invitations/claim', ClaimInvitationController::class)->middleware('throttle:10,1');
+
+Route::middleware('auth:sanctum')->get('/me', MeController::class);
 
 Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function (): void {
     Route::get('/schools/{school}/years', [SchoolYearController::class, 'index']);

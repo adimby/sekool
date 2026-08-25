@@ -40,9 +40,6 @@ final class LoginController extends Controller
 
         $token = $account->createToken('api')->plainTextToken;
 
-        return response()->json([
-            'token' => $token,
-            'person_id' => $account->person_id,
-        ]);
+        return response()->json(SessionPayload::for($account, $token));
     }
 }
