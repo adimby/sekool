@@ -4,6 +4,16 @@ use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\SchoolYear;
 use Illuminate\Support\Facades\DB;
 
+it('connects as a role that cannot bypass row level security', function () {
+    $role = DB::selectOne(
+        'select rolsuper, rolbypassrls from pg_roles where rolname = current_user'
+    );
+
+    expect($role)->not->toBeNull()
+        ->and(filter_var($role->rolsuper, FILTER_VALIDATE_BOOLEAN))->toBeFalse()
+        ->and(filter_var($role->rolbypassrls, FILTER_VALIDATE_BOOLEAN))->toBeFalse();
+});
+
 it('never lets school A read school B years through Eloquent', function () {
     $a = $this->provisionSchool();
     $b = $this->provisionSchool();

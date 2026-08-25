@@ -70,6 +70,13 @@ Postgres n’est plus exposé sur Internet ; seuls HTTP (et le Redis interne au 
 
 Si 5432 est aussi occupé, `make vps` n’en a pas besoin : l’app parle à Postgres **dans** Docker.
 
+Si un volume Postgres existe déjà (ancien `make up` où `fanabe` était superuser), recréez-le pour que le RLS s’applique vraiment :
+
+```bash
+docker compose --profile vps down -v
+make vps
+```
+
 Prérequis local (sans `make vps`) : PHP 8.3+, Composer, PostgreSQL, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
 
 ```bash

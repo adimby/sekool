@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
+        # POSTGRES_USER of the official image is a superuser. Superusers bypass
+        # FORCE ROW LEVEL SECURITY, so isolation tests would be a no-op.
         image: postgres:16
         env:
-          POSTGRES_DB: fanabe_test
-          POSTGRES_USER: fanabe
-          POSTGRES_PASSWORD: fanabe
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
@@ -31,6 +33,23 @@ jobs:
           php-version: "8.3"
           extensions: pgsql, redis, mbstring, xml, curl, zip, intl, bcmath, pcntl
           coverage: none
+
+      - name: Create FANABE role without BYPASSRLS
+        env:
+          PGPASSWORD: postgres
+        run: |
+          docker exec -i -e PGPASSWORD=postgres "${{ job.services.postgres.id }}" \
+            psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+          CREATE ROLE fanabe LOGIN PASSWORD 'fanabe' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS;
+          CREATE DATABASE fanabe_test OWNER fanabe;
+          SQL
+          docker exec -i -e PGPASSWORD=postgres "${{ job.services.postgres.id }}" \
+            psql -v ON_ERROR_STOP=1 -U postgres -d fanabe_test <<'SQL'
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          GRANT ALL ON SCHEMA public TO fanabe;
+          ALTER SCHEMA public OWNER TO fanabe;
+          SQL
 
       - name: Install API dependencies
         working-directory: api
