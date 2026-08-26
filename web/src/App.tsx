@@ -59,6 +59,41 @@ type InvoiceRow = {
   }>
 }
 
+type CockpitAction = {
+  id: string
+  enrollment_id: string
+  template_key: string
+  title: string
+  reason_summary: string
+  priority: string
+  status: string
+  student: { id: string; first_name: string; last_name: string } | null
+}
+
+type Cockpit = {
+  as_of: string
+  attendance: { present: number; absent: number }
+  collected_today: number
+  outstanding_amount: number
+  risk_counts: { low: number; medium: number; high: number; critical: number }
+  forecast: {
+    week_starting_on: string
+    expected_amount: number
+    confidence_low_amount: number
+    confidence_high_amount: number
+  } | null
+  actions: CockpitAction[]
+}
+
+type ParentInboxMessage = {
+  id: string
+  channel: string
+  subject: string
+  body: string
+  queued_at: string | null
+  sent_at: string | null
+}
+
 type ChildFinance = {
   remaining_amount: number
   data: Array<{
@@ -434,11 +469,11 @@ function DirectionScreen({
   const [paymentAmount, setPaymentAmount] = useState('50000')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [receipt, setReceipt] = useState<string | null>(null)
+  const [cockpit, setCockpit] = useState<Cockpit | null>(null)
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const schoolName = session.schools.find((row) => row.id === schoolId)?.name ?? 'Établissement'
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
-  const unassigned = activeEnrollments.filter((row) => !row.classroom_id)
   const outstanding = activeEnrollments.reduce((sum, row) => sum + (row.invoice?.remaining_amount ?? 0), 0)
   const filteredPeople = people.filter((person) => {
     const hay = `${person.first_name} ${person.last_name} ${person.public_id}`.toLowerCase()
@@ -453,16 +488,18 @@ function DirectionScreen({
     const current = years.data.find((year) => year.is_current) ?? years.data[0]
     setYearId(current?.id ?? '')
     setYearLabel(current?.label ?? '2026-2027')
-    const [list, classList, gradeList, enrollmentList] = await Promise.all([
+    const [list, classList, gradeList, enrollmentList, today] = await Promise.all([
       api<{ data: PersonRow[] }>(`/api/v1/schools/${schoolId}/people`, auth),
       api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
       api<{ data: Array<{ id: string; name: string }> }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
       api<{ data: EnrollmentRow[] }>(`/api/v1/schools/${schoolId}/enrollments`, auth),
+      api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth),
     ])
     setPeople(list.data)
     setClassrooms(classList.data)
     setGrades(gradeList.data)
     setEnrollments(enrollmentList.data)
+    setCockpit(today)
     setNewClassGrade((prev) => prev || gradeList.data[0]?.id || '')
     const active = enrollmentList.data.find((row) => row.status === 'active')
     setSelectedEnrollment((prev) => prev || active?.id || '')
@@ -607,6 +644,24 @@ function DirectionScreen({
     }
   }
 
+  async function relance(taskId: string) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/collection/tasks/${taskId}/relance`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setMessage('Relance enregistrée. Avis imprimé et message envoyé à la famille.')
+      await refresh()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Relance impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function downloadCsv() {
     const response = await fetch(`/api/v1/schools/${schoolId}/payments/export`, {
       headers: { Authorization: `Bearer ${session.token}`, Accept: 'text/csv' },
@@ -657,32 +712,58 @@ function DirectionScreen({
       {tab === 'accueil' ? (
         <div className="mt-6 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Élèves inscrits" value={String(activeEnrollments.length)} hint="Inscriptions actives" />
-            <Stat label="Sans classe" value={String(unassigned.length)} hint="À affecter" />
-            <Stat label="Classes" value={String(classrooms.length)} hint={yearLabel} />
-            <Stat label="Reste à encaisser" value={formatAr(outstanding)} hint="Soldes ouverts" />
+            <Stat label="Présents aujourd’hui" value={String(cockpit?.attendance.present ?? 0)} hint={`${cockpit?.attendance.absent ?? 0} absents`} />
+            <Stat label="Encaissé aujourd’hui" value={formatAr(cockpit?.collected_today ?? 0)} hint="Paiements enregistrés" />
+            <Stat label="Reste à encaisser" value={formatAr(cockpit?.outstanding_amount ?? outstanding)} hint="Échéances ouvertes" />
+            <Stat
+              label="À relancer"
+              value={String(cockpit?.actions.length ?? 0)}
+              hint={
+                cockpit
+                  ? `${cockpit.risk_counts.critical} critique · ${cockpit.risk_counts.high} élevé`
+                  : 'Chargement…'
+              }
+            />
           </div>
+          {cockpit?.forecast ? (
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Prévision de la semaine</p>
+              <p className="mt-2 font-display text-2xl font-semibold">{formatAr(cockpit.forecast.expected_amount)}</p>
+              <p className="mt-1 text-sm text-neutral-600">
+                Fourchette {formatAr(cockpit.forecast.confidence_low_amount)} – {formatAr(cockpit.forecast.confidence_high_amount)} · modèle explicable, sans score familial.
+              </p>
+            </Card>
+          ) : null}
+          <Card>
+            <h2 className="text-lg font-semibold">Trois actions prioritaires</h2>
+            <p className="mt-1 text-sm text-neutral-600">Qui relancer, pourquoi, par quel canal — la relance part à l’impression et dans l’espace famille.</p>
+            <ul className="mt-3 divide-y divide-black/5">
+              {(cockpit?.actions ?? []).map((row) => (
+                <li key={row.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{row.title}</p>
+                    <p className="mt-1 text-sm text-neutral-600">{row.reason_summary}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || row.status === 'resolved'}
+                    className={primaryButtonClass}
+                    onClick={() => relance(row.id)}
+                  >
+                    Relancer
+                  </button>
+                </li>
+              ))}
+              {(cockpit?.actions.length ?? 0) === 0 ? (
+                <li className="py-3 text-sm text-neutral-600">Aucune relance prioritaire pour le moment.</li>
+              ) : null}
+            </ul>
+          </Card>
           <div className="grid gap-3 sm:grid-cols-3">
             <QuickAction title="Inscrire une famille" body="Parent + élève + code imprimé." onClick={() => setTab('famille')} />
             <QuickAction title="Organiser les classes" body="Créer une classe et y affecter les élèves." onClick={() => setTab('classe')} />
             <QuickAction title="Enregistrer un paiement" body="Un reçu est émis tout de suite." onClick={() => setTab('caisse')} />
           </div>
-          <Card>
-            <h2 className="text-lg font-semibold">À traiter</h2>
-            <ul className="mt-3 divide-y divide-black/5">
-              {unassigned.slice(0, 5).map((row) => (
-                <li key={row.id} className="flex items-center justify-between gap-3 py-3">
-                  <span>
-                    {row.person?.first_name} {row.person?.last_name}
-                  </span>
-                  <button type="button" className="text-sm font-semibold text-fanabe-leaf" onClick={() => setTab('classe')}>
-                    Affecter
-                  </button>
-                </li>
-              ))}
-              {unassigned.length === 0 ? <li className="py-3 text-sm text-neutral-600">Tous les élèves ont une classe.</li> : null}
-            </ul>
-          </Card>
         </div>
       ) : null}
 
@@ -1278,21 +1359,26 @@ function AttendancePills({ value, onChange }: { value: string; onChange: (status
 function ParentScreen({ session }: { session: Session }) {
   const [children, setChildren] = useState<PersonRow[]>([])
   const [finances, setFinances] = useState<Record<string, ChildFinance>>({})
+  const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
     api<{ data: PersonRow[] }>('/api/v1/parent/children', { token: session.token })
       .then(async (payload) => {
         setChildren(payload.data)
-        const entries = await Promise.all(
-          payload.data.map(async (child) => {
-            const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, {
-              token: session.token,
-            })
-            return [child.id, finance] as const
-          }),
-        )
+        const [entries, notes] = await Promise.all([
+          Promise.all(
+            payload.data.map(async (child) => {
+              const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, {
+                token: session.token,
+              })
+              return [child.id, finance] as const
+            }),
+          ),
+          api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', { token: session.token }),
+        ])
         setFinances(Object.fromEntries(entries))
+        setInbox(notes.data)
       })
       .catch((error: Error) => setMessage(error.message))
   }, [session.token])
@@ -1307,6 +1393,20 @@ function ParentScreen({ session }: { session: Session }) {
       </h1>
       <p className="mt-1 text-sm text-neutral-600">Identifiant FANABE {session.person.public_id}</p>
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
+
+      {inbox.length > 0 ? (
+        <Card className="mt-6">
+          <h2 className="text-lg font-semibold">Messages de l’école</h2>
+          <ul className="mt-3 divide-y divide-black/5">
+            {inbox.map((note) => (
+              <li key={note.id} className="py-3">
+                <p className="font-medium">{note.subject}</p>
+                <p className="mt-1 whitespace-pre-line text-sm text-neutral-700">{note.body}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <Stat label="Enfants" value={String(children.length)} hint="Rattachés à ce compte" />

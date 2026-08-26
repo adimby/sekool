@@ -133,3 +133,24 @@ it('seeds classrooms and fee schedules for demo schools', function () {
             ->and(FeeSchedule::query()->count())->toBe(3);
     });
 });
+
+it('fills the Antsahabe cockpit with three priority actions after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $login = $this->postJson('/api/v1/auth/login', [
+        'email' => 'direction.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk();
+
+    $schoolId = $login->json('schools.0.id');
+
+    $this->flushHeaders();
+    $this->actingAs(
+        \App\Domain\Identity\Models\UserAccount::query()
+            ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
+            ->firstOrFail(),
+        'sanctum',
+    )->getJson("/api/v1/schools/{$schoolId}/cockpit")
+        ->assertOk()
+        ->assertJsonCount(3, 'actions');
+});

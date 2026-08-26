@@ -10,7 +10,7 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## État du projet
 
-**Conception validée le 21 août 2026. Phases 0, 1 et 2 livrées** (identité, inscriptions, classes, présence, factures, paiements enregistrés). Phase 3 (recouvrement / cockpit) pas encore ouverte.
+**Conception validée le 21 août 2026. Phases 0 à 3 livrées**, plus la fiabilité familiale (fin de MVP) : identité, classes, présence, factures, paiements enregistrés, moteur de risque, cockpit du jour, relances, messages famille. Pas de SMS. Pas d’encaissement en ligne. School Kit, certificats QR et notes restent hors MVP.
 
 ## Tester sur votre machine (recommandé)
 
@@ -65,7 +65,7 @@ Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Docker
 
 ### VPS (`make vps`) — si `make up` échoue sur le port 6379
 
-`make up` ne lance **pas** FANABE : seulement Postgres, Redis, MinIO et Mailpit, pour développer l’API sur la machine. Sur un VPS, le port **6379** est souvent déjà pris par un Redis installé (erreur `Bind for 0.0.0.0:6379 failed: port is already allocated`). Redis n’est pas requis pour la démo phase 2.
+`make up` ne lance **pas** FANABE : seulement Postgres, Redis, MinIO et Mailpit, pour développer l’API sur la machine. Sur un VPS, le port **6379** est souvent déjà pris par un Redis installé (erreur `Bind for 0.0.0.0:6379 failed: port is already allocated`). Redis n’est pas requis pour la démo.
 
 ```bash
 cd /opt/project/sekool   # ou le chemin du clone

@@ -10,8 +10,11 @@ use App\Domain\Finance\Models\PayerAccount;
 use App\Domain\Finance\Models\Payment;
 use App\Domain\Finance\Models\PaymentAllocation;
 use App\Domain\Finance\Models\Receipt;
+use App\Domain\Collection\Actions\AssessEnrollmentRisk;
+use App\Domain\Collection\Actions\ResolveSettledCollectionTasks;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
+use App\Domain\Reliability\Actions\ComputeFamilyReliability;
 use App\Domain\Reliability\Models\TrustEvent;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -161,6 +164,12 @@ final class RecordPayment
                         'method' => $method->value,
                     ],
                 );
+
+                if ($enrollment !== null) {
+                    app(AssessEnrollmentRisk::class)->execute($schoolId, (string) $enrollment->id);
+                    app(ResolveSettledCollectionTasks::class)->execute($schoolId, (string) $enrollment->id);
+                }
+                app(ComputeFamilyReliability::class)->execute($schoolId, (string) $payer->family_id);
 
                 return [
                     'payment' => $payment->load('allocations'),

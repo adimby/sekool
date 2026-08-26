@@ -3,6 +3,13 @@
 use App\Http\Api\V1\Auth\ClaimInvitationController;
 use App\Http\Api\V1\Auth\LoginController;
 use App\Http\Api\V1\Auth\MeController;
+use App\Http\Api\V1\ParentPortal\ParentMessageController;
+use App\Http\Api\V1\School\CockpitController;
+use App\Http\Api\V1\School\CollectionController;
+use App\Http\Api\V1\School\FamilyReliabilityController;
+use App\Http\Api\V1\School\OutboxController;
+use App\Http\Api\V1\School\RiskAssessmentController;
+use App\Http\Api\V1\School\WorkflowRunController;
 use App\Http\Api\V1\ParentPortal\AccessLogController;
 use App\Http\Api\V1\ParentPortal\ChildAttendanceController;
 use App\Http\Api\V1\ParentPortal\ChildFinanceController;
@@ -69,6 +76,16 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/transfers', [TransferController::class, 'index']);
         Route::post('/schools/{school}/transfers/{transfer}/approve', [TransferController::class, 'approve']);
         Route::post('/schools/{school}/transfers/{transfer}/refuse', [TransferController::class, 'refuse']);
+        Route::get('/schools/{school}/cockpit', CockpitController::class);
+        Route::get('/schools/{school}/collection/queue', [CollectionController::class, 'queue']);
+        Route::post('/schools/{school}/collection/tasks/{task}/relance', [CollectionController::class, 'relance']);
+        Route::post('/schools/{school}/collection/tasks/{task}/resolve', [CollectionController::class, 'resolve']);
+        Route::post('/schools/{school}/collection/tasks/{task}/dismiss', [CollectionController::class, 'dismiss']);
+        Route::get('/schools/{school}/enrollments/{enrollment}/risk', [RiskAssessmentController::class, 'show']);
+        Route::post('/schools/{school}/enrollments/{enrollment}/risk/override', [RiskAssessmentController::class, 'override']);
+        Route::post('/schools/{school}/workflows/run', WorkflowRunController::class);
+        Route::get('/schools/{school}/messages/outbox', OutboxController::class);
+        Route::get('/schools/{school}/families/{family}/reliability', FamilyReliabilityController::class);
     });
 
     Route::middleware('school.role:finance')->group(function (): void {
@@ -85,6 +102,7 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::get('/children/{person}', [ChildrenController::class, 'show']);
     Route::get('/children/{person}/finance', ChildFinanceController::class);
     Route::get('/children/{person}/attendance', ChildAttendanceController::class);
+    Route::get('/messages', ParentMessageController::class);
     Route::post('/share-tokens', [ShareTokenController::class, 'store']);
 
     Route::get('/link-requests', [LinkRequestController::class, 'index']);

@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Domain\Communication\Adapters\NullSmsGateway;
+use App\Domain\Communication\Ports\SmsGateway;
 use App\Domain\Platform\Tenancy\TenantContext;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\MigrationsStarted;
@@ -13,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->bind(SmsGateway::class, NullSmsGateway::class);
     }
 
     public function boot(): void
