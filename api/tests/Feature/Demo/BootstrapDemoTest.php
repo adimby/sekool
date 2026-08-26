@@ -84,12 +84,13 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ])
         ->assertCreated();
 
-    $direction = $this->postJson('/api/v1/auth/login', [
-        'email' => 'direction.antsahabe@fanabe.test',
-        'password' => 'password',
-    ])->assertOk();
+    $this->flushHeaders();
 
-    $this->withToken($direction->json('token'))
+    $directionAccount = UserAccount::query()
+        ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
+        ->firstOrFail();
+
+    $this->actingAs($directionAccount, 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
             'date' => '2026-09-15',
             'session' => 'full_day',
