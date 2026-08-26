@@ -2,6 +2,7 @@
 
 use App\Domain\Finance\Models\Payment;
 use App\Domain\Finance\Models\Receipt;
+use App\Domain\Platform\Tenancy\TenantContext;
 
 it('refuses a discount without a reason', function () {
     $school = $this->provisionSchool();
@@ -60,8 +61,9 @@ it('is idempotent for the same payment key', function () {
         ->json('data');
 
     expect($second['id'])->toBe($first['id'])
-        ->and($second['receipt']['number'])->toBe($first['receipt']['number'])
-        ->and(Payment::query()->count())->toBe(1);
+        ->and($second['receipt']['number'])->toBe($first['receipt']['number']);
+
+    TenantContext::runWithRlsBypass(fn () => expect(Payment::query()->withoutGlobalScopes()->count())->toBe(1));
 });
 
 it('allocates gapless receipt numbers per school year', function () {
@@ -93,8 +95,9 @@ it('allocates gapless receipt numbers per school year', function () {
         ->json('data.receipt.number');
 
     expect($first)->toBe('REC-2026-000001')
-        ->and($second)->toBe('REC-2026-000002')
-        ->and(Receipt::query()->count())->toBe(2);
+        ->and($second)->toBe('REC-2026-000002');
+
+    TenantContext::runWithRlsBypass(fn () => expect(Receipt::query()->withoutGlobalScopes()->count())->toBe(2));
 });
 
 it('exports recorded payments as CSV', function () {

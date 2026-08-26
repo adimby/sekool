@@ -56,25 +56,16 @@ final class PaymentController extends Controller
     {
         $filename = 'paiements-'.$school.'.csv';
 
-        return response()->streamDownload(function () use ($school): void {
-            $out = fopen('php://output', 'w');
-            fputcsv($out, ['recu', 'date', 'montant', 'mode', 'eleve', 'identifiant', 'facture'], ';');
-
-            $payments = Payment::query()
-                ->with(['receipt', 'payerAccount'])
-                ->orderBy('received_on')
-                ->orderBy('created_at')
-                ->get();
-
-            foreach ($payments as $payment) {
-                $invoice = Invoice::query()
-                    ->where('payer_account_id', $payment->payer_account_id)
-                    ->with('enrollment.person')
-                    ->latest('issued_on')
-                    ->first();
+        $rows = Payment::query()
+            ->with(['receipt', 'allocations.installment.invoice.enrollment.person'])
+            ->orderBy('received_on')
+            ->orderBy('created_at')
+            ->get()
+            ->map(function (Payment $payment): array {
+                $invoice = $payment->allocations->first()?->installment?->invoice;
                 $person = $invoice?->enrollment?->person;
 
-                fputcsv($out, [
+                return [
                     $payment->receipt?->number,
                     $payment->received_on?->toDateString(),
                     $payment->amount,
@@ -82,9 +73,16 @@ final class PaymentController extends Controller
                     $person === null ? '' : $person->first_name.' '.$person->last_name,
                     $person?->public_id ?? '',
                     $invoice?->number ?? '',
-                ], ';');
-            }
+                ];
+            })
+            ->all();
 
+        return response()->streamDownload(function () use ($rows): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['recu', 'date', 'montant', 'mode', 'eleve', 'identifiant', 'facture'], ';');
+            foreach ($rows as $row) {
+                fputcsv($out, $row, ';');
+            }
             fclose($out);
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',

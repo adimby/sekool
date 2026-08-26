@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Finance\Models\Payment;
+use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\Reliability\Models\TrustEvent;
 
 it('runs the school-core cycle: class, attendance, invoice, partial payment, parent balance', function () {
@@ -71,8 +72,10 @@ it('runs the school-core cycle: class, attendance, invoice, partial payment, par
         ->assertJsonPath('data.0.invoice.number', $invoice['number'])
         ->assertJsonPath('data.0.payments.0.receipt_number', $payment['data']['receipt']['number']);
 
-    expect(TrustEvent::query()->where('event_type', 'payment_on_time')->count())->toBe(1)
-        ->and(Payment::query()->count())->toBe(1);
+    TenantContext::runWithRlsBypass(function (): void {
+        expect(TrustEvent::query()->where('event_type', 'payment_on_time')->count())->toBe(1)
+            ->and(Payment::query()->withoutGlobalScopes()->count())->toBe(1);
+    });
 });
 
 it('replays attendance with the same client_reference without duplicating', function () {
