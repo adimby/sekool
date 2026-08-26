@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Academic\Models\Classroom;
+use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
@@ -38,4 +40,13 @@ it('lets the Antsahabe direction account log in after bootstrap', function () {
     ])->assertOk()
         ->assertJsonStructure(['token', 'person_id', 'person', 'schools'])
         ->assertJsonPath('schools.0.code', 'antsahabe');
+});
+
+it('seeds classrooms and fee schedules for demo schools', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    TenantContext::runWithRlsBypass(function (): void {
+        expect(Classroom::query()->count())->toBeGreaterThan(0)
+            ->and(FeeSchedule::query()->count())->toBe(3);
+    });
 });

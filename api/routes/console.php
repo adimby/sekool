@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Platform\Demo\EnsureDemoAccounts;
+use App\Domain\Platform\Demo\EnsureSchoolCore;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
@@ -26,6 +27,9 @@ Artisan::command('demo:bootstrap', function (): int {
 
     $this->info('Ensuring demo login accounts…');
     app(EnsureDemoAccounts::class)->execute();
+
+    $this->info('Ensuring school core (classes, barèmes)…');
+    app(EnsureSchoolCore::class)->execute();
 
     return 0;
 })->purpose('Extensions Postgres, migrations, et comptes de démo');

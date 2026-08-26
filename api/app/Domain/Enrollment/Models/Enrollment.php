@@ -2,6 +2,7 @@
 
 namespace App\Domain\Enrollment\Models;
 
+use App\Domain\Academic\Models\Classroom;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Platform\Tenancy\BelongsToTenant;
@@ -51,6 +52,11 @@ class Enrollment extends Model
     public function schoolYear(): BelongsTo
     {
         return $this->belongsTo(SchoolYear::class);
+    }
+
+    public function classroom(): BelongsTo
+    {
+        return $this->belongsTo(Classroom::class);
     }
 
     public function statusChanges(): HasMany

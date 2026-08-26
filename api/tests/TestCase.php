@@ -2,8 +2,13 @@
 
 namespace Tests;
 
+use App\Domain\Academic\Enums\GradeStage;
+use App\Domain\Academic\Models\GradeLevel;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Family\Models\Family;
+use App\Domain\Finance\Enums\FeeCategory;
+use App\Domain\Finance\Models\FeeItem;
+use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Identity\Actions\CreateFamilyWithStudent;
 use App\Domain\Identity\Enums\RelationshipType;
 use App\Domain\Identity\Models\Person;
@@ -111,5 +116,50 @@ abstract class TestCase extends BaseTestCase
         TenantContext::activate(TenantContext::forSchool($school->id, $account->person_id));
 
         return $this->actingAs($account);
+    }
+
+    /**
+     * @param  array{school: School, account: UserAccount, year: SchoolYear}  $fixture
+     * @return array{grade: GradeLevel, schedule: FeeSchedule}
+     */
+    protected function provisionFeeSchedule(array $fixture, int $itemAmount = 50_000): array
+    {
+        TenantContext::activate(TenantContext::forSchool($fixture['school']->id, $fixture['account']->person_id));
+
+        $grade = GradeLevel::query()->create([
+            'school_id' => $fixture['school']->id,
+            'name' => '6ème',
+            'stage' => GradeStage::Middle,
+            'sequence' => 6,
+        ]);
+
+        $schedule = FeeSchedule::query()->create([
+            'school_id' => $fixture['school']->id,
+            'school_year_id' => $fixture['year']->id,
+            'grade_level_id' => null,
+            'name' => 'Écolage 2026-2027',
+            'status' => 'active',
+        ]);
+
+        foreach ([
+            ['code' => 'SCOL_T1', 'label' => 'Écolage 1er trimestre', 'due_on' => '2026-09-15'],
+            ['code' => 'SCOL_T2', 'label' => 'Écolage 2e trimestre', 'due_on' => '2027-01-15'],
+            ['code' => 'SCOL_T3', 'label' => 'Écolage 3e trimestre', 'due_on' => '2027-04-15'],
+        ] as $item) {
+            FeeItem::query()->create([
+                'school_id' => $fixture['school']->id,
+                'fee_schedule_id' => $schedule->id,
+                'code' => $item['code'],
+                'label' => $item['label'],
+                'amount' => $itemAmount,
+                'due_on' => $item['due_on'],
+                'category' => FeeCategory::Tuition,
+                'is_recurring' => false,
+            ]);
+        }
+
+        TenantContext::clear();
+
+        return compact('grade', 'schedule');
     }
 }

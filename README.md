@@ -10,7 +10,7 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## État du projet
 
-**Conception validée le 21 août 2026. Phases 0 et 1 livrées** (identité, inscriptions, transferts). Phase 2 (classes, présence, frais) pas encore ouverte.
+**Conception validée le 21 août 2026. Phases 0, 1 et 2 livrées** (identité, inscriptions, classes, présence, factures, paiements enregistrés). Phase 3 (recouvrement / cockpit) pas encore ouverte.
 
 ## Tester sur votre machine (recommandé)
 
@@ -36,7 +36,7 @@ Oui : **toute l’application** (interface React + API Laravel) tient dans **un 
 6. Onglet **Domains** : service **`app`**, **container port `3000`**, HTTPS. Après un Redeploy, revérifier ce port (Dokploy le remet parfois à 3000). DNS : enregistrement A vers l’IP du VPS.
 7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test` / `password`.
 
-Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 1).
+Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 2).
 
 Si le déploiement échoue sur `network dokploy-network not found`, Dokploy n’a pas encore créé ce réseau : redémarrer Dokploy, ou activer **Isolated Deployments** et retirer le bloc `networks` du compose (Preview Compose pour vérifier que `app` et `db` restent sur le même réseau).
 
@@ -65,7 +65,7 @@ Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Docker
 
 ### VPS (`make vps`) — si `make up` échoue sur le port 6379
 
-`make up` ne lance **pas** FANABE : seulement Postgres, Redis, MinIO et Mailpit, pour développer l’API sur la machine. Sur un VPS, le port **6379** est souvent déjà pris par un Redis installé (erreur `Bind for 0.0.0.0:6379 failed: port is already allocated`). Redis n’est pas requis pour la démo phase 1.
+`make up` ne lance **pas** FANABE : seulement Postgres, Redis, MinIO et Mailpit, pour développer l’API sur la machine. Sur un VPS, le port **6379** est souvent déjà pris par un Redis installé (erreur `Bind for 0.0.0.0:6379 failed: port is already allocated`). Redis n’est pas requis pour la démo phase 2.
 
 ```bash
 cd /opt/project/sekool   # ou le chemin du clone
@@ -120,10 +120,12 @@ Ouvrir **http://127.0.0.1:5173**
 
 | Compte | Email | Mot de passe | Ce que vous voyez |
 |---|---|---|---|
-| Direction Antsahabe | `direction.antsahabe@fanabe.test` | `password` | Inscrire une famille, liste des personnes liées |
+| Direction Antsahabe | `direction.antsahabe@fanabe.test` | `password` | Onglets Famille, Classe, Présence, Caisse |
 | Direction Ambohipo | `direction.ambohipo@fanabe.test` | `password` | Idem, autre école (isolation) |
-| Parent Andry (persona A) | `parent.andry@fanabe.test` | `password` | Ses deux enfants, deux écoles |
-| Parent de Fanja | `parent.d@fanabe.test` | `password` | Espace famille |
+| Parent Andry (persona A) | `parent.andry@fanabe.test` | `password` | Ses deux enfants, deux écoles, soldes |
+| Parent de Fanja | `parent.d@fanabe.test` | `password` | Espace famille et échéances |
+
+Cycle phase 2 : affecter un élève à une classe, marquer la présence, générer la facture (150 000 Ar), enregistrer un paiement partiel (50 000 Ar), lire le reçu, puis se connecter en parent pour voir le solde restant (100 000 Ar). FANABE n’encaisse rien en ligne.
 
 Après une inscription, un **code d'invitation** s'affiche : onglet « Code d'invitation » pour activer le compte parent (email + mot de passe choisis).
 
