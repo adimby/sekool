@@ -22,7 +22,25 @@ Vercel est fait pour du frontend (React) et des fonctions serverless. FANABE a b
 
 Tu pourras un jour mettre **seulement** le frontend sur Vercel, avec l’API ailleurs. Pour tester aujourd’hui, un seul service qui sert l’interface et l’API est plus simple.
 
-### Render (recommandé pour la démo)
+### Dokploy (VPS — front + API ensemble)
+
+Oui : **toute l’application** (interface React + API Laravel) tient dans **un seul service** `app`. Le build Vite est copié dans Laravel (`public/app`) ; le navigateur parle au même domaine (`/api/v1/...`). Postgres (RLS) est le service `db`.
+
+1. Dans Dokploy : **Create Service → Compose** (pas Application, pas Stack).
+2. GitHub : dépôt `adimby/sekool`, branche `cursor/fanabe-architecture-docs-3345`.
+3. Compose file : **`compose.dokploy.yaml`**.
+4. Onglet **Environment** : coller [`.env.dokploy.example`](./.env.dokploy.example), puis :
+   - `APP_URL=https://votre-domaine` (le même que l’étape 6)
+   - `APP_KEY=base64:…` (`openssl rand -base64 32` puis préfixer `base64:`)
+5. Déployer une première fois (le build Docker prend quelques minutes).
+6. Onglet **Domains** : service **`app`**, **container port `8000`**, HTTPS. DNS : enregistrement A vers l’IP du VPS.
+7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test` / `password`.
+
+Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 1).
+
+Si le déploiement échoue sur `network dokploy-network not found`, Dokploy n’a pas encore créé ce réseau : redémarrer Dokploy, ou activer **Isolated Deployments** et retirer le bloc `networks` du compose (Preview Compose pour vérifier que `app` et `db` restent sur le même réseau).
+
+### Render (autre option de démo publique)
 
 1. Compte sur [render.com](https://render.com), GitHub connecté à `adimby/sekool`.
 2. **New → Blueprint** → ce dépôt, branche `cursor/fanabe-architecture-docs-3345` (`render.yaml`).
@@ -42,7 +60,8 @@ Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Docker
 | **Railway** | Même `Dockerfile` à la racine, Postgres en un clic. Très proche de Render. |
 | **Fly.io** | `fly launch` sur le Dockerfile, plus de contrôle, un peu plus de CLI. |
 | **Laravel Cloud** | Le plus natif pour Laravel, souvent plus cher pour une simple démo. |
-| **VPS** (Hetzner, OVH, Contabo, etc.) | `make vps` : Docker construit l’image et sert FANABE sur le port 80. |
+| **Dokploy** (VPS) | **`compose.dokploy.yaml`** : front + API + Postgres, domaine et HTTPS via Traefik. |
+| **VPS sans panneau** | `make vps` : même image, port 80 publié à la main. |
 
 ### VPS (`make vps`) — si `make up` échoue sur le port 6379
 

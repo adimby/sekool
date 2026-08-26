@@ -18,6 +18,9 @@ demo:
 	@echo "  cp -n .env.example .env   # renseigner APP_URL=http://VOTRE_IP"
 	@echo "  make vps"
 	@echo "  ouvrir http://VOTRE_IP (ou :FANABE_HTTP_PORT)"
+	@echo ""
+	@echo "Dokploy (front + API + Postgres) :"
+	@echo "  Compose → compose.dokploy.yaml ; Domains → service app, port 8000"
 
 up:
 	$(COMPOSE_DEV) up -d
