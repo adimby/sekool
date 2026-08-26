@@ -4,6 +4,7 @@ namespace App\Http\Api\V1\Auth;
 
 use App\Domain\Identity\Models\UserAccount;
 use App\Http\Controllers\Controller;
+use App\Domain\Platform\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -18,7 +19,9 @@ final class LoginController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $account = UserAccount::query()->where('email', $data['email'])->first();
+        $account = TenantContext::runWithRlsBypass(
+            fn (): ?UserAccount => UserAccount::query()->where('email', $data['email'])->first(),
+        );
 
         if ($account === null || ! Hash::check($data['password'], $account->password)) {
             throw ValidationException::withMessages([
@@ -32,11 +35,13 @@ final class LoginController extends Controller
             ]);
         }
 
-        $account->forceFill([
-            'failed_attempts' => 0,
-            'locked_until' => null,
-            'last_login_at' => now(),
-        ])->save();
+        TenantContext::runWithRlsBypass(function () use ($account): void {
+            $account->forceFill([
+                'failed_attempts' => 0,
+                'locked_until' => null,
+                'last_login_at' => now(),
+            ])->save();
+        });
 
         $token = $account->createToken('api')->plainTextToken;
 

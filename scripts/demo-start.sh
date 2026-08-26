@@ -78,6 +78,7 @@ fi
 
 upsert_env APP_URL "${APP_URL}"
 upsert_env APP_ENV "${APP_ENV}"
+upsert_env HASH_DRIVER "${HASH_DRIVER}"
 
 KEY_DIR="/var/fanabe-keys"
 KEY_FILE="${KEY_DIR}/app.key"

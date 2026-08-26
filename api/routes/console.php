@@ -1,8 +1,11 @@
 <?php
 
+use App\Domain\Identity\Models\UserAccount;
+use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 Artisan::command('demo:bootstrap', function (): int {
     $this->info('Preparing PostgreSQL extensions…');
@@ -17,14 +20,38 @@ Artisan::command('demo:bootstrap', function (): int {
     $this->info('Running migrations…');
     $this->call('migrate', ['--force' => true]);
 
-    if (School::query()->exists()) {
-        $this->info('Demo data already present — skipping seed.');
+    $demoEmail = 'direction.antsahabe@fanabe.test';
 
-        return 0;
+    $hasDemoUser = TenantContext::runWithRlsBypass(
+        fn (): bool => UserAccount::query()->where('email', $demoEmail)->exists(),
+    );
+
+    if (! $hasDemoUser) {
+        $this->info('Seeding demo schools and personas…');
+        $this->call('db:seed', ['--force' => true]);
+    } else {
+        $this->info('Demo data already present — ensuring known passwords.');
     }
 
-    $this->info('Seeding demo schools and personas…');
-    $this->call('db:seed', ['--force' => true]);
+    TenantContext::runWithRlsBypass(function (): void {
+        $emails = [
+            'direction.antsahabe@fanabe.test',
+            'direction.ambohipo@fanabe.test',
+            'direction.itaosy@fanabe.test',
+            'parent.andry@fanabe.test',
+            'parent.d@fanabe.test',
+        ];
+
+        foreach ($emails as $email) {
+            $account = UserAccount::query()->where('email', $email)->first();
+            if ($account === null) {
+                continue;
+            }
+            if (! Hash::check('password', $account->password)) {
+                $account->forceFill(['password' => 'password'])->save();
+            }
+        }
+    });
 
     return 0;
 })->purpose('Extensions Postgres, migrations, et seed de démo si la base est vide');
