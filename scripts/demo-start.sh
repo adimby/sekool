@@ -22,26 +22,48 @@ fi
 KEY_DIR="/var/fanabe-keys"
 KEY_FILE="${KEY_DIR}/app.key"
 
-normalize_app_key() {
-  if [ -n "${APP_KEY:-}" ] && [[ "${APP_KEY}" != base64:* ]]; then
-    export APP_KEY="base64:${APP_KEY}"
+read_dotenv_app_key() {
+  sed -n 's/^APP_KEY=//p' .env | tail -1 | tr -d '\r' | tr -d '"' | tr -d "'"
+}
+
+persist_app_key() {
+  if [ -d "${KEY_DIR}" ]; then
+    printf '%s\n' "${APP_KEY}" > "${KEY_FILE}"
+  fi
+  # Keep .env in sync so artisan does not see an empty APP_KEY= from .env.example.
+  if grep -q '^APP_KEY=' .env; then
+    sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" .env
+  else
+    printf '\nAPP_KEY=%s\n' "${APP_KEY}" >> .env
   fi
 }
+
+# Dokploy/Compose inject APP_KEY="" which shadows a generated .env key.
+case "${APP_KEY:-}" in
+  ''|'REMPLACER'|'base64:REMPLACER'|'base64:'|'null'|'change-me')
+    unset APP_KEY || true
+    ;;
+esac
 
 if [ -z "${APP_KEY:-}" ] && [ -f "${KEY_FILE}" ]; then
   export APP_KEY="$(tr -d '[:space:]' < "${KEY_FILE}")"
 fi
 
-normalize_app_key
+if [ -n "${APP_KEY:-}" ] && [[ "${APP_KEY}" != base64:* ]]; then
+  export APP_KEY="base64:${APP_KEY}"
+fi
 
 if [ -z "${APP_KEY:-}" ]; then
-  php artisan key:generate --force
-  if [ -d "${KEY_DIR}" ]; then
-    sed -n 's/^APP_KEY=//p' .env | head -1 | tr -d '[:space:]' > "${KEY_FILE}"
-  fi
-elif [ -d "${KEY_DIR}" ] && [ ! -f "${KEY_FILE}" ]; then
-  printf '%s\n' "${APP_KEY}" > "${KEY_FILE}"
+  php artisan key:generate --force --no-interaction
+  export APP_KEY="$(read_dotenv_app_key)"
 fi
+
+if [ -z "${APP_KEY:-}" ]; then
+  echo "FANABE: APP_KEY is still empty after key:generate" >&2
+  exit 1
+fi
+
+persist_app_key
 
 php artisan package:discover --ansi --no-interaction >/dev/null 2>&1 || true
 
