@@ -33,7 +33,7 @@ Oui : **toute l’application** (interface React + API Laravel) tient dans **un 
    - `APP_URL=https://votre-domaine` (le même que l’étape 6)
    - `APP_KEY=base64:…` (`openssl rand -base64 32` puis préfixer `base64:`)
 5. Déployer une première fois (le build Docker prend quelques minutes).
-6. Onglet **Domains** : service **`app`**, **container port `8000`**, HTTPS. DNS : enregistrement A vers l’IP du VPS.
+6. Onglet **Domains** : service **`app`**, **container port `3000`**, HTTPS. Après un Redeploy, revérifier ce port (Dokploy le remet parfois à 3000). DNS : enregistrement A vers l’IP du VPS.
 7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test` / `password`.
 
 Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 1).

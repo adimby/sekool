@@ -2,7 +2,6 @@
 
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
-use App\Domain\School\Models\School;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;

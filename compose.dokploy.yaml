@@ -1,8 +1,8 @@
 # FANABE sur Dokploy — front (React) + API (Laravel) dans le même conteneur.
 #
-# Dans Dokploy : New Compose → ce fichier `compose.dokploy.yaml` (pas Stack).
-# Onglet Domains : service `app`, container port 8000, HTTPS.
-# Ne pas publier le port 80 : Traefik de Dokploy l'occupe déjà.
+# Compose (pas Stack). Fichier : compose.dokploy.yaml
+# Onglet Domains : service `app`, container port **3000** (défaut Dokploy), HTTPS.
+# Après chaque Redeploy, revérifier que le port du domaine est bien 3000.
 
 services:
   db:
@@ -29,7 +29,7 @@ services:
       context: .
       dockerfile: Dockerfile
     expose:
-      - "8000"
+      - "3000"
     environment:
       APP_ENV: production
       APP_DEBUG: ${APP_DEBUG:-false}
@@ -49,7 +49,7 @@ services:
       QUEUE_CONNECTION: sync
       HASH_DRIVER: bcrypt
       LOG_CHANNEL: stderr
-      PORT: "8000"
+      PORT: "3000"
     volumes:
       - fanabe_keys:/var/fanabe-keys
     depends_on:

@@ -1,6 +1,6 @@
 <?php
 
-$publicPath = '/var/www/html/public';
+$publicPath = __DIR__;
 chdir($publicPath);
 
 $uri = urldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '');

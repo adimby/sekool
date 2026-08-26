@@ -118,11 +118,11 @@ upsert_env APP_KEY "${APP_KEY}"
 
 php artisan package:discover --ansi --no-interaction >/dev/null 2>&1 || true
 
-php artisan demo:bootstrap
+if ! php artisan demo:bootstrap; then
+  echo "FANABE: demo:bootstrap failed — HTTP server will still start. Check container logs." >&2
+fi
 
 port="${PORT:-8000}"
 echo "FANABE listening on 0.0.0.0:${port}"
-# php artisan serve strips DATABASE_URL from the HTTP worker.
-# Laravel's stock server.php uses getcwd() as the public root — we must not
-# run it from /var/www/html (it would require /var/www/html/index.php).
-exec php -S "0.0.0.0:${port}" -t /var/www/html/public /usr/local/bin/fanabe-router.php
+cd /var/www/html/public
+exec php -S "0.0.0.0:${port}" /var/www/html/public/router.php
