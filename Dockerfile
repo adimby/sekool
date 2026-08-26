@@ -23,6 +23,7 @@ COPY api/ ./
 COPY --from=vendor /app/vendor ./vendor
 COPY --from=web /web/dist ./public/app
 COPY scripts/demo-start.sh /usr/local/bin/fanabe-start
+COPY scripts/demo-router.php /usr/local/bin/fanabe-router.php
 RUN chmod +x /usr/local/bin/fanabe-start \
     && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache

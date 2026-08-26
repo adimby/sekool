@@ -121,7 +121,7 @@ php artisan demo:bootstrap
 
 port="${PORT:-8000}"
 echo "FANABE listening on 0.0.0.0:${port}"
-# Do not use `php artisan serve`: it strips DATABASE_URL/DB_* from the worker
-# (only a small passthrough list is forwarded), so HTTP requests hit 127.0.0.1.
-exec php -S "0.0.0.0:${port}" -t public \
-  vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+# php artisan serve strips DATABASE_URL from the HTTP worker.
+# Laravel's stock server.php uses getcwd() as the public root — we must not
+# run it from /var/www/html (it would require /var/www/html/index.php).
+exec php -S "0.0.0.0:${port}" -t /var/www/html/public /usr/local/bin/fanabe-router.php
