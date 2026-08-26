@@ -718,11 +718,7 @@ function DirectionScreen({
             <Stat
               label="À relancer"
               value={String(cockpit?.actions.length ?? 0)}
-              hint={
-                cockpit
-                  ? `${cockpit.risk_counts.critical} critique · ${cockpit.risk_counts.high} élevé`
-                  : 'Chargement…'
-              }
+              hint="Justifiées par des faits — pas un score"
             />
           </div>
           {cockpit?.forecast ? (
