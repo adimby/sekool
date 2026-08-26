@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\Identity\Models\UserAccount;
+use App\Domain\Platform\Demo\EnsureDemoAccounts;
 use App\Domain\Platform\Demo\EnsureSchoolCore;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
@@ -43,6 +44,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call(PersonaSeeder::class);
 
+        app(EnsureDemoAccounts::class)->execute();
         app(EnsureSchoolCore::class)->execute();
 
         TenantContext::clear();

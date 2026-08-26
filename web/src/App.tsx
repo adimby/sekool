@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { api, clearSession, loadSession, saveSession, type Session } from './session'
+import {
+  api,
+  clearSession,
+  defaultWorkspace,
+  loadSession,
+  saveSession,
+  workspacesOf,
+  type Session,
+  type Workspace,
+} from './session'
 
 type PersonRow = {
   id: string
@@ -25,6 +34,11 @@ type EnrollmentRow = {
   person: { id: string; public_id: string; first_name: string; last_name: string } | null
   classroom: { id: string; name: string } | null
   invoice: { id: string; number: string; remaining_amount: number; status: string } | null
+}
+
+type RosterStudent = {
+  enrollment_id: string
+  person: { id: string; public_id: string; first_name: string; last_name: string } | null
 }
 
 type InvoiceRow = {
@@ -55,21 +69,48 @@ type ChildFinance = {
   }>
 }
 
-type SchoolTab = 'accueil' | 'famille' | 'classe' | 'presence' | 'caisse'
+type StudentOverview = {
+  person: PersonRow
+  enrollment: {
+    student_number: string | null
+    school: { name: string } | null
+    classroom: { name: string } | null
+  } | null
+  attendance: Array<{ id: string; date: string; status: string }>
+  finance: {
+    remaining_amount: number
+    invoice: InvoiceRow | null
+    payments: Array<{ amount: number; received_on: string; receipt_number: string | null }>
+  }
+}
 
-const SCHOOL_NAV: Array<{ id: SchoolTab; label: string; hint: string }> = [
+type DirectionTab = 'accueil' | 'famille' | 'classe' | 'caisse'
+type TeacherTab = 'classe' | 'appel'
+
+const DIRECTION_NAV: Array<{ id: DirectionTab; label: string; hint: string }> = [
   { id: 'accueil', label: 'Aujourd’hui', hint: 'Vue du jour' },
   { id: 'famille', label: 'Familles', hint: 'Inscrire' },
-  { id: 'classe', label: 'Classes', hint: 'Affecter' },
-  { id: 'presence', label: 'Présence', hint: 'Faire l’appel' },
+  { id: 'classe', label: 'Classes', hint: 'Organiser' },
   { id: 'caisse', label: 'Caisse', hint: 'Encaisser' },
 ]
 
+const TEACHER_NAV: Array<{ id: TeacherTab; label: string; hint: string }> = [
+  { id: 'classe', label: 'Ma classe', hint: 'Effectif' },
+  { id: 'appel', label: 'Appel', hint: 'Présence' },
+]
+
+const WORKSPACE_LABEL: Record<Workspace, string> = {
+  direction: 'Espace direction',
+  teacher: 'Espace classe',
+  parent: 'Espace famille',
+  student: 'Espace élève',
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
-  const [view, setView] = useState<'school' | 'parent'>(() => {
+  const [workspace, setWorkspace] = useState<Workspace>(() => {
     const current = loadSession()
-    return current?.schools.length ? 'school' : 'parent'
+    return current ? defaultWorkspace(current) : 'parent'
   })
 
   function signedIn(next: Session) {
@@ -77,7 +118,7 @@ export default function App() {
     const stored = { ...next, schoolId }
     saveSession(stored)
     setSession(stored)
-    setView(stored.schools.length ? 'school' : 'parent')
+    setWorkspace(defaultWorkspace(stored))
   }
 
   function signOut() {
@@ -90,8 +131,7 @@ export default function App() {
   }
 
   const schoolName = session.schools.find((row) => row.id === session.schoolId)?.name ?? session.schools[0]?.name
-  const canSchool = session.schools.length > 0
-  const canParent = session.is_parent || session.schools.length === 0
+  const spaces = workspacesOf(session)
 
   return (
     <div className="min-h-svh lg:grid lg:grid-cols-[17.5rem_1fr]">
@@ -109,20 +149,17 @@ export default function App() {
             <p className="mt-1 font-semibold">
               {session.person.first_name} {session.person.last_name}
             </p>
-            {schoolName && view === 'school' ? <p className="mt-1 text-sm text-white/65">{schoolName}</p> : null}
+            {schoolName && (workspace === 'direction' || workspace === 'teacher') ? (
+              <p className="mt-1 text-sm text-white/65">{schoolName}</p>
+            ) : null}
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:mt-4 lg:flex-1 lg:flex-col lg:overflow-visible" aria-label="Espaces">
-          {canSchool ? (
-            <button type="button" className={sideLink(view === 'school')} onClick={() => setView('school')}>
-              Espace école
+          {spaces.map((space) => (
+            <button key={space} type="button" className={sideLink(workspace === space)} onClick={() => setWorkspace(space)}>
+              {WORKSPACE_LABEL[space]}
             </button>
-          ) : null}
-          {canParent ? (
-            <button type="button" className={sideLink(view === 'parent')} onClick={() => setView('parent')}>
-              Espace famille
-            </button>
-          ) : null}
+          ))}
         </nav>
         <div className="hidden p-4 lg:block">
           <button type="button" className="min-h-11 w-full rounded-xl border border-white/15 text-sm text-white/80" onClick={signOut}>
@@ -130,8 +167,12 @@ export default function App() {
           </button>
         </div>
       </aside>
-      {view === 'school' && canSchool ? (
-        <SchoolScreen session={session} onSchoolChange={(schoolId) => signedIn({ ...session, schoolId })} />
+      {workspace === 'direction' ? (
+        <DirectionScreen session={session} onSchoolChange={(schoolId) => signedIn({ ...session, schoolId })} />
+      ) : workspace === 'teacher' ? (
+        <TeacherScreen session={session} onSchoolChange={(schoolId) => signedIn({ ...session, schoolId })} />
+      ) : workspace === 'student' ? (
+        <StudentScreen session={session} />
       ) : (
         <ParentScreen session={session} />
       )}
@@ -190,6 +231,14 @@ function invoiceLabel(status?: string): string {
   return status ?? ''
 }
 
+function attendanceLabel(status?: string): string {
+  if (status === 'present') return 'Présent'
+  if (status === 'absent') return 'Absent'
+  if (status === 'late') return 'Retard'
+  if (status === 'excused') return 'Excusé'
+  return status ?? ''
+}
+
 function Avatar({ first, last }: { first?: string; last?: string }) {
   return (
     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-fanabe-mist text-sm font-semibold text-fanabe-leaf">
@@ -203,7 +252,7 @@ function Card({ children, className = '' }: { children: ReactNode; className?: s
 }
 
 function Banner({ message, onClear }: { message: string; onClear: () => void }) {
-  const error = /impossible|invalide|erreur/i.test(message)
+  const error = /impossible|invalide|erreur|appartient pas/i.test(message)
   return (
     <p
       role="status"
@@ -255,9 +304,10 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
   }
 
   const demos = [
-    { label: 'Direction Antsahabe', email: 'direction.antsahabe@fanabe.test' },
-    { label: 'Parent Andry', email: 'parent.andry@fanabe.test' },
-    { label: 'Parent de Fanja', email: 'parent.d@fanabe.test' },
+    { label: 'Direction', email: 'direction.antsahabe@fanabe.test' },
+    { label: 'Professeur', email: 'teacher.antsahabe@fanabe.test' },
+    { label: 'Parent', email: 'parent.andry@fanabe.test' },
+    { label: 'Élève', email: 'eleve.fanja@fanabe.test' },
   ]
 
   return (
@@ -267,8 +317,8 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
         <div>
           <p className="font-display text-4xl leading-tight">L’école, la famille, connectées.</p>
           <p className="mt-4 max-w-md text-base leading-relaxed text-white/75">
-            Inscrire une famille, suivre la classe, noter la présence, enregistrer un paiement déjà reçu, et laisser
-            le parent voir son solde — sans SMS, sans encaissement en ligne.
+            Quatre espaces distincts : la direction organise et encaisse, le professeur fait l’appel de sa classe,
+            l’élève lit sa scolarité, le parent suit le solde — sans SMS, sans encaissement en ligne.
           </p>
         </div>
         <p className="text-sm text-white/50">FANABE · Madagascar · démo 2026-2027</p>
@@ -278,7 +328,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
           <Logo />
         </div>
         <h1 className="mt-8 font-display text-3xl font-semibold tracking-tight lg:mt-0">Bienvenue</h1>
-        <p className="mt-2 text-neutral-700">Connectez-vous avec le compte de l’école ou le code imprimé du parent.</p>
+        <p className="mt-2 text-neutral-700">Connectez-vous selon votre rôle : direction, professeur, parent ou élève.</p>
         <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-black/5 p-1">
           <button type="button" className={modeTab(mode === 'login')} onClick={() => setMode('login')}>
             Connexion
@@ -306,7 +356,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
         {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
         <div className="mt-8">
           <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Comptes de démonstration</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {demos.map((demo) => (
               <button
                 key={demo.email}
@@ -349,7 +399,7 @@ const primaryButtonClass =
 const secondaryButtonClass =
   'min-h-11 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-60'
 
-function SchoolScreen({
+function DirectionScreen({
   session,
   onSchoolChange,
 }: {
@@ -357,7 +407,7 @@ function SchoolScreen({
   onSchoolChange: (schoolId: string) => void
 }) {
   const schoolId = session.schoolId ?? session.schools[0].id
-  const [tab, setTab] = useState<SchoolTab>('accueil')
+  const [tab, setTab] = useState<DirectionTab>('accueil')
   const [people, setPeople] = useState<PersonRow[]>([])
   const [yearId, setYearId] = useState('')
   const [yearLabel, setYearLabel] = useState('2026-2027')
@@ -379,9 +429,6 @@ function SchoolScreen({
   })
   const [newClassName, setNewClassName] = useState('6ème B')
   const [newClassGrade, setNewClassGrade] = useState('')
-  const [selectedClassroom, setSelectedClassroom] = useState('')
-  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [marks, setMarks] = useState<Record<string, string>>({})
   const [selectedEnrollment, setSelectedEnrollment] = useState('')
   const [invoice, setInvoice] = useState<InvoiceRow | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('50000')
@@ -393,7 +440,6 @@ function SchoolScreen({
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
   const unassigned = activeEnrollments.filter((row) => !row.classroom_id)
   const outstanding = activeEnrollments.reduce((sum, row) => sum + (row.invoice?.remaining_amount ?? 0), 0)
-  const roster = activeEnrollments.filter((row) => row.classroom_id === selectedClassroom)
   const filteredPeople = people.filter((person) => {
     const hay = `${person.first_name} ${person.last_name} ${person.public_id}`.toLowerCase()
     return hay.includes(query.toLowerCase())
@@ -417,7 +463,6 @@ function SchoolScreen({
     setClassrooms(classList.data)
     setGrades(gradeList.data)
     setEnrollments(enrollmentList.data)
-    setSelectedClassroom((prev) => prev || classList.data[0]?.id || '')
     setNewClassGrade((prev) => prev || gradeList.data[0]?.id || '')
     const active = enrollmentList.data.find((row) => row.status === 'active')
     setSelectedEnrollment((prev) => prev || active?.id || '')
@@ -492,48 +537,6 @@ function SchoolScreen({
       await refresh()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Affectation impossible.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function loadAttendance(classroomId: string, date: string) {
-    const payload = await api<{
-      data: Array<{ enrollment_id: string; attendance: { status: string } | null }>
-    }>(`/api/v1/schools/${schoolId}/attendance?classroom_id=${classroomId}&date=${date}&session=full_day`, auth)
-    const next: Record<string, string> = {}
-    for (const row of payload.data) {
-      next[row.enrollment_id] = row.attendance?.status ?? 'present'
-    }
-    setMarks(next)
-  }
-
-  useEffect(() => {
-    if (!selectedClassroom || tab !== 'presence') return
-    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => setMessage(error.message))
-  }, [selectedClassroom, attendanceDate, tab, schoolId, session.token])
-
-  async function saveAttendance(event: FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setMessage(null)
-    try {
-      await api(`/api/v1/schools/${schoolId}/attendance`, {
-        ...auth,
-        method: 'POST',
-        body: JSON.stringify({
-          date: attendanceDate,
-          session: 'full_day',
-          records: roster.map((row) => ({
-            enrollment_id: row.id,
-            status: marks[row.id] ?? 'present',
-            client_reference: crypto.randomUUID(),
-          })),
-        }),
-      })
-      setMessage('Présence enregistrée pour la classe.')
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Présence impossible à enregistrer.')
     } finally {
       setBusy(false)
     }
@@ -623,9 +626,9 @@ function SchoolScreen({
     <main className="min-w-0 px-4 py-6 sm:px-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fanabe-leaf">Espace école</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fanabe-leaf">Espace direction</p>
           <h1 className="font-display text-3xl font-semibold tracking-tight">{schoolName}</h1>
-          <p className="mt-1 text-sm text-neutral-600">Année scolaire {yearLabel}</p>
+          <p className="mt-1 text-sm text-neutral-600">Année scolaire {yearLabel} · l’appel se fait en classe, par le professeur.</p>
         </div>
         {session.schools.length > 1 ? (
           <label className="block min-w-56 text-sm font-medium">
@@ -641,8 +644,8 @@ function SchoolScreen({
         ) : null}
       </header>
 
-      <nav className="mt-6 flex gap-1 overflow-x-auto rounded-2xl bg-black/5 p-1" aria-label="Sections école">
-        {SCHOOL_NAV.map((item) => (
+      <nav className="mt-6 flex gap-1 overflow-x-auto rounded-2xl bg-black/5 p-1" aria-label="Sections direction">
+        {DIRECTION_NAV.map((item) => (
           <button key={item.id} type="button" className={schoolTab(tab === item.id)} onClick={() => setTab(item.id)}>
             <span className="block">{item.label}</span>
             <span className="hidden text-[11px] font-normal opacity-70 sm:block">{item.hint}</span>
@@ -660,9 +663,9 @@ function SchoolScreen({
             <Stat label="Reste à encaisser" value={formatAr(outstanding)} hint="Soldes ouverts" />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <QuickAction title="Faire l’appel" body="Noter la présence d’une classe." onClick={() => setTab('presence')} />
-            <QuickAction title="Enregistrer un paiement" body="Un reçu est émis tout de suite." onClick={() => setTab('caisse')} />
             <QuickAction title="Inscrire une famille" body="Parent + élève + code imprimé." onClick={() => setTab('famille')} />
+            <QuickAction title="Organiser les classes" body="Créer une classe et y affecter les élèves." onClick={() => setTab('classe')} />
+            <QuickAction title="Enregistrer un paiement" body="Un reçu est émis tout de suite." onClick={() => setTab('caisse')} />
           </div>
           <Card>
             <h2 className="text-lg font-semibold">À traiter</h2>
@@ -815,49 +818,6 @@ function SchoolScreen({
         </div>
       ) : null}
 
-      {tab === 'presence' ? (
-        <Card className="mt-6">
-          <h2 className="text-lg font-semibold">Appel du jour</h2>
-          <p className="mt-1 text-sm text-neutral-600">Une seule écriture possible hors ligne : la présence. Le reste attend le réseau.</p>
-          <form onSubmit={saveAttendance} className="mt-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Classe">
-                <select className={inputClass} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
-                  {classrooms.map((classroom) => (
-                    <option key={classroom.id} value={classroom.id}>
-                      {classroom.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Date">
-                <input className={inputClass} type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} />
-              </Field>
-            </div>
-            {roster.length === 0 ? (
-              <p className="rounded-xl bg-fanabe-sand/80 px-4 py-6 text-sm text-neutral-600">Aucun élève dans cette classe pour le moment.</p>
-            ) : (
-              <ul className="space-y-2">
-                {roster.map((row) => (
-                  <li key={row.id} className="flex flex-col gap-3 rounded-xl bg-fanabe-sand/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar first={row.person?.first_name} last={row.person?.last_name} />
-                      <p className="font-medium">
-                        {row.person?.first_name} {row.person?.last_name}
-                      </p>
-                    </div>
-                    <AttendancePills value={marks[row.id] ?? 'present'} onChange={(status) => setMarks({ ...marks, [row.id]: status })} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button type="submit" disabled={busy || roster.length === 0} className={primaryButtonClass}>
-              Enregistrer l’appel
-            </button>
-          </form>
-        </Card>
-      ) : null}
-
       {tab === 'caisse' ? (
         <div className="mt-6 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
@@ -960,6 +920,295 @@ function SchoolScreen({
                 </button>
               </div>
             ) : null}
+          </Card>
+        </div>
+      ) : null}
+    </main>
+  )
+}
+
+function TeacherScreen({
+  session,
+  onSchoolChange,
+}: {
+  session: Session
+  onSchoolChange: (schoolId: string) => void
+}) {
+  const schoolId = session.schoolId ?? session.schools[0].id
+  const [tab, setTab] = useState<TeacherTab>('appel')
+  const [classrooms, setClassrooms] = useState<ClassroomRow[]>([])
+  const [selectedClassroom, setSelectedClassroom] = useState('')
+  const [students, setStudents] = useState<RosterStudent[]>([])
+  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [marks, setMarks] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const auth = useMemo(() => ({ token: session.token }), [session.token])
+  const schoolName = session.schools.find((row) => row.id === schoolId)?.name ?? 'Établissement'
+  const currentClass = classrooms.find((row) => row.id === selectedClassroom)
+
+  async function refresh() {
+    const classList = await api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth)
+    setClassrooms(classList.data)
+    setSelectedClassroom((prev) => prev || classList.data[0]?.id || '')
+  }
+
+  async function loadRoster(classroomId: string) {
+    const payload = await api<{ data: { students: RosterStudent[] } }>(
+      `/api/v1/schools/${schoolId}/classrooms/${classroomId}/roster`,
+      auth,
+    )
+    setStudents(payload.data.students)
+  }
+
+  async function loadAttendance(classroomId: string, date: string) {
+    const payload = await api<{
+      data: Array<{ enrollment_id: string; attendance: { status: string } | null }>
+    }>(`/api/v1/schools/${schoolId}/attendance?classroom_id=${classroomId}&date=${date}&session=full_day`, auth)
+    const next: Record<string, string> = {}
+    for (const row of payload.data) {
+      next[row.enrollment_id] = row.attendance?.status ?? 'present'
+    }
+    setMarks(next)
+  }
+
+  useEffect(() => {
+    refresh().catch((error: Error) => setMessage(error.message))
+  }, [schoolId, session.token])
+
+  useEffect(() => {
+    if (!selectedClassroom) return
+    loadRoster(selectedClassroom).catch((error: Error) => setMessage(error.message))
+  }, [selectedClassroom, schoolId, session.token])
+
+  useEffect(() => {
+    if (!selectedClassroom || tab !== 'appel') return
+    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => setMessage(error.message))
+  }, [selectedClassroom, attendanceDate, tab, schoolId, session.token])
+
+  async function saveAttendance(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/attendance`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          date: attendanceDate,
+          session: 'full_day',
+          records: students.map((row) => ({
+            enrollment_id: row.enrollment_id,
+            status: marks[row.enrollment_id] ?? 'present',
+            client_reference: crypto.randomUUID(),
+          })),
+        }),
+      })
+      setMessage('Présence enregistrée pour la classe.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Présence impossible à enregistrer.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <main className="min-w-0 px-4 py-6 sm:px-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fanabe-leaf">Espace classe</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">{currentClass?.name ?? schoolName}</h1>
+          <p className="mt-1 text-sm text-neutral-600">
+            {session.person.first_name} {session.person.last_name} · professeur principal
+          </p>
+        </div>
+        {session.schools.length > 1 ? (
+          <label className="block min-w-56 text-sm font-medium">
+            Établissement
+            <select className={inputClass} value={schoolId} onChange={(event) => onSchoolChange(event.target.value)}>
+              {session.schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </header>
+
+      <nav className="mt-6 flex gap-1 overflow-x-auto rounded-2xl bg-black/5 p-1" aria-label="Sections classe">
+        {TEACHER_NAV.map((item) => (
+          <button key={item.id} type="button" className={schoolTab(tab === item.id)} onClick={() => setTab(item.id)}>
+            <span className="block">{item.label}</span>
+            <span className="hidden text-[11px] font-normal opacity-70 sm:block">{item.hint}</span>
+          </button>
+        ))}
+      </nav>
+      {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
+
+      {classrooms.length === 0 ? (
+        <p className="mt-6 rounded-2xl bg-fanabe-paper px-4 py-8 text-center text-sm text-neutral-600">
+          Aucune classe ne vous est encore attribuée. La direction désigne le professeur principal.
+        </p>
+      ) : null}
+
+      {tab === 'classe' && classrooms.length > 0 ? (
+        <div className="mt-6 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <Card>
+            <h2 className="text-lg font-semibold">Mes classes</h2>
+            <ul className="mt-4 space-y-2">
+              {classrooms.map((classroom) => (
+                <li key={classroom.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClassroom(classroom.id)}
+                    className={`w-full rounded-xl px-4 py-3 text-left ${
+                      classroom.id === selectedClassroom ? 'bg-fanabe-mist ring-2 ring-fanabe-leaf' : 'bg-fanabe-sand/70'
+                    }`}
+                  >
+                    <p className="font-medium">{classroom.name}</p>
+                    <p className="text-sm text-neutral-600">{classroom.grade_level?.name}</p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+          <Card>
+            <h2 className="text-lg font-semibold">Effectif {currentClass?.name}</h2>
+            <p className="mt-1 text-sm text-neutral-600">{students.length} élève(s) — sans accès à la caisse.</p>
+            <ul className="mt-4 space-y-2">
+              {students.map((row) => (
+                <li key={row.enrollment_id} className="flex items-center gap-3 rounded-xl bg-fanabe-sand/70 px-4 py-3">
+                  <Avatar first={row.person?.first_name} last={row.person?.last_name} />
+                  <div>
+                    <p className="font-medium">
+                      {row.person?.first_name} {row.person?.last_name}
+                    </p>
+                    <p className="text-sm text-neutral-600">{row.person?.public_id}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === 'appel' && classrooms.length > 0 ? (
+        <Card className="mt-6">
+          <h2 className="text-lg font-semibold">Appel du jour</h2>
+          <p className="mt-1 text-sm text-neutral-600">Geste de classe : seul le professeur de la classe enregistre la présence.</p>
+          <form onSubmit={saveAttendance} className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Classe">
+                <select className={inputClass} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
+                  {classrooms.map((classroom) => (
+                    <option key={classroom.id} value={classroom.id}>
+                      {classroom.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Date">
+                <input className={inputClass} type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} />
+              </Field>
+            </div>
+            {students.length === 0 ? (
+              <p className="rounded-xl bg-fanabe-sand/80 px-4 py-6 text-sm text-neutral-600">Aucun élève dans cette classe pour le moment.</p>
+            ) : (
+              <ul className="space-y-2">
+                {students.map((row) => (
+                  <li key={row.enrollment_id} className="flex flex-col gap-3 rounded-xl bg-fanabe-sand/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar first={row.person?.first_name} last={row.person?.last_name} />
+                      <p className="font-medium">
+                        {row.person?.first_name} {row.person?.last_name}
+                      </p>
+                    </div>
+                    <AttendancePills
+                      value={marks[row.enrollment_id] ?? 'present'}
+                      onChange={(status) => setMarks({ ...marks, [row.enrollment_id]: status })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="submit" disabled={busy || students.length === 0} className={primaryButtonClass}>
+              Enregistrer l’appel
+            </button>
+          </form>
+        </Card>
+      ) : null}
+    </main>
+  )
+}
+
+function StudentScreen({ session }: { session: Session }) {
+  const [overview, setOverview] = useState<StudentOverview | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    api<StudentOverview>('/api/v1/student/me', { token: session.token })
+      .then(setOverview)
+      .catch((error: Error) => setMessage(error.message))
+  }, [session.token])
+
+  return (
+    <main className="min-w-0 px-4 py-6 sm:px-8">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fanabe-leaf">Espace élève</p>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">
+        Bonjour {session.person.first_name}
+      </h1>
+      <p className="mt-1 text-sm text-neutral-600">Lecture seule — la présence se note en classe, les paiements à la caisse.</p>
+      {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
+
+      {overview ? (
+        <div className="mt-6 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Stat label="École" value={overview.enrollment?.school?.name ?? '—'} hint={overview.enrollment?.classroom?.name ?? 'Pas encore de classe'} />
+            <Stat label="Présences (14 j.)" value={String(overview.attendance.length)} hint="Jours saisis" />
+            <Stat
+              label="Reste à payer"
+              value={formatAr(overview.finance.remaining_amount)}
+              hint={overview.finance.invoice ? overview.finance.invoice.number : 'Pas encore de facture'}
+            />
+          </div>
+          <Card>
+            <h2 className="text-lg font-semibold">Présence récente</h2>
+            {overview.attendance.length === 0 ? (
+              <p className="mt-3 text-sm text-neutral-600">Aucune présence enregistrée sur les 14 derniers jours.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-black/5">
+                {overview.attendance.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between py-3 text-sm">
+                    <span>{formatDate(row.date)}</span>
+                    <span className="font-semibold">{attendanceLabel(row.status)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card>
+            <h2 className="text-lg font-semibold">Écolage</h2>
+            {overview.finance.invoice ? (
+              <>
+                <p className="mt-2 text-sm">
+                  {overview.finance.invoice.number} · {invoiceLabel(overview.finance.invoice.status)}
+                </p>
+                <p className="mt-1 text-sm">
+                  Payé {formatAr(overview.finance.invoice.paid_amount)} sur {formatAr(overview.finance.invoice.net_amount)}
+                </p>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {overview.finance.invoice.installments.map((row) => (
+                    <li key={row.id} className="flex justify-between gap-3">
+                      <span>{formatDate(row.due_on)}</span>
+                      <span>{formatAr(row.remaining_amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-neutral-600">L’école n’a pas encore émis de facture.</p>
+            )}
           </Card>
         </div>
       ) : null}

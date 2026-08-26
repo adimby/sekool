@@ -92,7 +92,7 @@ Option A **retenue**, avec une restriction supplémentaire :
 |---|---|
 | Personnel | Email + mot de passe (Argon2id). TOTP **obligatoire** pour `platform_admin`, `school_owner`, `school_admin`, `accountant`. |
 | Parent | Code d'invitation émis par l'école (papier ou in-app), puis mot de passe. |
-| Élève | Pas de compte au MVP. |
+| Élève | Compte **en lecture seule** possible (démo Fanja) pour l’espace « ma scolarité ». L’inscription d’une famille **n’ouvre pas** de compte élève automatiquement. |
 | Sessions | 8 h personnel (renouvellement glissant), 30 jours parent. |
 
 **Pas de SMS**, y compris comme second facteur optionnel. Conséquence sur la communication : le MVP s'appuie sur **l'application, l'email et le papier**. Le port `SmsGateway` reste défini (Null) pour ne pas fermer une évolution, mais aucun parcours du MVP ne l'exige. WhatsApp idem.

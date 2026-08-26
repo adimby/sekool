@@ -144,7 +144,7 @@ Une réponse manquante à n'importe laquelle des quatre ⇒ refus.
 | Ressource | Platform Admin | School Owner / Admin | Principal | Teacher | Accountant | Parent |
 |---|---|---|---|---|---|---|
 | Élèves de l'établissement | — (métadonnées seules) | Lecture / écriture | Lecture | Lecture (ses classes) | Lecture (état civil restreint) | Ses enfants seulement |
-| Présence | — | Lecture / écriture | Lecture | Écriture (ses classes) | — | Lecture (ses enfants) |
+| Présence | — | Lecture | Lecture | **Écriture** (ses classes) | — | Lecture (ses enfants) |
 | Factures et paiements | — | Lecture / écriture | Lecture | — | Lecture / écriture | Lecture (ses enfants) |
 | Risque et recouvrement | — | Lecture | Lecture | — | Lecture / écriture | **Jamais** |
 | Reliability (famille) | — | Lecture | Lecture | — | Lecture | **Jamais** |

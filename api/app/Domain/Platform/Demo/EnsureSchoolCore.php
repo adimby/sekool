@@ -11,6 +11,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Finance\Enums\FeeCategory;
 use App\Domain\Finance\Models\FeeItem;
 use App\Domain\Finance\Models\FeeSchedule;
+use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
 use App\Domain\School\Models\SchoolYear;
@@ -47,10 +48,22 @@ final class EnsureSchoolCore
         $this->ensureTerms($year);
         $sixieme = $this->ensureGrade($school->id, '6ème', GradeStage::Middle, 6);
         $cinquieme = $this->ensureGrade($school->id, '5ème', GradeStage::Middle, 5);
-        $class6 = $this->ensureClassroom($year, $sixieme, '6ème A');
-        $class5 = $this->ensureClassroom($year, $cinquieme, '5ème A');
+        $teacherId = $this->mainTeacherPersonId($school);
+        $class6 = $this->ensureClassroom($year, $sixieme, '6ème A', $teacherId);
+        $class5 = $this->ensureClassroom($year, $cinquieme, '5ème A', $teacherId);
         $this->ensureFeeSchedule($year);
         $this->assignEnrollments($year, $class6, $class5);
+    }
+
+    private function mainTeacherPersonId(School $school): ?string
+    {
+        if ($school->code !== 'antsahabe') {
+            return null;
+        }
+
+        return UserAccount::query()
+            ->whereRaw('lower(email) = ?', ['teacher.antsahabe@fanabe.test'])
+            ->value('person_id');
     }
 
     private function ensureTerms(SchoolYear $year): void
@@ -85,9 +98,9 @@ final class EnsureSchoolCore
         );
     }
 
-    private function ensureClassroom(SchoolYear $year, GradeLevel $grade, string $name): Classroom
+    private function ensureClassroom(SchoolYear $year, GradeLevel $grade, string $name, ?string $teacherPersonId): Classroom
     {
-        return Classroom::query()->firstOrCreate(
+        $classroom = Classroom::query()->firstOrCreate(
             [
                 'school_id' => $year->school_id,
                 'school_year_id' => $year->id,
@@ -96,8 +109,15 @@ final class EnsureSchoolCore
             [
                 'grade_level_id' => $grade->id,
                 'capacity' => 40,
+                'main_teacher_person_id' => $teacherPersonId,
             ],
         );
+
+        if ($teacherPersonId !== null && $classroom->main_teacher_person_id !== $teacherPersonId) {
+            $classroom->forceFill(['main_teacher_person_id' => $teacherPersonId])->save();
+        }
+
+        return $classroom;
     }
 
     private function ensureFeeSchedule(SchoolYear $year): void

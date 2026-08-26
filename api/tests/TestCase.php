@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Domain\Academic\Enums\GradeStage;
+use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\GradeLevel;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Family\Models\Family;
@@ -161,5 +162,33 @@ abstract class TestCase extends BaseTestCase
         TenantContext::clear();
 
         return compact('grade', 'schedule');
+    }
+
+    /**
+     * @param  array{school: School, account: UserAccount, year: SchoolYear}  $fixture
+     * @return array{account: UserAccount}
+     */
+    protected function provisionTeacher(array $fixture, ?string $classroomId = null): array
+    {
+        TenantContext::activate(TenantContext::forSchool($fixture['school']->id, $fixture['account']->person_id));
+
+        $account = UserAccount::factory()->create();
+
+        SchoolRoleAssignment::query()->create([
+            'school_id' => $fixture['school']->id,
+            'person_id' => $account->person_id,
+            'role' => SchoolRole::Teacher,
+            'granted_at' => now(),
+        ]);
+
+        if ($classroomId !== null) {
+            Classroom::query()->whereKey($classroomId)->update([
+                'main_teacher_person_id' => $account->person_id,
+            ]);
+        }
+
+        TenantContext::clear();
+
+        return compact('account');
     }
 }

@@ -26,7 +26,9 @@ it('runs the school-core cycle: class, attendance, invoice, partial payment, par
         ->assertOk()
         ->assertJsonPath('data.classroom_id', $classroom['id']);
 
-    $this->actingAs($school['account'], 'sanctum')
+    $teacher = $this->provisionTeacher($school, $classroom['id']);
+
+    $this->actingAs($teacher['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
             'date' => '2026-09-15',
             'session' => 'full_day',
@@ -96,6 +98,8 @@ it('replays attendance with the same client_reference without duplicating', func
             'classroom_id' => $classroom['id'],
         ]);
 
+    $teacher = $this->provisionTeacher($school, $classroom['id']);
+
     $payload = [
         'date' => '2026-09-16',
         'session' => 'full_day',
@@ -106,11 +110,11 @@ it('replays attendance with the same client_reference without duplicating', func
         ]],
     ];
 
-    $this->actingAs($school['account'], 'sanctum')
+    $this->actingAs($teacher['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", $payload)
         ->assertCreated();
 
-    $this->actingAs($school['account'], 'sanctum')
+    $this->actingAs($teacher['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", $payload)
         ->assertCreated();
 

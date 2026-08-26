@@ -34,7 +34,7 @@ Oui : **toute l’application** (interface React + API Laravel) tient dans **un 
    - `APP_KEY=base64:…` (`openssl rand -base64 32` puis préfixer `base64:`)
 5. Déployer une première fois (le build Docker prend quelques minutes).
 6. Onglet **Domains** : service **`app`**, **container port `3000`**, HTTPS. Après un Redeploy, revérifier ce port (Dokploy le remet parfois à 3000). DNS : enregistrement A vers l’IP du VPS.
-7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test` / `password`.
+7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test`, `teacher.antsahabe@fanabe.test`, `parent.andry@fanabe.test`, `eleve.fanja@fanabe.test` / `password`.
 
 Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 2).
 
@@ -45,7 +45,7 @@ Si le déploiement échoue sur `network dokploy-network not found`, Dokploy n’
 1. Compte sur [render.com](https://render.com), GitHub connecté à `adimby/sekool`.
 2. **New → Blueprint** → ce dépôt, branche `cursor/fanabe-architecture-docs-3345` (`render.yaml`).
 3. Attendre le build Docker. L’URL ressemble à `https://fanabe-xxxx.onrender.com`.
-4. Comptes : `direction.antsahabe@fanabe.test` / `password`, `parent.andry@fanabe.test` / `password`.
+4. Comptes : `direction.antsahabe@fanabe.test`, `teacher.antsahabe@fanabe.test`, `parent.andry@fanabe.test`, `eleve.fanja@fanabe.test` / `password`.
 
 Le premier démarrage crée les extensions Postgres, migre, et sème les personas. Les redémarrages ne réécrasent pas les données.
 
@@ -83,7 +83,7 @@ cp -n .env.example .env
 make vps
 ```
 
-Ouvrir `http://VOTRE_IP` (ou `:8080`). Comptes : `direction.antsahabe@fanabe.test` / `password`.
+Ouvrir `http://VOTRE_IP` (ou `:8080`). Comptes : `direction.antsahabe@fanabe.test` / `password` (direction), `teacher.antsahabe@fanabe.test` (appel), `eleve.fanja@fanabe.test` (élève).
 
 Postgres n’est plus exposé sur Internet ; seuls HTTP (et le Redis interne au réseau Docker, sans port hôte) restent. La clé Laravel est persistée dans le volume `fanabe_keys` pour survivre aux rebuilds.
 
@@ -120,12 +120,14 @@ Ouvrir **http://127.0.0.1:5173**
 
 | Compte | Email | Mot de passe | Ce que vous voyez |
 |---|---|---|---|
-| Direction Antsahabe | `direction.antsahabe@fanabe.test` | `password` | Onglets Famille, Classe, Présence, Caisse |
-| Direction Ambohipo | `direction.ambohipo@fanabe.test` | `password` | Idem, autre école (isolation) |
+| Direction Antsahabe | `direction.antsahabe@fanabe.test` | `password` | Familles, organisation des classes, caisse — **pas l’appel** |
+| Professeur Nivo | `teacher.antsahabe@fanabe.test` | `password` | Ses classes (6ème A, 5ème A) et l’appel du jour |
+| Direction Ambohipo | `direction.ambohipo@fanabe.test` | `password` | Idem direction, autre école (isolation) |
 | Parent Andry (persona A) | `parent.andry@fanabe.test` | `password` | Ses deux enfants, deux écoles, soldes |
 | Parent de Fanja | `parent.d@fanabe.test` | `password` | Espace famille et échéances |
+| Élève Fanja | `eleve.fanja@fanabe.test` | `password` | Lecture seule : classe, présence, écolage |
 
-Cycle phase 2 : affecter un élève à une classe, marquer la présence, générer la facture (150 000 Ar), enregistrer un paiement partiel (50 000 Ar), lire le reçu, puis se connecter en parent pour voir le solde restant (100 000 Ar). FANABE n’encaisse rien en ligne.
+Cycle phase 2 : la direction inscrit et affecte, le professeur fait l’appel, la caisse génère la facture (150 000 Ar) et enregistre un paiement partiel (50 000 Ar), le parent et l’élève lisent le solde restant (100 000 Ar). FANABE n’encaisse rien en ligne.
 
 Après une inscription, un **code d'invitation** s'affiche : onglet « Code d'invitation » pour activer le compte parent (email + mot de passe choisis).
 

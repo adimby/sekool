@@ -3,6 +3,7 @@ type School = {
   name: string
   code: string
   role: string
+  roles?: string[]
 }
 
 export type Session = {
@@ -16,8 +17,11 @@ export type Session = {
   }
   schools: School[]
   is_parent: boolean
+  is_student?: boolean
   schoolId?: string
 }
+
+export type Workspace = 'direction' | 'teacher' | 'parent' | 'student'
 
 const KEY = 'fanabe.session'
 
@@ -39,6 +43,32 @@ export function saveSession(session: Session): void {
 
 export function clearSession(): void {
   sessionStorage.removeItem(KEY)
+}
+
+export function schoolRoles(school: School): string[] {
+  return school.roles?.length ? school.roles : school.role ? [school.role] : []
+}
+
+export function workspacesOf(session: Session): Workspace[] {
+  const roles = session.schools.flatMap(schoolRoles)
+  const list: Workspace[] = []
+  if (roles.some((role) => ['school_owner', 'school_admin', 'principal'].includes(role))) {
+    list.push('direction')
+  }
+  if (roles.includes('teacher')) {
+    list.push('teacher')
+  }
+  if (session.is_parent) {
+    list.push('parent')
+  }
+  if (session.is_student) {
+    list.push('student')
+  }
+  return list
+}
+
+export function defaultWorkspace(session: Session): Workspace {
+  return workspacesOf(session)[0] ?? 'parent'
 }
 
 export async function api<T>(path: string, init: RequestInit & { token?: string; schoolId?: string } = {}): Promise<T> {

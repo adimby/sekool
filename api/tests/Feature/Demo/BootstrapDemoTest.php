@@ -38,8 +38,90 @@ it('lets the Antsahabe direction account log in after bootstrap', function () {
         'email' => 'direction.antsahabe@fanabe.test',
         'password' => 'password',
     ])->assertOk()
-        ->assertJsonStructure(['token', 'person_id', 'person', 'schools'])
-        ->assertJsonPath('schools.0.code', 'antsahabe');
+        ->assertJsonStructure(['token', 'person_id', 'person', 'schools', 'is_parent', 'is_student'])
+        ->assertJsonPath('schools.0.code', 'antsahabe')
+        ->assertJsonPath('schools.0.role', 'school_admin')
+        ->assertJsonPath('is_student', false);
+});
+
+it('lets the Antsahabe teacher take attendance and forbids the direction from doing so', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $teacher = $this->postJson('/api/v1/auth/login', [
+        'email' => 'teacher.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk()
+        ->assertJsonPath('schools.0.role', 'teacher')
+        ->assertJsonPath('is_student', false);
+
+    $schoolId = $teacher->json('schools.0.id');
+    $token = $teacher->json('token');
+
+    $classrooms = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms")
+        ->assertOk()
+        ->json('data');
+
+    expect($classrooms)->not->toBeEmpty();
+
+    $classroomId = $classrooms[0]['id'];
+    $roster = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}/roster")
+        ->assertOk()
+        ->json('data.students');
+
+    expect($roster)->not->toBeEmpty();
+
+    $this->withToken($token)
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-15',
+            'session' => 'full_day',
+            'records' => [[
+                'enrollment_id' => $roster[0]['enrollment_id'],
+                'status' => 'present',
+                'client_reference' => '33333333-3333-4333-8333-333333333333',
+            ]],
+        ])
+        ->assertCreated();
+
+    $direction = $this->postJson('/api/v1/auth/login', [
+        'email' => 'direction.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk();
+
+    $this->withToken($direction->json('token'))
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-15',
+            'session' => 'full_day',
+            'records' => [[
+                'enrollment_id' => $roster[0]['enrollment_id'],
+                'status' => 'absent',
+            ]],
+        ])
+        ->assertForbidden();
+});
+
+it('lets Fanja open a read-only student space after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'eleve.fanja@fanabe.test',
+        'password' => 'password',
+    ])->assertOk()
+        ->assertJsonPath('is_student', true)
+        ->assertJsonPath('is_parent', false)
+        ->assertJsonCount(0, 'schools');
+
+    $login = $this->postJson('/api/v1/auth/login', [
+        'email' => 'eleve.fanja@fanabe.test',
+        'password' => 'password',
+    ])->assertOk();
+
+    $this->withToken($login->json('token'))
+        ->getJson('/api/v1/student/me')
+        ->assertOk()
+        ->assertJsonPath('person.first_name', 'Fanja')
+        ->assertJsonPath('enrollment.classroom.name', '5ème A');
 });
 
 it('seeds classrooms and fee schedules for demo schools', function () {

@@ -2,6 +2,11 @@
 
 namespace App\Domain\Platform\Demo;
 
+use App\Domain\Identity\Actions\AcquirePersonRole;
+use App\Domain\Identity\Actions\GrantSchoolPersonLink;
+use App\Domain\Identity\Enums\PersonRoleType;
+use App\Domain\Identity\Enums\SchoolPersonLinkKind;
+use App\Domain\Identity\Enums\SchoolPersonLinkSource;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
@@ -14,7 +19,7 @@ use Illuminate\Support\Facades\Hash;
 final class EnsureDemoAccounts
 {
     /**
-     * @var list<array{email: string, first_name: string, last_name: string, school?: string, school_name?: string, plan?: string}>
+     * @var list<array<string, mixed>>
      */
     private const ACCOUNTS = [
         [
@@ -24,6 +29,7 @@ final class EnsureDemoAccounts
             'school' => 'antsahabe',
             'school_name' => 'École Antsahabe',
             'plan' => 'plus',
+            'role' => SchoolRole::Admin,
         ],
         [
             'email' => 'direction.ambohipo@fanabe.test',
@@ -32,6 +38,7 @@ final class EnsureDemoAccounts
             'school' => 'ambohipo',
             'school_name' => 'École Ambohipo',
             'plan' => 'starter',
+            'role' => SchoolRole::Admin,
         ],
         [
             'email' => 'direction.itaosy@fanabe.test',
@@ -40,6 +47,16 @@ final class EnsureDemoAccounts
             'school' => 'itaosy',
             'school_name' => 'École Itaosy',
             'plan' => 'starter',
+            'role' => SchoolRole::Admin,
+        ],
+        [
+            'email' => 'teacher.antsahabe@fanabe.test',
+            'first_name' => 'Nivo',
+            'last_name' => 'Andriamihaja',
+            'school' => 'antsahabe',
+            'school_name' => 'École Antsahabe',
+            'plan' => 'plus',
+            'role' => SchoolRole::Teacher,
         ],
         [
             'email' => 'parent.andry@fanabe.test',
@@ -50,6 +67,12 @@ final class EnsureDemoAccounts
             'email' => 'parent.d@fanabe.test',
             'first_name' => 'Mialy',
             'last_name' => 'Rakoto',
+        ],
+        [
+            'email' => 'eleve.fanja@fanabe.test',
+            'first_name' => 'Fanja',
+            'last_name' => 'Rakoto',
+            'kind' => 'student',
         ],
     ];
 
@@ -63,11 +86,17 @@ final class EnsureDemoAccounts
     }
 
     /**
-     * @param  array{email: string, first_name: string, last_name: string, school?: string, school_name?: string, plan?: string}  $row
+     * @param  array<string, mixed>  $row
      */
     private function ensure(array $row): void
     {
         $password = Hash::driver('bcrypt')->make('password');
+
+        if (($row['kind'] ?? null) === 'student') {
+            $this->ensureStudent($row, $password);
+
+            return;
+        }
 
         $account = UserAccount::query()->whereRaw('lower(email) = ?', [strtolower($row['email'])])->first();
 
@@ -114,10 +143,11 @@ final class EnsureDemoAccounts
             ],
         );
 
+        $role = $row['role'] ?? SchoolRole::Admin;
         $exists = SchoolRoleAssignment::query()
             ->where('school_id', $school->id)
             ->where('person_id', $account->person_id)
-            ->where('role', SchoolRole::Admin)
+            ->where('role', $role)
             ->whereNull('revoked_at')
             ->exists();
 
@@ -125,9 +155,53 @@ final class EnsureDemoAccounts
             SchoolRoleAssignment::query()->create([
                 'school_id' => $school->id,
                 'person_id' => $account->person_id,
-                'role' => SchoolRole::Admin,
+                'role' => $role,
                 'granted_at' => now(),
             ]);
         }
+
+        if ($role === SchoolRole::Teacher) {
+            app(AcquirePersonRole::class)->execute($account->person_id, PersonRoleType::Staff);
+            app(GrantSchoolPersonLink::class)->execute(
+                $school->id,
+                $account->person_id,
+                SchoolPersonLinkKind::Staff,
+                SchoolPersonLinkSource::Created,
+                false,
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function ensureStudent(array $row, string $password): void
+    {
+        $person = Person::query()
+            ->where('first_name', $row['first_name'])
+            ->where('last_name', $row['last_name'])
+            ->first();
+
+        if ($person === null) {
+            return;
+        }
+
+        $account = UserAccount::query()->whereRaw('lower(email) = ?', [strtolower($row['email'])])->first();
+
+        if ($account === null) {
+            UserAccount::query()->create([
+                'person_id' => $person->id,
+                'email' => $row['email'],
+                'password' => $password,
+                'must_change_password' => false,
+            ]);
+
+            return;
+        }
+
+        $account->forceFill([
+            'person_id' => $person->id,
+            'password' => $password,
+        ])->save();
     }
 }

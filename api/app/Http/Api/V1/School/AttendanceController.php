@@ -6,8 +6,10 @@ use App\Domain\Academic\Actions\RecordAttendance;
 use App\Domain\Academic\Enums\AttendanceSession;
 use App\Domain\Academic\Enums\AttendanceStatus;
 use App\Domain\Academic\Models\AttendanceRecord;
+use App\Domain\Academic\Models\Classroom;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\School\Support\SchoolGate;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +24,11 @@ final class AttendanceController extends Controller
             'date' => ['required', 'date'],
             'session' => ['nullable', 'string'],
         ]);
+
+        $classroom = Classroom::query()->find($data['classroom_id']);
+        if ($classroom === null || ! SchoolGate::canViewClassroom($request, $classroom)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
 
         $session = AttendanceSession::tryFrom($data['session'] ?? AttendanceSession::FullDay->value)
             ?? AttendanceSession::FullDay;
@@ -83,6 +90,19 @@ final class AttendanceController extends Controller
         $schoolId = (string) $request->route('school');
         $actorId = $request->user()->person_id;
         $via = $data['recorded_via'] ?? 'web';
+
+        $enrollmentIds = collect($data['records'])->pluck('enrollment_id')->unique()->all();
+        $enrollments = Enrollment::query()->whereIn('id', $enrollmentIds)->get();
+        if ($enrollments->count() !== count($enrollmentIds) || $enrollments->contains(fn (Enrollment $row) => $row->classroom_id === null)) {
+            return response()->json(['message' => 'Inscription introuvable.'], 404);
+        }
+
+        $classrooms = Classroom::query()->whereIn('id', $enrollments->pluck('classroom_id')->unique())->get();
+        foreach ($classrooms as $classroom) {
+            if (! SchoolGate::canTakeAttendance($request, $classroom)) {
+                return response()->json(['message' => 'L’appel se fait par le professeur de la classe.'], 403);
+            }
+        }
 
         $saved = DB::transaction(function () use ($data, $session, $record, $schoolId, $actorId, $via) {
             $rows = [];

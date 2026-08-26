@@ -7,8 +7,9 @@ it('authenticates a school user with email and password', function () {
         'email' => $fixture['account']->email,
         'password' => 'password',
     ])->assertOk()
-        ->assertJsonStructure(['token', 'person_id', 'person', 'schools', 'is_parent'])
-        ->assertJsonPath('schools.0.id', $fixture['school']->id);
+        ->assertJsonStructure(['token', 'person_id', 'person', 'schools', 'is_parent', 'is_student'])
+        ->assertJsonPath('schools.0.id', $fixture['school']->id)
+        ->assertJsonPath('is_student', false);
 });
 
 it('returns the session payload on /me', function () {

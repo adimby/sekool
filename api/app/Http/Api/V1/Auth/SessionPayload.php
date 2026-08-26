@@ -7,10 +7,24 @@ use App\Domain\Identity\Models\PersonRole;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Identity\Support\PersonPayload;
 use App\Domain\Platform\Tenancy\TenantContext;
+use App\Domain\School\Enums\SchoolRole;
 use App\Domain\School\Models\SchoolRoleAssignment;
+use Illuminate\Support\Collection;
 
 final class SessionPayload
 {
+    /**
+     * @var list<string>
+     */
+    private const PRIMARY_ROLE_ORDER = [
+        SchoolRole::Owner->value,
+        SchoolRole::Admin->value,
+        SchoolRole::Principal->value,
+        SchoolRole::Accountant->value,
+        SchoolRole::Teacher->value,
+        SchoolRole::Staff->value,
+    ];
+
     /**
      * @return array<string, mixed>
      */
@@ -18,32 +32,59 @@ final class SessionPayload
     {
         $account->loadMissing('person');
 
-        $schools = TenantContext::runWithRlsBypass(fn () => SchoolRoleAssignment::query()
+        $assignments = TenantContext::runWithRlsBypass(fn () => SchoolRoleAssignment::query()
             ->withoutGlobalScopes()
             ->where('person_id', $account->person_id)
             ->whereNull('revoked_at')
             ->with('school')
-            ->get()
-            ->map(fn (SchoolRoleAssignment $assignment): array => [
-                'id' => $assignment->school_id,
-                'name' => $assignment->school?->name,
-                'code' => $assignment->school?->code,
-                'role' => $assignment->role->value,
-            ])
-            ->values());
+            ->get());
 
-        $isParent = PersonRole::query()
+        $schools = $assignments
+            ->groupBy('school_id')
+            ->map(function (Collection $rows): array {
+                $assignment = $rows->first();
+                $roles = $rows
+                    ->map(fn (SchoolRoleAssignment $row): string => $row->role->value)
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return [
+                    'id' => $assignment->school_id,
+                    'name' => $assignment->school?->name,
+                    'code' => $assignment->school?->code,
+                    'role' => self::primaryRole($roles),
+                    'roles' => $roles,
+                ];
+            })
+            ->values();
+
+        $openRoles = PersonRole::query()
             ->where('person_id', $account->person_id)
-            ->where('role', PersonRoleType::Parent)
             ->whereNull('ended_at')
-            ->exists();
+            ->pluck('role');
 
         return [
             'token' => $token,
             'person_id' => $account->person_id,
             'person' => PersonPayload::forParent($account->person),
             'schools' => $schools,
-            'is_parent' => $isParent,
+            'is_parent' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Parent || $role === PersonRoleType::Parent->value),
+            'is_student' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Student || $role === PersonRoleType::Student->value),
         ];
+    }
+
+    /**
+     * @param  list<string>  $roles
+     */
+    private static function primaryRole(array $roles): string
+    {
+        foreach (self::PRIMARY_ROLE_ORDER as $role) {
+            if (in_array($role, $roles, true)) {
+                return $role;
+            }
+        }
+
+        return $roles[0] ?? SchoolRole::Staff->value;
     }
 }

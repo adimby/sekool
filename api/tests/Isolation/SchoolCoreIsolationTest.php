@@ -51,7 +51,9 @@ it('never lets school A read school B attendance through Eloquent or RLS', funct
             'classroom_id' => $classroom['id'],
         ]);
 
-    $recordId = $this->actingAs($a['account'], 'sanctum')
+    $teacher = $this->provisionTeacher($a, $classroom['id']);
+
+    $recordId = $this->actingAs($teacher['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$a['school']->id}/attendance", [
             'date' => '2026-09-15',
             'session' => 'full_day',
