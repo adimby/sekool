@@ -28,3 +28,14 @@ it('seeds demo users when schools already exist without accounts', function () {
 
     expect(UserAccount::query()->where('email', 'direction.antsahabe@fanabe.test')->exists())->toBeTrue();
 });
+
+it('lets the Antsahabe direction account log in after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'direction.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk()
+        ->assertJsonStructure(['token', 'person_id', 'person', 'schools'])
+        ->assertJsonPath('schools.0.code', 'antsahabe');
+});

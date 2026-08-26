@@ -20,10 +20,17 @@ final class LoginController extends Controller
         ]);
 
         $account = TenantContext::runWithRlsBypass(
-            fn (): ?UserAccount => UserAccount::query()->where('email', $data['email'])->first(),
+            fn (): ?UserAccount => UserAccount::query()
+                ->whereRaw('lower(email) = ?', [strtolower($data['email'])])
+                ->first(),
         );
 
-        if ($account === null || ! Hash::check($data['password'], $account->password)) {
+        $hash = $account?->getRawOriginal('password');
+        $passwordOk = is_string($hash)
+            && $hash !== ''
+            && (Hash::check($data['password'], $hash) || password_verify($data['password'], $hash));
+
+        if ($account === null || ! $passwordOk) {
             throw ValidationException::withMessages([
                 'email' => ['Identifiants invalides.'],
             ]);
