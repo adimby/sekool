@@ -54,6 +54,12 @@ services:
       APP_URL: ${APP_URL:-http://localhost}
       APP_KEY: ${APP_KEY:-}
       DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: fanabe
+      DB_USERNAME: fanabe
+      DB_PASSWORD: fanabe
+      DB_URL: postgres://fanabe:fanabe@db:5432/fanabe
       DATABASE_URL: postgres://fanabe:fanabe@db:5432/fanabe
       DB_SSLMODE: disable
       CACHE_STORE: file
