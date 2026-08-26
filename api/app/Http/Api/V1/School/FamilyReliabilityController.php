@@ -3,7 +3,6 @@
 namespace App\Http\Api\V1\School;
 
 use App\Domain\Collection\Support\CollectionPayload;
-use App\Domain\Collection\Support\FamilyRecipients;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Family\Models\FamilyMember;
 use App\Domain\Reliability\Actions\ComputeFamilyReliability;

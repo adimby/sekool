@@ -146,7 +146,7 @@ it('fills the Antsahabe cockpit with three priority actions after bootstrap', fu
 
     $this->flushHeaders();
     $this->actingAs(
-        \App\Domain\Identity\Models\UserAccount::query()
+        UserAccount::query()
             ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
             ->firstOrFail(),
         'sanctum',

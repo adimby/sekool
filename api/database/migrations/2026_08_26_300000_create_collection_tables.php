@@ -33,7 +33,7 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessments_enrollment_fk FOREIGN KEY (school_id, enrollment_id) REFERENCES enrollments (school_id, id)');
         DB::statement("ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessments_level_chk CHECK (level IN ('low', 'medium', 'high', 'critical'))");
-        DB::statement("ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessments_override_chk CHECK (manual_override_level IS NULL OR (override_reason IS NOT NULL AND override_until IS NOT NULL))");
+        DB::statement('ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessments_override_chk CHECK (manual_override_level IS NULL OR (override_reason IS NOT NULL AND override_until IS NOT NULL))');
 
         Schema::create('risk_factors', function (Blueprint $table) {
             $table->uuid('id')->primary();

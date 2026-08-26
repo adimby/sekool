@@ -2,6 +2,8 @@
 
 namespace App\Domain\Finance\Actions;
 
+use App\Domain\Collection\Actions\AssessEnrollmentRisk;
+use App\Domain\Collection\Actions\ResolveSettledCollectionTasks;
 use App\Domain\Finance\Enums\DocumentType;
 use App\Domain\Finance\Enums\PaymentMethod;
 use App\Domain\Finance\Models\Installment;
@@ -10,8 +12,6 @@ use App\Domain\Finance\Models\PayerAccount;
 use App\Domain\Finance\Models\Payment;
 use App\Domain\Finance\Models\PaymentAllocation;
 use App\Domain\Finance\Models\Receipt;
-use App\Domain\Collection\Actions\AssessEnrollmentRisk;
-use App\Domain\Collection\Actions\ResolveSettledCollectionTasks;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
 use App\Domain\Reliability\Actions\ComputeFamilyReliability;
