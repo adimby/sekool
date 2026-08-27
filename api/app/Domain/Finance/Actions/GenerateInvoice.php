@@ -8,24 +8,25 @@ use App\Domain\Family\Models\FamilyMember;
 use App\Domain\Finance\Enums\DocumentType;
 use App\Domain\Finance\Enums\InstallmentStatus;
 use App\Domain\Finance\Enums\InvoiceStatus;
-use App\Domain\Finance\Models\FeeItem;
-use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Finance\Models\Installment;
 use App\Domain\Finance\Models\Invoice;
 use App\Domain\Finance\Models\InvoiceLine;
 use App\Domain\Finance\Models\PayerAccount;
+use App\Domain\Finance\Support\ResolveFeeSchedule;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
 use App\Domain\Platform\Support\Money;
 use App\Domain\Reliability\Actions\ComputeSchoolReliability;
 use App\Domain\Reliability\Models\TrustEvent;
 use App\Domain\Reliability\Support\ReliabilityIndexes;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 final class GenerateInvoice
 {
-    public function __construct(private readonly NextDocumentNumber $numbers) {}
+    public function __construct(
+        private readonly NextDocumentNumber $numbers,
+        private readonly ResolveFeeSchedule $feeSchedules,
+    ) {}
 
     /**
      * @return array{invoice: Invoice, created: bool}
@@ -73,7 +74,18 @@ final class GenerateInvoice
                 return ['invoice' => $existing->load(['lines', 'installments']), 'created' => false];
             }
 
-            $items = $this->feeItemsFor($enrollment);
+            $schedule = $this->feeSchedules->forYearAndGrade(
+                $enrollment->school_year_id,
+                $enrollment->classroom?->grade_level_id,
+                true,
+            );
+            $items = $schedule?->items
+                ->sortBy([
+                    ['due_on', 'asc'],
+                    ['code', 'asc'],
+                ])
+                ->values() ?? collect();
+
             if ($items->isEmpty()) {
                 throw new DomainException('Aucun barème de frais n\'est défini pour cette classe / année.');
             }
@@ -163,39 +175,6 @@ final class GenerateInvoice
 
             return ['invoice' => $invoice->load(['lines', 'installments']), 'created' => true];
         });
-    }
-
-    /**
-     * @return Collection<int, FeeItem>
-     */
-    private function feeItemsFor(Enrollment $enrollment)
-    {
-        $gradeId = $enrollment->classroom?->grade_level_id;
-
-        $schedule = null;
-        if ($gradeId !== null) {
-            $schedule = FeeSchedule::query()
-                ->where('school_year_id', $enrollment->school_year_id)
-                ->where('grade_level_id', $gradeId)
-                ->where('status', 'active')
-                ->first();
-        }
-
-        $schedule ??= FeeSchedule::query()
-            ->where('school_year_id', $enrollment->school_year_id)
-            ->whereNull('grade_level_id')
-            ->where('status', 'active')
-            ->first();
-
-        if ($schedule === null) {
-            return collect();
-        }
-
-        return FeeItem::query()
-            ->where('fee_schedule_id', $schedule->id)
-            ->orderBy('due_on')
-            ->orderBy('code')
-            ->get();
     }
 
     private function payerAccountFor(string $schoolId, string $studentPersonId): PayerAccount

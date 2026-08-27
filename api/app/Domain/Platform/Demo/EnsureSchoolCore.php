@@ -9,6 +9,7 @@ use App\Domain\Academic\Models\GradeLevel;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Finance\Enums\FeeCategory;
+use App\Domain\Finance\Enums\FeeScheduleStatus;
 use App\Domain\Finance\Models\FeeItem;
 use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Identity\Models\UserAccount;
@@ -130,9 +131,18 @@ final class EnsureSchoolCore
             ],
             [
                 'grade_level_id' => null,
-                'status' => 'active',
+                'status' => FeeScheduleStatus::Active,
+                'submitted_at' => now(),
+                'locked_at' => now(),
             ],
         );
+
+        if ($schedule->status === FeeScheduleStatus::Active && $schedule->locked_at === null) {
+            $schedule->forceFill([
+                'submitted_at' => $schedule->submitted_at ?? $schedule->created_at,
+                'locked_at' => $schedule->created_at,
+            ])->save();
+        }
 
         $items = [
             ['code' => 'SCOL_T1', 'label' => 'Écolage 1er trimestre', 'due_on' => '2026-09-15'],

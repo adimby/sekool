@@ -83,7 +83,43 @@ type ClassroomRow = {
   name: string
   grade_level_id: string
   school_year_id?: string
-  grade_level?: { name: string }
+  capacity?: number | null
+  grade_level?: { id?: string; name: string } | null
+  main_teacher?: { id?: string; first_name: string; last_name: string } | null
+}
+
+type YearRow = {
+  id: string
+  label: string
+  is_current: boolean
+  starts_on?: string
+  ends_on?: string
+}
+
+type FeeItemRow = {
+  id?: string
+  code?: string
+  label: string
+  amount: number
+  due_on: string
+  category: string
+  is_recurring?: boolean
+}
+
+type FeeScheduleRow = {
+  id: string
+  school_year_id: string
+  grade_level_id: string | null
+  name: string
+  status: string
+  locked: boolean
+  total_amount: number
+  copied_from_schedule_id?: string | null
+  unlock_requested_at?: string | null
+  unlock_request_reason?: string | null
+  grade_level?: { id: string; name: string } | null
+  school_year?: { id: string; label: string } | null
+  items: FeeItemRow[]
 }
 
 type EnrollmentRow = {
@@ -210,7 +246,7 @@ type ReliabilityOverview = {
   }>
 }
 
-type DirectionTab = 'accueil' | 'famille' | 'classe' | 'caisse' | 'indices'
+type DirectionTab = 'accueil' | 'famille' | 'classe' | 'frais' | 'caisse' | 'indices'
 type TeacherTab = 'classe' | 'appel'
 type ParentTab = 'enfants' | 'messages' | 'compte'
 
@@ -220,6 +256,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
   { id: 'accueil', label: 'Aujourd’hui' },
   { id: 'famille', label: 'Familles' },
   { id: 'classe', label: 'Classes' },
+  { id: 'frais', label: 'Frais' },
   { id: 'caisse', label: 'Caisse' },
   { id: 'indices', label: 'Indices' },
 ]
@@ -432,6 +469,36 @@ function consentLabel(scope?: string): string {
   if (scope === 'documents.external') return 'Documents'
   if (scope === 'documents.certificates') return 'Certificats'
   return scope ?? ''
+}
+
+function feeCategoryLabel(category?: string): string {
+  if (category === 'tuition') return 'Écolage'
+  if (category === 'registration') return 'Droit d’inscription'
+  if (category === 'exam') return 'Examen'
+  if (category === 'association') return 'Cotisation APE'
+  if (category === 'other') return 'Autre'
+  return category ?? ''
+}
+
+function feeStatusLabel(status?: string, locked?: boolean): string {
+  if (locked || status === 'active') return 'Verrouillé'
+  if (status === 'pending_validation') return '1re validation'
+  if (status === 'draft') return 'Brouillon'
+  return status ?? ''
+}
+
+function feeScheduleForClass(
+  classroom: ClassroomRow | undefined,
+  schedules: FeeScheduleRow[],
+  yearId: string,
+): FeeScheduleRow | null {
+  if (!classroom) return null
+  const yearSchedules = schedules.filter((row) => row.school_year_id === (classroom.school_year_id || yearId))
+  return (
+    yearSchedules.find((row) => row.grade_level_id === classroom.grade_level_id) ??
+    yearSchedules.find((row) => row.grade_level_id == null) ??
+    null
+  )
 }
 
 function invoiceLabel(status?: string): string {
@@ -1032,6 +1099,497 @@ function EnrollmentWizard({
   )
 }
 
+function starterFeeItems(startsOn?: string): Array<{ label: string; amount: string; due_on: string; category: string }> {
+  const start = startsOn ? new Date(`${startsOn}T00:00:00`) : new Date('2026-09-01T00:00:00')
+  const iso = (months: number, day: number) => {
+    const date = new Date(start)
+    date.setMonth(date.getMonth() + months)
+    date.setDate(day)
+    return date.toISOString().slice(0, 10)
+  }
+  return [
+    { label: 'Droit d’inscription', amount: '20000', due_on: iso(0, 1), category: 'registration' },
+    { label: 'Écolage 1er trimestre', amount: '50000', due_on: iso(0, 15), category: 'tuition' },
+    { label: 'Écolage 2e trimestre', amount: '50000', due_on: iso(4, 15), category: 'tuition' },
+    { label: 'Écolage 3e trimestre', amount: '50000', due_on: iso(7, 15), category: 'tuition' },
+  ]
+}
+
+function FeeSettingsPanel({
+  schoolId,
+  auth,
+  years,
+  grades,
+  currentYearId,
+  schedules,
+  busy,
+  onBusy,
+  onMessage,
+  onRefresh,
+}: {
+  schoolId: string
+  auth: { token: string }
+  years: YearRow[]
+  grades: Array<{ id: string; name: string }>
+  currentYearId: string
+  schedules: FeeScheduleRow[]
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+  onRefresh: () => Promise<void>
+}) {
+  const [yearId, setYearId] = useState(currentYearId)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [gradeId, setGradeId] = useState('')
+  const [items, setItems] = useState(starterFeeItems())
+  const [sourceYearId, setSourceYearId] = useState('')
+  const [adjustType, setAdjustType] = useState<'none' | 'amount' | 'percent'>('none')
+  const [lineAdjustType, setLineAdjustType] = useState<'amount' | 'percent'>('percent')
+  const [adjustValue, setAdjustValue] = useState('10')
+  const [unlockReason, setUnlockReason] = useState('')
+
+  const year = years.find((row) => row.id === yearId) ?? years[0]
+  const yearSchedules = schedules.filter((row) => row.school_year_id === (year?.id ?? yearId))
+  const selected = yearSchedules.find((row) => row.id === selectedId) ?? null
+  const previousYears = years.filter((row) => row.id !== (year?.id ?? yearId))
+  const locked = Boolean(selected?.locked)
+
+  useEffect(() => {
+    if (currentYearId && (yearId === '' || !years.some((row) => row.id === yearId))) {
+      setYearId(currentYearId)
+    }
+  }, [currentYearId, years, yearId])
+
+  useEffect(() => {
+    if (creating) return
+    const list = schedules.filter((row) => row.school_year_id === yearId)
+    if (selectedId && list.some((row) => row.id === selectedId)) return
+    setSelectedId(list[0]?.id ?? null)
+  }, [yearId, schedules, creating, selectedId])
+
+  const itemSignature = selected?.items.map((item) => `${item.id}:${item.amount}:${item.label}:${item.due_on}`).join('|')
+
+  useEffect(() => {
+    if (!selected || creating) return
+    setName(selected.name)
+    setGradeId(selected.grade_level_id ?? '')
+    setItems(
+      selected.items.map((item) => ({
+        label: item.label,
+        amount: String(item.amount),
+        due_on: item.due_on,
+        category: item.category,
+      })),
+    )
+  }, [selected?.id, itemSignature, creating])
+
+  function startCreate() {
+    setCreating(true)
+    setSelectedId(null)
+    setName(`Frais ${year?.label ?? ''}`)
+    setGradeId('')
+    setItems(starterFeeItems(year?.starts_on))
+  }
+
+  async function run(action: () => Promise<void>, ok?: string) {
+    onBusy(true)
+    onMessage(null)
+    try {
+      await action()
+      await onRefresh()
+      if (ok) onMessage(ok)
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Action impossible.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  function payloadItems() {
+    return items
+      .filter((item) => item.label.trim() !== '')
+      .map((item) => ({
+        label: item.label.trim(),
+        amount: Number(item.amount),
+        due_on: item.due_on,
+        category: item.category,
+      }))
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[16rem_1fr]">
+      <Panel className="p-3">
+        <h2 className="text-sm font-semibold">Barèmes</h2>
+        <p className="mt-1 text-[11px] text-neutral-500">Paramétrés à l’ouverture des inscriptions, puis verrouillés.</p>
+        <select className={`${inputClass} mt-3`} value={year?.id ?? yearId} onChange={(e) => setYearId(e.target.value)}>
+          {years.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+              {row.is_current ? ' · en cours' : ''}
+            </option>
+          ))}
+        </select>
+        <ul className="mt-3 divide-y divide-black/5 text-sm">
+          {yearSchedules.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                className={`flex w-full items-center justify-between py-1.5 text-left ${
+                  !creating && selectedId === row.id ? 'font-semibold text-fanabe-leaf' : ''
+                }`}
+                onClick={() => {
+                  setCreating(false)
+                  setSelectedId(row.id)
+                }}
+              >
+                <span>{row.grade_level?.name ?? 'Toute l’école'}</span>
+                <span className="text-[11px] text-neutral-500">{feeStatusLabel(row.status, row.locked)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {yearSchedules.length === 0 ? <p className="mt-3 text-xs text-neutral-500">Aucun barème pour {year?.label}.</p> : null}
+        <button type="button" className={`${btnGhost} mt-3 w-full`} onClick={startCreate} disabled={busy}>
+          Nouveau barème
+        </button>
+        {previousYears.length > 0 ? (
+          <div className="mt-4 space-y-2 border-t border-black/5 pt-3">
+            <p className="text-xs font-medium text-neutral-600">Reprendre une année</p>
+            <select className={inputClass} value={sourceYearId} onChange={(e) => setSourceYearId(e.target.value)}>
+              <option value="">Année source</option>
+              {previousYears.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.label}
+                </option>
+              ))}
+            </select>
+            <select className={inputClass} value={adjustType} onChange={(e) => setAdjustType(e.target.value as typeof adjustType)}>
+              <option value="none">Sans changement</option>
+              <option value="amount">Écart en Ariary</option>
+              <option value="percent">Pourcentage</option>
+            </select>
+            {adjustType !== 'none' ? (
+              <input
+                className={inputClass}
+                value={adjustValue}
+                onChange={(e) => setAdjustValue(e.target.value)}
+                placeholder={adjustType === 'percent' ? '+10 %' : '+5000 Ar'}
+              />
+            ) : null}
+            <button
+              type="button"
+              className={btnBlock}
+              disabled={busy || !sourceYearId || !year}
+              onClick={() =>
+                void run(async () => {
+                  const body: Record<string, unknown> = {
+                    source_year_id: sourceYearId,
+                    target_year_id: year?.id,
+                  }
+                  if (adjustType === 'amount') {
+                    body.adjustment_type = 'amount'
+                    body.adjustment_amount = Number(adjustValue)
+                  }
+                  if (adjustType === 'percent') {
+                    body.adjustment_type = 'percent'
+                    body.adjustment_percent = Number(adjustValue)
+                  }
+                  const payload = await api<{ data: FeeScheduleRow[] }>(`/api/v1/schools/${schoolId}/fee-schedules/copy-year`, {
+                    ...auth,
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                  })
+                  setCreating(false)
+                  setSelectedId(payload.data[0]?.id ?? null)
+                }, 'Barèmes copiés. Vérifiez les montants avant validation.')
+              }
+            >
+              Copier
+            </button>
+          </div>
+        ) : null}
+      </Panel>
+      <Panel className="min-w-0 p-3">
+        {creating || selected ? (
+          <>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">{creating ? 'Nouveau barème' : selected?.name}</h2>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  {year?.label} · {feeStatusLabel(selected?.status, selected?.locked)}
+                  {selected?.copied_from_schedule_id ? ' · repris de l’année précédente' : ''}
+                </p>
+              </div>
+              <p className="text-sm font-medium tabular-nums">
+                {formatAr(items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0))}
+              </p>
+            </div>
+            {locked ? (
+              <p className="mt-2 rounded-md bg-fanabe-mist px-3 py-2 text-xs text-neutral-700">
+                Verrouillé après double validation. Toute modification exige une demande de support FANABE.
+              </p>
+            ) : null}
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <Field label="Libellé">
+                <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} disabled={locked} />
+              </Field>
+              <Field label="Niveau">
+                <select className={inputClass} value={gradeId} onChange={(e) => setGradeId(e.target.value)} disabled={locked}>
+                  <option value="">Toute l’école</option>
+                  {grades.map((grade) => (
+                    <option key={grade.id} value={grade.id}>
+                      {grade.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="mt-3 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className="px-2 py-1.5 font-medium">Type</th>
+                    <th className="px-2 py-1.5 font-medium">Libellé</th>
+                    <th className="px-2 py-1.5 font-medium">Montant</th>
+                    <th className="px-2 py-1.5 font-medium">Échéance</th>
+                    <th className="px-2 py-1.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={index} className="border-t border-black/5">
+                      <td className="px-2 py-1">
+                        <select
+                          className={inputClass}
+                          value={item.category}
+                          disabled={locked}
+                          onChange={(e) =>
+                            setItems((prev) => prev.map((row, i) => (i === index ? { ...row, category: e.target.value } : row)))
+                          }
+                        >
+                          <option value="registration">Droit d’inscription</option>
+                          <option value="tuition">Écolage</option>
+                          <option value="exam">Examen</option>
+                          <option value="association">Cotisation APE</option>
+                          <option value="other">Autre</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          className={inputClass}
+                          value={item.label}
+                          disabled={locked}
+                          onChange={(e) =>
+                            setItems((prev) => prev.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          className={inputClass}
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.amount}
+                          disabled={locked}
+                          onChange={(e) =>
+                            setItems((prev) => prev.map((row, i) => (i === index ? { ...row, amount: e.target.value } : row)))
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          className={inputClass}
+                          type="date"
+                          value={item.due_on}
+                          disabled={locked}
+                          onChange={(e) =>
+                            setItems((prev) => prev.map((row, i) => (i === index ? { ...row, due_on: e.target.value } : row)))
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          disabled={locked || items.length <= 1}
+                          onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          Retirer
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!locked ? (
+              <button
+                type="button"
+                className={`${btnGhost} mt-2`}
+                onClick={() =>
+                  setItems((prev) => [...prev, { label: '', amount: '10000', due_on: year?.starts_on ?? '', category: 'other' }])
+                }
+              >
+                Ajouter une ligne
+              </button>
+            ) : null}
+            {!locked && selected && !creating ? (
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <Field label="Ajuster toutes les lignes">
+                  <select className={inputClass} value={lineAdjustType} onChange={(e) => setLineAdjustType(e.target.value as typeof lineAdjustType)}>
+                    <option value="amount">Écart en Ariary</option>
+                    <option value="percent">Pourcentage</option>
+                  </select>
+                </Field>
+                <input className={`${inputClass} max-w-[8rem]`} value={adjustValue} onChange={(e) => setAdjustValue(e.target.value)} />
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}/adjust`, {
+                        ...auth,
+                        method: 'POST',
+                        body: JSON.stringify(
+                          lineAdjustType === 'percent'
+                            ? { adjustment_type: 'percent', adjustment_percent: Number(adjustValue) }
+                            : { adjustment_type: 'amount', adjustment_amount: Number(adjustValue) },
+                        ),
+                      })
+                    }, 'Montants ajustés. Vous pouvez encore corriger à la main.')
+                  }
+                >
+                  Appliquer
+                </button>
+              </div>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {!locked ? (
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={busy || name.trim() === '' || payloadItems().length === 0}
+                  onClick={() =>
+                    void run(async () => {
+                      if (creating) {
+                        const payload = await api<{ data: FeeScheduleRow }>(`/api/v1/schools/${schoolId}/fee-schedules`, {
+                          ...auth,
+                          method: 'POST',
+                          body: JSON.stringify({
+                            school_year_id: year?.id,
+                            grade_level_id: gradeId || null,
+                            name,
+                            items: payloadItems(),
+                          }),
+                        })
+                        setCreating(false)
+                        setSelectedId(payload.data.id)
+                      } else if (selected) {
+                        await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}`, {
+                          ...auth,
+                          method: 'PATCH',
+                          body: JSON.stringify({
+                            name,
+                            grade_level_id: gradeId || null,
+                            items: payloadItems(),
+                          }),
+                        })
+                      }
+                    }, creating ? 'Brouillon enregistré.' : 'Barème mis à jour.')
+                  }
+                >
+                  Enregistrer
+                </button>
+              ) : null}
+              {selected && selected.status === 'draft' ? (
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}/submit`, { ...auth, method: 'POST' })
+                    }, 'Première validation enregistrée.')
+                  }
+                >
+                  1re validation
+                </button>
+              ) : null}
+              {selected && selected.status === 'pending_validation' ? (
+                <>
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}/confirm`, { ...auth, method: 'POST' })
+                      }, 'Barème verrouillé pour l’année.')
+                    }
+                  >
+                    2e validation
+                  </button>
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}/reopen`, { ...auth, method: 'POST' })
+                      }, 'Renvoyé en brouillon.')
+                    }
+                  >
+                    Revenir au brouillon
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {locked ? (
+              <form
+                className="mt-4 space-y-2 border-t border-black/5 pt-3"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!selected) return
+                  void run(async () => {
+                    await api(`/api/v1/schools/${schoolId}/fee-schedules/${selected.id}/request-unlock`, {
+                      ...auth,
+                      method: 'POST',
+                      body: JSON.stringify({ reason: unlockReason }),
+                    })
+                    setUnlockReason('')
+                  }, 'Demande de support enregistrée. Le barème reste verrouillé.')
+                }}
+              >
+                <Field label="Demande de support">
+                  <input
+                    className={inputClass}
+                    value={unlockReason}
+                    onChange={(e) => setUnlockReason(e.target.value)}
+                    placeholder="Motif (erreur de saisie, décision du conseil…)"
+                    required
+                  />
+                </Field>
+                <button type="submit" className={btnGhost} disabled={busy || unlockReason.trim() === ''}>
+                  Demander le support FANABE
+                </button>
+                {selected?.unlock_requested_at ? (
+                  <p className="text-[11px] text-neutral-500">Demande déjà transmise. Le barème ne peut toujours pas être modifié.</p>
+                ) : null}
+              </form>
+            ) : null}
+          </>
+        ) : (
+          <p className="py-8 text-center text-sm text-neutral-500">Choisissez un barème ou créez-en un pour {year?.label}.</p>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
 function DirectionScreen({
   session,
   tab,
@@ -1045,8 +1603,10 @@ function DirectionScreen({
   const [people, setPeople] = useState<PersonRow[]>([])
   const [yearId, setYearId] = useState('')
   const [yearLabel, setYearLabel] = useState('2026-2027')
+  const [years, setYears] = useState<YearRow[]>([])
   const [classrooms, setClassrooms] = useState<ClassroomRow[]>([])
   const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([])
+  const [feeSchedules, setFeeSchedules] = useState<FeeScheduleRow[]>([])
   const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [invitation, setInvitation] = useState<string | null>(null)
@@ -1088,13 +1648,16 @@ function DirectionScreen({
   const pagedEnrollments = pageOf(filteredEnrollments, page)
   const selectedStudent = activeEnrollments.find((row) => row.id === selectedEnrollment)
   const selectedFamily = families.find((family) => family.id === selectedFamilyId) ?? null
+  const selectedClassroom = classrooms.find((row) => row.id === classFilter)
+  const selectedClassSchedule = feeScheduleForClass(selectedClassroom, feeSchedules, yearId)
+  const selectedClassCount = selectedClassroom
+    ? activeEnrollments.filter((row) => row.classroom_id === selectedClassroom.id).length
+    : 0
 
   async function loadCore() {
-    const years = await api<{ data: Array<{ id: string; is_current: boolean; label: string }> }>(
-      `/api/v1/schools/${schoolId}/years`,
-      auth,
-    )
-    const current = years.data.find((year) => year.is_current) ?? years.data[0]
+    const yearsPayload = await api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth)
+    const current = yearsPayload.data.find((year) => year.is_current) ?? yearsPayload.data[0]
+    setYears(yearsPayload.data)
     setYearId(current?.id ?? '')
     setYearLabel(current?.label ?? '2026-2027')
     const [classList, gradeList, today] = await Promise.all([
@@ -1106,6 +1669,11 @@ function DirectionScreen({
     setGrades(gradeList.data)
     setCockpit(today)
     setNewClassGrade((prev) => prev || gradeList.data[0]?.id || '')
+  }
+
+  async function loadFeeSchedules() {
+    const list = await api<{ data: FeeScheduleRow[] }>(`/api/v1/schools/${schoolId}/fee-schedules`, auth)
+    setFeeSchedules(list.data)
   }
 
   async function loadPeople() {
@@ -1144,8 +1712,8 @@ function DirectionScreen({
     if (tab === 'famille') {
       Promise.all([loadPeople(), loadFamilies(), loadTransfers()]).catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'classe' || tab === 'caisse') {
-      loadEnrollments().catch((error: Error) => setMessage(error.message))
+    if (tab === 'classe' || tab === 'caisse' || tab === 'frais') {
+      Promise.all([loadEnrollments(), loadFeeSchedules()]).catch((error: Error) => setMessage(error.message))
     }
     if (tab === 'indices') {
       loadReliability().catch((error: Error) => setMessage(error.message))
@@ -1640,6 +2208,50 @@ function DirectionScreen({
             </ul>
           </Panel>
           <Panel className="min-w-0">
+            {selectedClassroom ? (
+              <div className="border-b border-black/5 px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-semibold">{selectedClassroom.name}</h2>
+                    <p className="text-xs text-neutral-500">
+                      {selectedClassroom.grade_level?.name ?? 'Niveau'} · {yearLabel}
+                      {selectedClassroom.main_teacher
+                        ? ` · ${selectedClassroom.main_teacher.first_name} ${selectedClassroom.main_teacher.last_name}`
+                        : ''}
+                    </p>
+                  </div>
+                  <p className="text-xs text-neutral-600">
+                    {selectedClassCount}
+                    {selectedClassroom.capacity ? ` / ${selectedClassroom.capacity}` : ''} élèves
+                  </p>
+                </div>
+                {selectedClassSchedule ? (
+                  <div className="mt-2 overflow-auto rounded-md border border-black/5">
+                    <div className="flex items-center justify-between gap-2 bg-black/[0.03] px-2 py-1">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                        Barème · {feeStatusLabel(selectedClassSchedule.status, selectedClassSchedule.locked)}
+                      </p>
+                      <p className="text-xs tabular-nums">{formatAr(selectedClassSchedule.total_amount)}</p>
+                    </div>
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {selectedClassSchedule.items.map((item) => (
+                          <tr key={item.id ?? item.label} className="border-t border-black/5">
+                            <td className="px-2 py-1 text-neutral-500">{feeCategoryLabel(item.category)}</td>
+                            <td className="px-2 py-1">{item.label}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{formatAr(item.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Aucun barème pour ce niveau. Paramétrez-le dans l’onglet Frais avant les inscriptions.
+                  </p>
+                )}
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
               <input className={`${inputClass} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un élève" />
               <Pager page={page} total={filteredEnrollments.length} onPage={setPage} />
@@ -1681,6 +2293,23 @@ function DirectionScreen({
             </div>
           </Panel>
         </div>
+      ) : null}
+
+      {tab === 'frais' ? (
+        <FeeSettingsPanel
+          schoolId={schoolId}
+          auth={auth}
+          years={years}
+          grades={grades}
+          currentYearId={yearId}
+          schedules={feeSchedules}
+          busy={busy}
+          onBusy={setBusy}
+          onMessage={setMessage}
+          onRefresh={async () => {
+            await Promise.all([loadFeeSchedules(), loadCore()])
+          }}
+        />
       ) : null}
 
       {tab === 'caisse' ? (

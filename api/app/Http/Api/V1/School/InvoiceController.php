@@ -3,7 +3,6 @@
 namespace App\Http\Api\V1\School;
 
 use App\Domain\Finance\Actions\GenerateInvoice;
-use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Finance\Models\Invoice;
 use App\Domain\Finance\Support\InvoicePayload;
 use App\Http\Controllers\Controller;
@@ -12,13 +11,6 @@ use Illuminate\Http\Request;
 
 final class InvoiceController extends Controller
 {
-    public function schedules(): JsonResponse
-    {
-        $schedules = FeeSchedule::query()->with('items')->orderBy('name')->get();
-
-        return response()->json(['data' => $schedules]);
-    }
-
     public function show(string $school, string $enrollment): JsonResponse
     {
         $invoice = Invoice::query()

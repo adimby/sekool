@@ -21,6 +21,7 @@ use App\Http\Api\V1\School\CollectionController;
 use App\Http\Api\V1\School\EnrollmentController;
 use App\Http\Api\V1\School\FamilyController;
 use App\Http\Api\V1\School\FamilyReliabilityController;
+use App\Http\Api\V1\School\FeeScheduleController;
 use App\Http\Api\V1\School\GradeLevelController;
 use App\Http\Api\V1\School\InvoiceController;
 use App\Http\Api\V1\School\OutboxController;
@@ -101,12 +102,21 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/reliability/overview', [ReliabilityController::class, 'overview']);
         Route::get('/schools/{school}/reliability/school', [ReliabilityController::class, 'school']);
         Route::get('/schools/{school}/reliability/school/compare', [ReliabilityController::class, 'schoolCompare']);
+        Route::post('/schools/{school}/fee-schedules', [FeeScheduleController::class, 'store']);
+        Route::post('/schools/{school}/fee-schedules/copy-year', [FeeScheduleController::class, 'copyYear']);
+        Route::patch('/schools/{school}/fee-schedules/{schedule}', [FeeScheduleController::class, 'update']);
+        Route::post('/schools/{school}/fee-schedules/{schedule}/adjust', [FeeScheduleController::class, 'adjust']);
+        Route::post('/schools/{school}/fee-schedules/{schedule}/submit', [FeeScheduleController::class, 'submit']);
+        Route::post('/schools/{school}/fee-schedules/{schedule}/confirm', [FeeScheduleController::class, 'confirm']);
+        Route::post('/schools/{school}/fee-schedules/{schedule}/reopen', [FeeScheduleController::class, 'reopen']);
+        Route::post('/schools/{school}/fee-schedules/{schedule}/request-unlock', [FeeScheduleController::class, 'requestUnlock']);
     });
 
     Route::middleware('school.role:finance')->group(function (): void {
         Route::post('/schools/{school}/enrollments/{enrollment}/invoices', [InvoiceController::class, 'store']);
         Route::get('/schools/{school}/enrollments/{enrollment}/invoice', [InvoiceController::class, 'show']);
-        Route::get('/schools/{school}/fee-schedules', [InvoiceController::class, 'schedules']);
+        Route::get('/schools/{school}/fee-schedules', [FeeScheduleController::class, 'index']);
+        Route::get('/schools/{school}/fee-schedules/{schedule}', [FeeScheduleController::class, 'show']);
         Route::post('/schools/{school}/payments', [PaymentController::class, 'store']);
         Route::get('/schools/{school}/payments/export', [PaymentController::class, 'export']);
     });

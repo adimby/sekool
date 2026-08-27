@@ -140,6 +140,8 @@ abstract class TestCase extends BaseTestCase
             'grade_level_id' => null,
             'name' => 'Écolage 2026-2027',
             'status' => 'active',
+            'submitted_at' => now(),
+            'locked_at' => now(),
         ]);
 
         foreach ([
