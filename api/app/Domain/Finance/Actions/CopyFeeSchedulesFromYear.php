@@ -52,16 +52,13 @@ final class CopyFeeSchedulesFromYear
             throw new DomainException('Aucun barème à copier pour l’année source.');
         }
 
-        $shiftDays = (int) round(
-            ($targetYear->starts_on->copy()->startOfDay()->getTimestamp()
-                - $sourceYear->starts_on->copy()->startOfDay()->getTimestamp()) / 86400,
-        );
+        $yearShift = $targetYear->starts_on->year - $sourceYear->starts_on->year;
 
         return DB::transaction(function () use (
             $schoolId,
             $sources,
             $targetYear,
-            $shiftDays,
+            $yearShift,
             $adjustmentType,
             $adjustmentAmount,
             $adjustmentPercentBps,
@@ -75,7 +72,7 @@ final class CopyFeeSchedulesFromYear
                         ['code', 'asc'],
                     ])
                     ->values()
-                    ->map(function (FeeItem $item) use ($shiftDays, $adjustmentType, $adjustmentAmount, $adjustmentPercentBps): array {
+                    ->map(function (FeeItem $item) use ($yearShift, $adjustmentType, $adjustmentAmount, $adjustmentPercentBps): array {
                         $amount = (int) $item->amount;
                         if ($adjustmentType !== null) {
                             $amount = FeeAmountAdjuster::apply(
@@ -94,7 +91,7 @@ final class CopyFeeSchedulesFromYear
                             'code' => $item->code,
                             'label' => $item->label,
                             'amount' => $amount,
-                            'due_on' => $item->due_on->copy()->addDays($shiftDays)->toDateString(),
+                            'due_on' => $item->due_on->copy()->addYears($yearShift)->toDateString(),
                             'category' => $category,
                             'is_recurring' => $item->is_recurring,
                         ];
