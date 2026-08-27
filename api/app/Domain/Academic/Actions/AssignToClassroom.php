@@ -30,8 +30,21 @@ final class AssignToClassroom
             throw new DomainException('La classe n\'appartient pas à la même année scolaire.');
         }
 
+        $previousClassroomId = $enrollment->classroom_id;
+
         $enrollment->classroom_id = $classroom->id;
         $enrollment->save();
+
+        if ($previousClassroomId !== null && $previousClassroomId !== $classroom->id) {
+            Classroom::query()
+                ->whereKey($previousClassroomId)
+                ->where('delegate_person_id', $enrollment->person_id)
+                ->update(['delegate_person_id' => null]);
+            Classroom::query()
+                ->whereKey($previousClassroomId)
+                ->where('vice_delegate_person_id', $enrollment->person_id)
+                ->update(['vice_delegate_person_id' => null]);
+        }
 
         Auditor::record(
             'enrollment.assigned_to_classroom',

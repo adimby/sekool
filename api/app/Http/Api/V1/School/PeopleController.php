@@ -6,6 +6,8 @@ use App\Domain\Identity\Actions\UpdatePersonCivilData;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Identity\Models\SchoolPersonLink;
 use App\Domain\Identity\Support\PersonPayload;
+use App\Domain\School\Enums\SchoolRole;
+use App\Domain\School\Models\SchoolRoleAssignment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,35 @@ final class PeopleController extends Controller
 
         return response()->json([
             'data' => $links->map(fn (SchoolPersonLink $link) => PersonPayload::forSchool($link->person, $link))->values(),
+        ]);
+    }
+
+    public function staff(): JsonResponse
+    {
+        $personIds = SchoolRoleAssignment::query()
+            ->whereNull('revoked_at')
+            ->whereIn('role', [
+                SchoolRole::Teacher,
+                SchoolRole::Staff,
+                SchoolRole::Principal,
+                SchoolRole::Admin,
+            ])
+            ->pluck('person_id')
+            ->unique();
+
+        $people = Person::query()
+            ->whereIn('id', $personIds)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        return response()->json([
+            'data' => $people->map(fn (Person $person): array => [
+                'id' => $person->id,
+                'first_name' => $person->first_name,
+                'last_name' => $person->last_name,
+                'kind' => 'staff',
+            ])->values(),
         ]);
     }
 

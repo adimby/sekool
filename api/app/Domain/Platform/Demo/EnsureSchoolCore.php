@@ -2,16 +2,25 @@
 
 namespace App\Domain\Platform\Demo;
 
+use App\Domain\Academic\Enums\ClassActivityType;
+use App\Domain\Academic\Enums\ClassCouncilStatus;
 use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\AcademicTerm;
+use App\Domain\Academic\Models\ClassActivity;
+use App\Domain\Academic\Models\ClassCouncil;
 use App\Domain\Academic\Models\Classroom;
+use App\Domain\Academic\Models\ClassroomTeacher;
 use App\Domain\Academic\Models\GradeLevel;
+use App\Domain\Academic\Models\TimetableSlot;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Finance\Enums\ExpenseCategory;
+use App\Domain\Finance\Enums\ExpenseKind;
 use App\Domain\Finance\Enums\FeeCategory;
 use App\Domain\Finance\Enums\FeeScheduleStatus;
 use App\Domain\Finance\Models\FeeItem;
 use App\Domain\Finance\Models\FeeSchedule;
+use App\Domain\Finance\Models\SchoolExpense;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
@@ -54,6 +63,8 @@ final class EnsureSchoolCore
         $class5 = $this->ensureClassroom($year, $cinquieme, '5ème A', $teacherId);
         $this->ensureFeeSchedule($year);
         $this->assignEnrollments($year, $class6, $class5);
+        $this->ensureClassLife($year, $class6, $teacherId);
+        $this->ensureExpense($year);
     }
 
     private function mainTeacherPersonId(School $school): ?string
@@ -118,7 +129,124 @@ final class EnsureSchoolCore
             $classroom->forceFill(['main_teacher_person_id' => $teacherPersonId])->save();
         }
 
+        if ($teacherPersonId !== null) {
+            ClassroomTeacher::query()->firstOrCreate(
+                [
+                    'school_id' => $year->school_id,
+                    'classroom_id' => $classroom->id,
+                    'person_id' => $teacherPersonId,
+                ],
+                ['subject' => null],
+            );
+        }
+
         return $classroom;
+    }
+
+    private function ensureClassLife(SchoolYear $year, Classroom $classroom, ?string $teacherPersonId): void
+    {
+        $term = AcademicTerm::query()
+            ->where('school_year_id', $year->id)
+            ->where('sequence', 1)
+            ->first();
+
+        $delegateId = Enrollment::query()
+            ->where('classroom_id', $classroom->id)
+            ->where('status', EnrollmentStatus::Active)
+            ->orderBy('student_number')
+            ->value('person_id');
+
+        if ($delegateId !== null && $classroom->delegate_person_id === null) {
+            $classroom->forceFill(['delegate_person_id' => $delegateId])->save();
+        }
+
+        if ($teacherPersonId !== null) {
+            TimetableSlot::query()->firstOrCreate(
+                [
+                    'school_id' => $year->school_id,
+                    'classroom_id' => $classroom->id,
+                    'weekday' => 1,
+                    'starts_at' => '07:30:00',
+                ],
+                [
+                    'ends_at' => '08:25:00',
+                    'subject' => 'Malagasy',
+                    'teacher_person_id' => $teacherPersonId,
+                    'room' => 'A1',
+                ],
+            );
+            TimetableSlot::query()->firstOrCreate(
+                [
+                    'school_id' => $year->school_id,
+                    'classroom_id' => $classroom->id,
+                    'weekday' => 1,
+                    'starts_at' => '08:30:00',
+                ],
+                [
+                    'ends_at' => '09:25:00',
+                    'subject' => 'Mathématiques',
+                    'teacher_person_id' => $teacherPersonId,
+                    'room' => 'A1',
+                ],
+            );
+        }
+
+        if ($term !== null) {
+            ClassCouncil::query()->firstOrCreate(
+                [
+                    'school_id' => $year->school_id,
+                    'classroom_id' => $classroom->id,
+                    'academic_term_id' => $term->id,
+                ],
+                [
+                    'held_on' => '2026-12-10',
+                    'title' => 'Conseil du 1er trimestre',
+                    'minutes' => 'Classe sérieuse. Travaux à poursuivre au 2e trimestre.',
+                    'status' => ClassCouncilStatus::Held,
+                ],
+            );
+        }
+
+        ClassActivity::query()->firstOrCreate(
+            [
+                'school_id' => $year->school_id,
+                'classroom_id' => $classroom->id,
+                'title' => 'Réunion parents de rentrée',
+            ],
+            [
+                'type' => ClassActivityType::ParentMeeting,
+                'held_on' => '2026-09-12',
+                'location' => 'Salle 6ème A',
+                'notes' => 'Présentation de l’année et du professeur titulaire.',
+            ],
+        );
+    }
+
+    private function ensureExpense(SchoolYear $year): void
+    {
+        $actorId = UserAccount::query()
+            ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
+            ->value('person_id');
+
+        if ($actorId === null) {
+            return;
+        }
+
+        SchoolExpense::query()->firstOrCreate(
+            [
+                'school_id' => $year->school_id,
+                'school_year_id' => $year->id,
+                'label' => 'Craie et cahiers de brouillon',
+            ],
+            [
+                'kind' => ExpenseKind::Purchase,
+                'category' => ExpenseCategory::Supplies,
+                'amount' => 85_000,
+                'spent_on' => '2026-09-05',
+                'vendor' => 'Papeterie Analakely',
+                'recorded_by_person_id' => $actorId,
+            ],
+        );
     }
 
     private function ensureFeeSchedule(SchoolYear $year): void

@@ -46,3 +46,28 @@ it('never lets school A read school B fee schedules through Eloquent or RLS', fu
         ])
         ->assertNotFound();
 });
+
+it('never lets school A read school B expenses', function () {
+    $a = $this->provisionSchool();
+    $b = $this->provisionSchool();
+
+    $expenseId = $this->actingAs($a['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$a['school']->id}/expenses", [
+            'school_year_id' => $a['year']->id,
+            'kind' => 'expense',
+            'label' => 'Eau',
+            'amount' => 12_000,
+            'spent_on' => '2026-09-01',
+        ])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->actingAs($b['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$b['school']->id}/expenses")
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    $this->actingAs($b['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$a['school']->id}/expenses")
+        ->assertNotFound();
+});

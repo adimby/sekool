@@ -3,12 +3,10 @@
 namespace App\Http\Api\V1\School;
 
 use App\Domain\Academic\Actions\CreateClassroom;
+use App\Domain\Academic\Actions\UpdateClassroom;
 use App\Domain\Academic\Models\Classroom;
-use App\Domain\Enrollment\Enums\EnrollmentStatus;
-use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Academic\Support\ClassroomFilePayload;
 use App\Domain\Finance\Models\Invoice;
-use App\Domain\Finance\Support\FeeSchedulePayload;
-use App\Domain\Finance\Support\ResolveFeeSchedule;
 use App\Domain\School\Support\SchoolGate;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -18,10 +16,10 @@ final class ClassroomController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $classrooms = SchoolGate::visibleClassrooms($request)->with('mainTeacher')->get();
+        $classrooms = SchoolGate::visibleClassrooms($request)->with(['mainTeacher', 'delegate', 'viceDelegate'])->get();
 
         return response()->json([
-            'data' => $classrooms->map(fn (Classroom $classroom): array => $this->serializeClassroom($classroom))->values(),
+            'data' => $classrooms->map(fn (Classroom $classroom): array => ClassroomFilePayload::classroom($classroom))->values(),
         ]);
     }
 
@@ -32,6 +30,7 @@ final class ClassroomController extends Controller
             'grade_level_id' => ['required', 'uuid'],
             'name' => ['required', 'string', 'max:64'],
             'capacity' => ['nullable', 'integer', 'min:1'],
+            'main_teacher_person_id' => ['nullable', 'uuid'],
         ]);
 
         $classroom = $create->execute(
@@ -40,98 +39,82 @@ final class ClassroomController extends Controller
             gradeLevelId: $data['grade_level_id'],
             name: $data['name'],
             capacity: $data['capacity'] ?? null,
+            mainTeacherPersonId: $data['main_teacher_person_id'] ?? null,
         );
 
-        return response()->json(['data' => $this->serializeClassroom($classroom->load('gradeLevel', 'mainTeacher'))], 201);
+        if (($data['main_teacher_person_id'] ?? null) !== null) {
+            app(UpdateClassroom::class)->execute(
+                (string) $request->route('school'),
+                $classroom->id,
+                ['main_teacher_person_id' => $data['main_teacher_person_id']],
+            );
+            $classroom->refresh();
+        }
+
+        return response()->json(['data' => ClassroomFilePayload::classroom($classroom)], 201);
     }
 
-    public function roster(Request $request, string $school, string $classroom, ResolveFeeSchedule $resolve): JsonResponse
+    public function show(Request $request, string $school, string $classroom): JsonResponse
     {
-        $model = Classroom::query()->with(['gradeLevel', 'mainTeacher'])->find($classroom);
+        $model = Classroom::query()->find($classroom);
         if ($model === null || ! SchoolGate::canViewClassroom($request, $model)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
-        $enrollments = Enrollment::query()
-            ->with('person')
-            ->where('classroom_id', $model->id)
-            ->where('status', EnrollmentStatus::Active)
-            ->orderBy('student_number')
-            ->get();
+        return response()->json(['data' => ClassroomFilePayload::file($model)]);
+    }
 
+    public function update(Request $request, string $school, string $classroom, UpdateClassroom $update): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:64'],
+            'capacity' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'main_teacher_person_id' => ['sometimes', 'nullable', 'uuid'],
+            'delegate_person_id' => ['sometimes', 'nullable', 'uuid'],
+            'vice_delegate_person_id' => ['sometimes', 'nullable', 'uuid'],
+        ]);
+
+        $model = $update->execute($school, $classroom, $data);
+
+        return response()->json(['data' => ClassroomFilePayload::classroom($model)]);
+    }
+
+    public function roster(Request $request, string $school, string $classroom): JsonResponse
+    {
+        $model = Classroom::query()->find($classroom);
+        if ($model === null || ! SchoolGate::canViewClassroom($request, $model)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $file = ClassroomFilePayload::file($model);
         $showFinance = SchoolGate::isFinance($request);
         $invoiceByEnrollment = $showFinance
             ? Invoice::query()
-                ->whereIn('enrollment_id', $enrollments->pluck('id'))
+                ->whereIn('enrollment_id', collect($file['students'])->pluck('enrollment_id'))
                 ->where('status', '!=', 'cancelled')
                 ->get()
                 ->keyBy('enrollment_id')
             : collect();
 
-        $schedule = $resolve->forYearAndGrade(
-            $model->school_year_id,
-            $model->grade_level_id,
-            false,
-        );
+        $students = collect($file['students'])->map(function (array $row) use ($invoiceByEnrollment, $showFinance): array {
+            if ($showFinance) {
+                $invoice = $invoiceByEnrollment->get($row['enrollment_id']);
+                $row['invoice'] = $invoice === null ? null : [
+                    'id' => $invoice->id,
+                    'number' => $invoice->number,
+                    'remaining_amount' => $invoice->remainingAmount(),
+                    'status' => $invoice->status->value,
+                ];
+            }
+
+            return $row;
+        })->values();
 
         return response()->json([
             'data' => [
-                'classroom' => $this->serializeClassroom($model),
-                'fee_schedule' => $schedule === null ? null : FeeSchedulePayload::make($schedule),
-                'students' => $enrollments->map(function (Enrollment $enrollment) use ($invoiceByEnrollment, $showFinance): array {
-                    $row = [
-                        'enrollment_id' => $enrollment->id,
-                        'person_id' => $enrollment->person_id,
-                        'student_number' => $enrollment->student_number,
-                        'status' => $enrollment->status->value,
-                        'person' => $enrollment->person === null ? null : [
-                            'id' => $enrollment->person->id,
-                            'public_id' => $enrollment->person->public_id,
-                            'first_name' => $enrollment->person->first_name,
-                            'last_name' => $enrollment->person->last_name,
-                        ],
-                    ];
-
-                    if ($showFinance) {
-                        $invoice = $invoiceByEnrollment->get($enrollment->id);
-                        $row['invoice'] = $invoice === null ? null : [
-                            'id' => $invoice->id,
-                            'number' => $invoice->number,
-                            'remaining_amount' => $invoice->remainingAmount(),
-                            'status' => $invoice->status->value,
-                        ];
-                    }
-
-                    return $row;
-                })->values(),
+                'classroom' => $file['classroom'],
+                'students' => $students,
             ],
         ]);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function serializeClassroom(Classroom $classroom): array
-    {
-        $classroom->loadMissing(['gradeLevel', 'mainTeacher']);
-
-        return [
-            'id' => $classroom->id,
-            'school_id' => $classroom->school_id,
-            'school_year_id' => $classroom->school_year_id,
-            'grade_level_id' => $classroom->grade_level_id,
-            'name' => $classroom->name,
-            'capacity' => $classroom->capacity,
-            'main_teacher_person_id' => $classroom->main_teacher_person_id,
-            'grade_level' => $classroom->gradeLevel === null ? null : [
-                'id' => $classroom->gradeLevel->id,
-                'name' => $classroom->gradeLevel->name,
-            ],
-            'main_teacher' => $classroom->mainTeacher === null ? null : [
-                'id' => $classroom->mainTeacher->id,
-                'first_name' => $classroom->mainTeacher->first_name,
-                'last_name' => $classroom->mainTeacher->last_name,
-            ],
-        ];
     }
 }

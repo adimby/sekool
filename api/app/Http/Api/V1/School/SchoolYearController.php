@@ -24,7 +24,24 @@ final class SchoolYearController extends Controller
             return response()->json(['message' => 'Not found.'], 404);
         }
 
-        return response()->json(['data' => $model]);
+        $model->load(['terms' => fn ($query) => $query->orderBy('sequence')]);
+
+        return response()->json([
+            'data' => [
+                'id' => $model->id,
+                'label' => $model->label,
+                'starts_on' => $model->starts_on?->toDateString(),
+                'ends_on' => $model->ends_on?->toDateString(),
+                'is_current' => $model->is_current,
+                'terms' => $model->terms->map(fn ($term): array => [
+                    'id' => $term->id,
+                    'label' => $term->label,
+                    'sequence' => $term->sequence,
+                    'starts_on' => $term->starts_on?->toDateString(),
+                    'ends_on' => $term->ends_on?->toDateString(),
+                ])->values(),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse

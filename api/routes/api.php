@@ -16,6 +16,7 @@ use App\Http\Api\V1\School\AcademicHistoryController;
 use App\Http\Api\V1\School\AssignClassroomController;
 use App\Http\Api\V1\School\AttendanceController;
 use App\Http\Api\V1\School\ClassroomController;
+use App\Http\Api\V1\School\ClassroomLifeController;
 use App\Http\Api\V1\School\CockpitController;
 use App\Http\Api\V1\School\CollectionController;
 use App\Http\Api\V1\School\EnrollmentController;
@@ -30,6 +31,7 @@ use App\Http\Api\V1\School\PeopleController;
 use App\Http\Api\V1\School\PersonLinkRequestController;
 use App\Http\Api\V1\School\ReliabilityController;
 use App\Http\Api\V1\School\RiskAssessmentController;
+use App\Http\Api\V1\School\SchoolExpenseController;
 use App\Http\Api\V1\School\SchoolYearController;
 use App\Http\Api\V1\School\ShareTokenRedeemController;
 use App\Http\Api\V1\School\TransferController;
@@ -52,6 +54,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
 
     Route::middleware('school.role:classroom')->group(function (): void {
         Route::get('/schools/{school}/classrooms', [ClassroomController::class, 'index']);
+        Route::get('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'show']);
         Route::get('/schools/{school}/classrooms/{classroom}/roster', [ClassroomController::class, 'roster']);
         Route::get('/schools/{school}/attendance', [AttendanceController::class, 'index']);
     });
@@ -65,6 +68,18 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/grade-levels', [GradeLevelController::class, 'index']);
         Route::post('/schools/{school}/grade-levels', [GradeLevelController::class, 'store']);
         Route::post('/schools/{school}/classrooms', [ClassroomController::class, 'store']);
+        Route::patch('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'update']);
+        Route::post('/schools/{school}/classrooms/{classroom}/teachers', [ClassroomLifeController::class, 'addTeacher']);
+        Route::delete('/schools/{school}/classrooms/{classroom}/teachers/{person}', [ClassroomLifeController::class, 'removeTeacher']);
+        Route::post('/schools/{school}/classrooms/{classroom}/timetable', [ClassroomLifeController::class, 'storeSlot']);
+        Route::patch('/schools/{school}/classrooms/{classroom}/timetable/{slot}', [ClassroomLifeController::class, 'updateSlot']);
+        Route::delete('/schools/{school}/classrooms/{classroom}/timetable/{slot}', [ClassroomLifeController::class, 'destroySlot']);
+        Route::post('/schools/{school}/classrooms/{classroom}/councils', [ClassroomLifeController::class, 'storeCouncil']);
+        Route::patch('/schools/{school}/classrooms/{classroom}/councils/{council}', [ClassroomLifeController::class, 'updateCouncil']);
+        Route::post('/schools/{school}/classrooms/{classroom}/activities', [ClassroomLifeController::class, 'storeActivity']);
+        Route::patch('/schools/{school}/classrooms/{classroom}/activities/{activity}', [ClassroomLifeController::class, 'updateActivity']);
+        Route::delete('/schools/{school}/classrooms/{classroom}/activities/{activity}', [ClassroomLifeController::class, 'destroyActivity']);
+        Route::get('/schools/{school}/staff', [PeopleController::class, 'staff']);
         Route::post('/schools/{school}/families', [FamilyController::class, 'store']);
         Route::get('/schools/{school}/families', [FamilyController::class, 'index']);
         Route::get('/schools/{school}/families/{family}', [FamilyController::class, 'show']);
@@ -119,6 +134,8 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/fee-schedules/{schedule}', [FeeScheduleController::class, 'show']);
         Route::post('/schools/{school}/payments', [PaymentController::class, 'store']);
         Route::get('/schools/{school}/payments/export', [PaymentController::class, 'export']);
+        Route::get('/schools/{school}/expenses', [SchoolExpenseController::class, 'index']);
+        Route::post('/schools/{school}/expenses', [SchoolExpenseController::class, 'store']);
     });
 });
 

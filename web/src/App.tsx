@@ -78,14 +78,75 @@ type AccessLogRow = {
   outcome: string
 }
 
+type PersonMini = { id: string; first_name: string; last_name: string }
+
 type ClassroomRow = {
   id: string
   name: string
   grade_level_id: string
   school_year_id?: string
   capacity?: number | null
+  main_teacher_person_id?: string | null
+  delegate_person_id?: string | null
+  vice_delegate_person_id?: string | null
   grade_level?: { id?: string; name: string } | null
-  main_teacher?: { id?: string; first_name: string; last_name: string } | null
+  main_teacher?: PersonMini | null
+  delegate?: PersonMini | null
+  vice_delegate?: PersonMini | null
+}
+
+type TermRow = { id: string; label: string; sequence: number }
+
+type ClassStudentRow = {
+  enrollment_id: string
+  person_id: string
+  student_number: string | null
+  office: 'delegate' | 'vice_delegate' | null
+  person: { id: string; public_id: string; first_name: string; last_name: string } | null
+}
+
+type ClassFile = {
+  classroom: ClassroomRow
+  headcount: number
+  students: ClassStudentRow[]
+  teachers: Array<{ id: string; person_id: string; subject: string | null; is_main: boolean; person: PersonMini | null }>
+  timetable: Array<{
+    id: string
+    weekday: number
+    starts_at: string
+    ends_at: string
+    subject: string
+    room: string | null
+    teacher_person_id: string | null
+    teacher: PersonMini | null
+  }>
+  councils: Array<{
+    id: string
+    academic_term_id: string | null
+    term: TermRow | null
+    held_on: string
+    title: string
+    minutes: string | null
+    status: string
+  }>
+  activities: Array<{
+    id: string
+    type: string
+    title: string
+    held_on: string
+    location: string | null
+    notes: string | null
+  }>
+}
+
+type ExpenseRow = {
+  id: string
+  kind: string
+  label: string
+  category: string
+  amount: number
+  spent_on: string
+  vendor: string | null
 }
 
 type YearRow = {
@@ -246,7 +307,7 @@ type ReliabilityOverview = {
   }>
 }
 
-type DirectionTab = 'accueil' | 'famille' | 'classe' | 'frais' | 'caisse' | 'indices'
+type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'indices'
 type TeacherTab = 'classe' | 'appel'
 type ParentTab = 'enfants' | 'messages' | 'compte'
 
@@ -256,14 +317,14 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
   { id: 'accueil', label: 'Aujourd’hui' },
   { id: 'famille', label: 'Familles' },
   { id: 'classe', label: 'Classes' },
-  { id: 'frais', label: 'Frais' },
+  { id: 'finance', label: 'Finance' },
   { id: 'caisse', label: 'Caisse' },
   { id: 'indices', label: 'Indices' },
 ]
 
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
-  { id: 'classe', label: 'Effectif' },
+  { id: 'classe', label: 'Classe' },
 ]
 
 const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
@@ -471,34 +532,11 @@ function consentLabel(scope?: string): string {
   return scope ?? ''
 }
 
-function feeCategoryLabel(category?: string): string {
-  if (category === 'tuition') return 'Écolage'
-  if (category === 'registration') return 'Droit d’inscription'
-  if (category === 'exam') return 'Examen'
-  if (category === 'association') return 'Cotisation APE'
-  if (category === 'other') return 'Autre'
-  return category ?? ''
-}
-
 function feeStatusLabel(status?: string, locked?: boolean): string {
   if (locked || status === 'active') return 'Verrouillé'
   if (status === 'pending_validation') return '1re validation'
   if (status === 'draft') return 'Brouillon'
   return status ?? ''
-}
-
-function feeScheduleForClass(
-  classroom: ClassroomRow | undefined,
-  schedules: FeeScheduleRow[],
-  yearId: string,
-): FeeScheduleRow | null {
-  if (!classroom) return null
-  const yearSchedules = schedules.filter((row) => row.school_year_id === (classroom.school_year_id || yearId))
-  return (
-    yearSchedules.find((row) => row.grade_level_id === classroom.grade_level_id) ??
-    yearSchedules.find((row) => row.grade_level_id == null) ??
-    null
-  )
 }
 
 function invoiceLabel(status?: string): string {
@@ -722,6 +760,58 @@ function sexLabel(sex?: string): string {
 function classroomLabel(classroom?: ClassroomRow | null): string {
   if (!classroom) return '—'
   return classroom.grade_level?.name ? `${classroom.name} · ${classroom.grade_level.name}` : classroom.name
+}
+
+const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const
+
+function weekdayLabel(day: number): string {
+  return WEEKDAY_LABELS[day - 1] ?? String(day)
+}
+
+function personLabel(person?: PersonMini | null): string {
+  if (!person) return '—'
+  return `${person.first_name} ${person.last_name}`
+}
+
+function activityTypeLabel(type?: string): string {
+  if (type === 'parent_meeting') return 'Réunion parents'
+  if (type === 'outing') return 'Sortie'
+  if (type === 'celebration') return 'Fête'
+  return 'Autre'
+}
+
+function councilStatusLabel(status?: string): string {
+  if (status === 'held') return 'Tenu'
+  return 'Prévu'
+}
+
+function expenseKindLabel(kind?: string): string {
+  if (kind === 'purchase') return 'Achat'
+  return 'Dépense'
+}
+
+function expenseCategoryLabel(category?: string): string {
+  if (category === 'supplies') return 'Fournitures'
+  if (category === 'maintenance') return 'Entretien'
+  if (category === 'utilities') return 'Charges'
+  if (category === 'transport') return 'Transport'
+  if (category === 'food') return 'Alimentation'
+  return 'Autre'
+}
+
+function officeLabel(office?: string | null): string {
+  if (office === 'delegate') return 'Délégué'
+  if (office === 'vice_delegate') return 'Vice-délégué'
+  return ''
+}
+
+function ClassSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="border-t border-black/5 px-3 py-3">
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{title}</h3>
+      {children}
+    </div>
+  )
 }
 
 function EnrollmentWizard({
@@ -1188,7 +1278,7 @@ function FeeSettingsPanel({
   function startCreate() {
     setCreating(true)
     setSelectedId(null)
-    setName(`Frais ${year?.label ?? ''}`)
+    setName(`Barème ${year?.label ?? ''}`)
     setGradeId('')
     setItems(starterFeeItems(year?.starts_on))
   }
@@ -1590,6 +1680,676 @@ function FeeSettingsPanel({
   )
 }
 
+function ClassFilePanel({
+  schoolId,
+  auth,
+  file,
+  staff,
+  terms,
+  classrooms,
+  busy,
+  readOnly = false,
+  onBusy,
+  onMessage,
+  onReload,
+  onAssignClassroom,
+}: {
+  schoolId: string
+  auth: { token: string }
+  file: ClassFile
+  staff: PersonMini[]
+  terms: TermRow[]
+  classrooms: ClassroomRow[]
+  busy: boolean
+  readOnly?: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+  onReload: () => Promise<void>
+  onAssignClassroom?: (enrollmentId: string, classroomId: string) => Promise<void>
+}) {
+  const classroom = file.classroom
+  const classroomId = classroom.id
+  const [capacity, setCapacity] = useState(classroom.capacity ? String(classroom.capacity) : '')
+  const [teacherPerson, setTeacherPerson] = useState('')
+  const [teacherSubject, setTeacherSubject] = useState('')
+  const [slotWeekday, setSlotWeekday] = useState('1')
+  const [slotStart, setSlotStart] = useState('07:30')
+  const [slotEnd, setSlotEnd] = useState('08:25')
+  const [slotSubject, setSlotSubject] = useState('')
+  const [slotTeacher, setSlotTeacher] = useState('')
+  const [slotRoom, setSlotRoom] = useState('')
+  const [councilTerm, setCouncilTerm] = useState('')
+  const [councilDate, setCouncilDate] = useState('')
+  const [councilTitle, setCouncilTitle] = useState('')
+  const [councilMinutes, setCouncilMinutes] = useState('')
+  const [councilStatus, setCouncilStatus] = useState('scheduled')
+  const [activityType, setActivityType] = useState('parent_meeting')
+  const [activityTitle, setActivityTitle] = useState('')
+  const [activityDate, setActivityDate] = useState('')
+  const [activityLocation, setActivityLocation] = useState('')
+  const [activityNotes, setActivityNotes] = useState('')
+
+  useEffect(() => {
+    setCapacity(classroom.capacity ? String(classroom.capacity) : '')
+  }, [classroom.id, classroom.capacity])
+
+  async function run(action: () => Promise<void>, ok?: string) {
+    onBusy(true)
+    onMessage(null)
+    try {
+      await action()
+      await onReload()
+      if (ok) onMessage(ok)
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Action impossible.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  function lifeUrl(suffix: string): string {
+    return `/api/v1/schools/${schoolId}/classrooms/${classroomId}${suffix}`
+  }
+
+  async function patchClassroom(body: Record<string, string | number | null>) {
+    await run(async () => {
+      await api(`/api/v1/schools/${schoolId}/classrooms/${classroomId}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+    })
+  }
+
+  const addedTeacherIds = new Set(file.teachers.map((row) => row.person_id))
+  const availableTeachers = staff.filter((person) => !addedTeacherIds.has(person.id))
+
+  return (
+    <div>
+      <div className="px-3 py-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold">{classroom.name}</h2>
+            <p className="text-xs text-neutral-500">
+              {classroom.grade_level?.name ?? 'Niveau'} · {personLabel(classroom.main_teacher)}
+            </p>
+          </div>
+          <p className="text-xs text-neutral-600">
+            {file.headcount}
+            {classroom.capacity ? ` / ${classroom.capacity}` : ''} élèves
+          </p>
+        </div>
+        {readOnly ? (
+          <p className="mt-2 text-xs text-neutral-600">
+            Délégué {personLabel(classroom.delegate)} · Vice {personLabel(classroom.vice_delegate)}
+          </p>
+        ) : (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Titulaire">
+              <select
+                className={inputClass}
+                value={classroom.main_teacher_person_id ?? ''}
+                disabled={busy}
+                onChange={(event) => {
+                  void patchClassroom({ main_teacher_person_id: event.target.value || null })
+                }}
+              >
+                <option value="">Sans titulaire</option>
+                {staff.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {personLabel(person)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Délégué">
+              <select
+                className={inputClass}
+                value={classroom.delegate_person_id ?? ''}
+                disabled={busy}
+                onChange={(event) => {
+                  void patchClassroom({ delegate_person_id: event.target.value || null })
+                }}
+              >
+                <option value="">Aucun</option>
+                {file.students.map((row) => (
+                  <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.vice_delegate_person_id}>
+                    {row.person ? personLabel(row.person) : row.person_id}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Vice-délégué">
+              <select
+                className={inputClass}
+                value={classroom.vice_delegate_person_id ?? ''}
+                disabled={busy}
+                onChange={(event) => {
+                  void patchClassroom({ vice_delegate_person_id: event.target.value || null })
+                }}
+              >
+                <option value="">Aucun</option>
+                {file.students.map((row) => (
+                  <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.delegate_person_id}>
+                    {row.person ? personLabel(row.person) : row.person_id}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Capacité">
+              <form
+                className="flex gap-1"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void patchClassroom({ capacity: capacity.trim() === '' ? null : Number(capacity) })
+                }}
+              >
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="—"
+                />
+                <button type="submit" className={btnGhost} disabled={busy}>
+                  OK
+                </button>
+              </form>
+            </Field>
+          </div>
+        )}
+      </div>
+
+      <ClassSection title={`Effectif · ${file.headcount}`}>
+        {file.students.length === 0 ? (
+          <p className="text-xs text-neutral-500">Aucun élève inscrit dans cette classe.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+              <tr>
+                <th className="py-1 font-medium">N°</th>
+                <th className="py-1 font-medium">Élève</th>
+                <th className="py-1 font-medium">Office</th>
+                {readOnly || !onAssignClassroom ? null : <th className="py-1 font-medium">Classe</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {file.students.map((row) => (
+                <tr key={row.enrollment_id} className="border-t border-black/5">
+                  <td className="py-1.5 tabular-nums text-neutral-500">{row.student_number ?? '—'}</td>
+                  <td className="py-1.5 font-medium">{row.person ? personLabel(row.person) : '—'}</td>
+                  <td className="py-1.5 text-xs text-neutral-600">{officeLabel(row.office) || '—'}</td>
+                  {readOnly || !onAssignClassroom ? null : (
+                    <td className="py-1.5">
+                      <select
+                        className={inputClass}
+                        value={classroomId}
+                        disabled={busy}
+                        onChange={(event) => {
+                          if (event.target.value) void onAssignClassroom(row.enrollment_id, event.target.value)
+                        }}
+                      >
+                        {classrooms.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </ClassSection>
+
+      <ClassSection title="Enseignants">
+        {file.teachers.length === 0 ? <p className="text-xs text-neutral-500">Aucun enseignant attribué.</p> : null}
+        <ul className="space-y-1 text-sm">
+          {file.teachers.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-2">
+              <span>
+                {personLabel(row.person)}
+                {row.subject ? <span className="text-neutral-500"> · {row.subject}</span> : null}
+                {row.is_main ? <span className="ml-1 text-[11px] text-fanabe-leaf">titulaire</span> : null}
+              </span>
+              {readOnly || row.is_main ? null : (
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api(lifeUrl(`/teachers/${row.person_id}`), { ...auth, method: 'DELETE' })
+                    })
+                  }
+                >
+                  Retirer
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {readOnly ? null : (
+          <form
+            className="mt-2 grid gap-2 sm:grid-cols-[1fr_8rem_auto]"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!teacherPerson) return
+              void run(async () => {
+                await api(lifeUrl('/teachers'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({ person_id: teacherPerson, subject: teacherSubject || null }),
+                })
+                setTeacherPerson('')
+                setTeacherSubject('')
+              }, 'Enseignant ajouté.')
+            }}
+          >
+            <select className={inputClass} value={teacherPerson} onChange={(e) => setTeacherPerson(e.target.value)} required>
+              <option value="">Personnel</option>
+              {availableTeachers.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {personLabel(person)}
+                </option>
+              ))}
+            </select>
+            <input className={inputClass} value={teacherSubject} onChange={(e) => setTeacherSubject(e.target.value)} placeholder="Matière" />
+            <button type="submit" className={btnGhost} disabled={busy || !teacherPerson}>
+              Ajouter
+            </button>
+          </form>
+        )}
+      </ClassSection>
+
+      <ClassSection title="Emploi du temps">
+        {file.timetable.length === 0 ? <p className="text-xs text-neutral-500">Aucun créneau.</p> : null}
+        <table className="w-full text-sm">
+          <tbody>
+            {file.timetable.map((slot) => (
+              <tr key={slot.id} className="border-t border-black/5">
+                <td className="py-1.5 text-xs font-medium text-neutral-500">{weekdayLabel(slot.weekday)}</td>
+                <td className="py-1.5 tabular-nums text-xs">
+                  {slot.starts_at}–{slot.ends_at}
+                </td>
+                <td className="py-1.5 font-medium">{slot.subject}</td>
+                <td className="py-1.5 text-neutral-600">{personLabel(slot.teacher)}</td>
+                <td className="py-1.5 text-xs text-neutral-500">{slot.room ?? ''}</td>
+                {readOnly ? null : (
+                  <td className="py-1.5 text-right">
+                    <button
+                      type="button"
+                      className={btnGhost}
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await api(lifeUrl(`/timetable/${slot.id}`), { ...auth, method: 'DELETE' })
+                        })
+                      }
+                    >
+                      ×
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {readOnly ? null : (
+          <form
+            className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-7"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/timetable'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    weekday: Number(slotWeekday),
+                    starts_at: slotStart.slice(0, 5),
+                    ends_at: slotEnd.slice(0, 5),
+                    subject: slotSubject,
+                    teacher_person_id: slotTeacher || null,
+                    room: slotRoom || null,
+                  }),
+                })
+                setSlotSubject('')
+                setSlotRoom('')
+              }, 'Créneau ajouté.')
+            }}
+          >
+            <select className={inputClass} value={slotWeekday} onChange={(e) => setSlotWeekday(e.target.value)}>
+              {WEEKDAY_LABELS.map((label, index) => (
+                <option key={label} value={String(index + 1)}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input className={inputClass} type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} required />
+            <input className={inputClass} type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} required />
+            <input className={inputClass} value={slotSubject} onChange={(e) => setSlotSubject(e.target.value)} placeholder="Matière" required />
+            <select className={inputClass} value={slotTeacher} onChange={(e) => setSlotTeacher(e.target.value)}>
+              <option value="">Enseignant</option>
+              {staff.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {personLabel(person)}
+                </option>
+              ))}
+            </select>
+            <input className={inputClass} value={slotRoom} onChange={(e) => setSlotRoom(e.target.value)} placeholder="Salle" />
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Ajouter
+            </button>
+          </form>
+        )}
+      </ClassSection>
+
+      <ClassSection title="Conseil de classe">
+        {file.councils.length === 0 ? <p className="text-xs text-neutral-500">Aucun conseil enregistré.</p> : null}
+        <ul className="space-y-2 text-sm">
+          {file.councils.map((row) => (
+            <li key={row.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+              <p className="font-medium">
+                {row.title}
+                <span className="ml-2 text-xs font-normal text-neutral-500">
+                  {formatDate(row.held_on)} · {row.term?.label ?? 'Trimestre'} · {councilStatusLabel(row.status)}
+                </span>
+              </p>
+              {row.minutes ? <p className="mt-0.5 text-xs text-neutral-600">{row.minutes}</p> : null}
+            </li>
+          ))}
+        </ul>
+        {readOnly ? null : (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/councils'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    academic_term_id: councilTerm || null,
+                    held_on: councilDate,
+                    title: councilTitle,
+                    minutes: councilMinutes || null,
+                    status: councilStatus,
+                  }),
+                })
+                setCouncilTitle('')
+                setCouncilMinutes('')
+              }, 'Conseil enregistré.')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-4">
+              <select className={inputClass} value={councilTerm} onChange={(e) => setCouncilTerm(e.target.value)}>
+                <option value="">Trimestre</option>
+                {terms.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.label}
+                  </option>
+                ))}
+              </select>
+              <input className={inputClass} type="date" value={councilDate} onChange={(e) => setCouncilDate(e.target.value)} required />
+              <input className={inputClass} value={councilTitle} onChange={(e) => setCouncilTitle(e.target.value)} placeholder="Titre" required />
+              <select className={inputClass} value={councilStatus} onChange={(e) => setCouncilStatus(e.target.value)}>
+                <option value="scheduled">Prévu</option>
+                <option value="held">Tenu</option>
+              </select>
+            </div>
+            <textarea
+              className={`${inputClass} h-16 py-1.5`}
+              value={councilMinutes}
+              onChange={(e) => setCouncilMinutes(e.target.value)}
+              placeholder="Compte rendu (sans notes)"
+            />
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Enregistrer le conseil
+            </button>
+          </form>
+        )}
+      </ClassSection>
+
+      <ClassSection title="Activités">
+        {file.activities.length === 0 ? <p className="text-xs text-neutral-500">Aucune activité.</p> : null}
+        <ul className="space-y-2 text-sm">
+          {file.activities.map((row) => (
+            <li key={row.id} className="flex items-start justify-between gap-2 border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+              <div>
+                <p className="font-medium">
+                  {row.title}
+                  <span className="ml-2 text-xs font-normal text-neutral-500">
+                    {activityTypeLabel(row.type)} · {formatDate(row.held_on)}
+                    {row.location ? ` · ${row.location}` : ''}
+                  </span>
+                </p>
+                {row.notes ? <p className="mt-0.5 text-xs text-neutral-600">{row.notes}</p> : null}
+              </div>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await api(lifeUrl(`/activities/${row.id}`), { ...auth, method: 'DELETE' })
+                    })
+                  }
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {readOnly ? null : (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/activities'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    type: activityType,
+                    title: activityTitle,
+                    held_on: activityDate,
+                    location: activityLocation || null,
+                    notes: activityNotes || null,
+                  }),
+                })
+                setActivityTitle('')
+                setActivityLocation('')
+                setActivityNotes('')
+              }, 'Activité ajoutée.')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-4">
+              <select className={inputClass} value={activityType} onChange={(e) => setActivityType(e.target.value)}>
+                <option value="parent_meeting">Réunion parents</option>
+                <option value="outing">Sortie</option>
+                <option value="celebration">Fête</option>
+                <option value="other">Autre</option>
+              </select>
+              <input className={inputClass} value={activityTitle} onChange={(e) => setActivityTitle(e.target.value)} placeholder="Titre" required />
+              <input className={inputClass} type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} required />
+              <input className={inputClass} value={activityLocation} onChange={(e) => setActivityLocation(e.target.value)} placeholder="Lieu" />
+            </div>
+            <input className={inputClass} value={activityNotes} onChange={(e) => setActivityNotes(e.target.value)} placeholder="Notes" />
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Ajouter l’activité
+            </button>
+          </form>
+        )}
+      </ClassSection>
+    </div>
+  )
+}
+
+function ExpensesPanel({
+  schoolId,
+  auth,
+  years,
+  currentYearId,
+  busy,
+  onBusy,
+  onMessage,
+}: {
+  schoolId: string
+  auth: { token: string }
+  years: YearRow[]
+  currentYearId: string
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+}) {
+  const [yearId, setYearId] = useState(currentYearId)
+  const [rows, setRows] = useState<ExpenseRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [kind, setKind] = useState('purchase')
+  const [category, setCategory] = useState('supplies')
+  const [label, setLabel] = useState('')
+  const [amount, setAmount] = useState('')
+  const [spentOn, setSpentOn] = useState(() => new Date().toISOString().slice(0, 10))
+  const [vendor, setVendor] = useState('')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (currentYearId && (yearId === '' || !years.some((row) => row.id === yearId))) {
+      setYearId(currentYearId)
+    }
+  }, [currentYearId, years, yearId])
+
+  async function refresh() {
+    if (!yearId) return
+    const payload = await api<{ data: ExpenseRow[]; total_amount: number }>(
+      `/api/v1/schools/${schoolId}/expenses?school_year_id=${yearId}`,
+      auth,
+    )
+    setRows(payload.data)
+    setTotal(payload.total_amount)
+  }
+
+  useEffect(() => {
+    refresh().catch((error: Error) => onMessage(error.message))
+  }, [yearId, schoolId, auth.token])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/expenses`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          school_year_id: yearId,
+          kind,
+          category,
+          label,
+          amount: Number(amount),
+          spent_on: spentOn,
+          vendor: vendor || null,
+          notes: notes || null,
+        }),
+      })
+      setLabel('')
+      setAmount('')
+      setVendor('')
+      setNotes('')
+      await refresh()
+      onMessage('Achat enregistré.')
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Achat impossible à enregistrer.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[16rem_1fr]">
+      <Panel className="p-3">
+        <h2 className="text-sm font-semibold">Achats et dépenses</h2>
+        <p className="mt-1 text-[11px] text-neutral-500">Registre de l’école, en Ariary. Pas de plan comptable.</p>
+        <select className={`${inputClass} mt-3`} value={yearId} onChange={(e) => setYearId(e.target.value)}>
+          {years.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+              {row.is_current ? ' · en cours' : ''}
+            </option>
+          ))}
+        </select>
+        <p className="mt-3 text-sm font-semibold tabular-nums">{formatAr(total)}</p>
+        <p className="text-[11px] text-neutral-500">{rows.length} ligne(s)</p>
+      </Panel>
+      <Panel className="min-w-0 p-3">
+        <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="purchase">Achat</option>
+            <option value="expense">Dépense</option>
+          </select>
+          <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="supplies">Fournitures</option>
+            <option value="maintenance">Entretien</option>
+            <option value="utilities">Charges</option>
+            <option value="transport">Transport</option>
+            <option value="food">Alimentation</option>
+            <option value="other">Autre</option>
+          </select>
+          <input className={inputClass} type="date" value={spentOn} onChange={(e) => setSpentOn(e.target.value)} required />
+          <input className={inputClass} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Libellé" required />
+          <input
+            className={inputClass}
+            type="number"
+            min={1}
+            step={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Montant Ar"
+            required
+          />
+          <input className={inputClass} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Fournisseur" />
+          <input className={`${inputClass} sm:col-span-2`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" />
+          <button type="submit" className={btnPrimary} disabled={busy || !yearId}>
+            Enregistrer
+          </button>
+        </form>
+        <table className="mt-3 w-full text-sm">
+          <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="px-2 py-1.5 font-medium">Date</th>
+              <th className="px-2 py-1.5 font-medium">Libellé</th>
+              <th className="px-2 py-1.5 font-medium">Catégorie</th>
+              <th className="px-2 py-1.5 text-right font-medium">Montant</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-t border-black/5">
+                <td className="px-2 py-1.5 text-xs text-neutral-500">{formatDate(row.spent_on)}</td>
+                <td className="px-2 py-1.5">
+                  <span className="font-medium">{row.label}</span>
+                  <span className="ml-2 text-[11px] text-neutral-500">
+                    {expenseKindLabel(row.kind)}
+                    {row.vendor ? ` · ${row.vendor}` : ''}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5 text-neutral-600">{expenseCategoryLabel(row.category)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{formatAr(row.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 ? <p className="px-2 py-6 text-center text-sm text-neutral-500">Aucun achat pour cette année.</p> : null}
+      </Panel>
+    </div>
+  )
+}
+
 function DirectionScreen({
   session,
   tab,
@@ -1614,6 +2374,7 @@ function DirectionScreen({
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState('')
+  const [selectedClassId, setSelectedClassId] = useState('')
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [newClassName, setNewClassName] = useState('6ème B')
   const [newClassGrade, setNewClassGrade] = useState('')
@@ -1632,6 +2393,12 @@ function DirectionScreen({
   const [shareTokenInput, setShareTokenInput] = useState('')
   const [publicIdInput, setPublicIdInput] = useState('')
   const [transfers, setTransfers] = useState<TransferRow[]>([])
+  const [staff, setStaff] = useState<PersonMini[]>([])
+  const [terms, setTerms] = useState<TermRow[]>([])
+  const [classFile, setClassFile] = useState<ClassFile | null>(null)
+  const [financePane, setFinancePane] = useState<'baremes' | 'achats'>('baremes')
+  const [newClassCapacity, setNewClassCapacity] = useState('')
+  const [newClassTeacher, setNewClassTeacher] = useState('')
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
@@ -1648,11 +2415,6 @@ function DirectionScreen({
   const pagedEnrollments = pageOf(filteredEnrollments, page)
   const selectedStudent = activeEnrollments.find((row) => row.id === selectedEnrollment)
   const selectedFamily = families.find((family) => family.id === selectedFamilyId) ?? null
-  const selectedClassroom = classrooms.find((row) => row.id === classFilter)
-  const selectedClassSchedule = feeScheduleForClass(selectedClassroom, feeSchedules, yearId)
-  const selectedClassCount = selectedClassroom
-    ? activeEnrollments.filter((row) => row.classroom_id === selectedClassroom.id).length
-    : 0
 
   async function loadCore() {
     const yearsPayload = await api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth)
@@ -1660,14 +2422,16 @@ function DirectionScreen({
     setYears(yearsPayload.data)
     setYearId(current?.id ?? '')
     setYearLabel(current?.label ?? '2026-2027')
-    const [classList, gradeList, today] = await Promise.all([
+    const [classList, gradeList, today, staffList] = await Promise.all([
       api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
       api<{ data: Array<{ id: string; name: string }> }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
       api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth),
+      api<{ data: PersonMini[] }>(`/api/v1/schools/${schoolId}/staff`, auth),
     ])
     setClassrooms(classList.data)
     setGrades(gradeList.data)
     setCockpit(today)
+    setStaff(staffList.data)
     setNewClassGrade((prev) => prev || gradeList.data[0]?.id || '')
   }
 
@@ -1704,6 +2468,17 @@ function DirectionScreen({
     setSelectedEnrollment((prev) => prev || active?.id || '')
   }
 
+  async function loadTerms() {
+    if (!yearId) return
+    const payload = await api<{ data: { terms: TermRow[] } }>(`/api/v1/schools/${schoolId}/years/${yearId}`, auth)
+    setTerms(payload.data.terms ?? [])
+  }
+
+  async function loadClassFile(id: string) {
+    const payload = await api<{ data: ClassFile }>(`/api/v1/schools/${schoolId}/classrooms/${id}`, auth)
+    setClassFile(payload.data)
+  }
+
   useEffect(() => {
     loadCore().catch((error: Error) => setMessage(error.message))
   }, [schoolId, session.token])
@@ -1712,8 +2487,14 @@ function DirectionScreen({
     if (tab === 'famille') {
       Promise.all([loadPeople(), loadFamilies(), loadTransfers()]).catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'classe' || tab === 'caisse' || tab === 'frais') {
-      Promise.all([loadEnrollments(), loadFeeSchedules()]).catch((error: Error) => setMessage(error.message))
+    if (tab === 'classe') {
+      Promise.all([loadEnrollments(), loadTerms()]).catch((error: Error) => setMessage(error.message))
+    }
+    if (tab === 'caisse') {
+      loadEnrollments().catch((error: Error) => setMessage(error.message))
+    }
+    if (tab === 'finance') {
+      loadFeeSchedules().catch((error: Error) => setMessage(error.message))
     }
     if (tab === 'indices') {
       loadReliability().catch((error: Error) => setMessage(error.message))
@@ -1725,6 +2506,27 @@ function DirectionScreen({
   useEffect(() => {
     setPage(1)
   }, [query, classFilter])
+
+  useEffect(() => {
+    if (tab !== 'classe') return
+    if (selectedClassId === '' && classrooms[0]) {
+      setSelectedClassId(classrooms[0].id)
+    }
+  }, [tab, classrooms, selectedClassId])
+
+  useEffect(() => {
+    if (tab !== 'classe' || !selectedClassId) {
+      setClassFile(null)
+      return
+    }
+    loadClassFile(selectedClassId).catch((error: Error) => setMessage(error.message))
+  }, [tab, selectedClassId, schoolId, session.token])
+
+  useEffect(() => {
+    if (tab === 'classe' && yearId) {
+      loadTerms().catch((error: Error) => setMessage(error.message))
+    }
+  }, [tab, yearId, schoolId, session.token])
 
   async function redeemShareToken(event: FormEvent) {
     event.preventDefault()
@@ -1788,13 +2590,23 @@ function DirectionScreen({
     setBusy(true)
     setMessage(null)
     try {
-      await api(`/api/v1/schools/${schoolId}/classrooms`, {
+      const payload = await api<{ data: ClassroomRow }>(`/api/v1/schools/${schoolId}/classrooms`, {
         ...auth,
         method: 'POST',
-        body: JSON.stringify({ school_year_id: yearId, grade_level_id: newClassGrade, name: newClassName }),
+        body: JSON.stringify({
+          school_year_id: yearId,
+          grade_level_id: newClassGrade,
+          name: newClassName,
+          ...(newClassCapacity.trim() !== '' ? { capacity: Number(newClassCapacity) } : {}),
+          ...(newClassTeacher ? { main_teacher_person_id: newClassTeacher } : {}),
+        }),
       })
       setMessage(`Classe ${newClassName} créée.`)
+      setSelectedClassId(payload.data.id)
+      setNewClassTeacher('')
+      setNewClassCapacity('')
       await loadCore()
+      await loadEnrollments()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Classe impossible à créer.')
     } finally {
@@ -1812,6 +2624,9 @@ function DirectionScreen({
         body: JSON.stringify({ classroom_id: classroomId }),
       })
       await loadEnrollments()
+      if (selectedClassId) {
+        await loadClassFile(selectedClassId)
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Affectation impossible.')
     } finally {
@@ -2185,6 +3000,22 @@ function DirectionScreen({
                 ))}
               </select>
               <input className={inputClass} value={newClassName} onChange={(e) => setNewClassName(e.target.value)} required />
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                value={newClassCapacity}
+                onChange={(e) => setNewClassCapacity(e.target.value)}
+                placeholder="Capacité"
+              />
+              <select className={inputClass} value={newClassTeacher} onChange={(e) => setNewClassTeacher(e.target.value)}>
+                <option value="">Titulaire (optionnel)</option>
+                {staff.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {personLabel(person)}
+                  </option>
+                ))}
+              </select>
               <button type="submit" disabled={busy || !yearId || !newClassGrade} className={btnBlock}>
                 Créer
               </button>
@@ -2196,8 +3027,8 @@ function DirectionScreen({
                   <li key={classroom.id}>
                     <button
                       type="button"
-                      className={`flex w-full items-center justify-between py-1.5 text-left ${classFilter === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
-                      onClick={() => setClassFilter((prev) => (prev === classroom.id ? '' : classroom.id))}
+                      className={`flex w-full items-center justify-between py-1.5 text-left ${selectedClassId === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
+                      onClick={() => setSelectedClassId(classroom.id)}
                     >
                       <span>{classroom.name}</span>
                       <span className="text-xs text-neutral-500">{count}</span>
@@ -2208,108 +3039,69 @@ function DirectionScreen({
             </ul>
           </Panel>
           <Panel className="min-w-0">
-            {selectedClassroom ? (
-              <div className="border-b border-black/5 px-3 py-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-semibold">{selectedClassroom.name}</h2>
-                    <p className="text-xs text-neutral-500">
-                      {selectedClassroom.grade_level?.name ?? 'Niveau'} · {yearLabel}
-                      {selectedClassroom.main_teacher
-                        ? ` · ${selectedClassroom.main_teacher.first_name} ${selectedClassroom.main_teacher.last_name}`
-                        : ''}
-                    </p>
-                  </div>
-                  <p className="text-xs text-neutral-600">
-                    {selectedClassCount}
-                    {selectedClassroom.capacity ? ` / ${selectedClassroom.capacity}` : ''} élèves
-                  </p>
-                </div>
-                {selectedClassSchedule ? (
-                  <div className="mt-2 overflow-auto rounded-md border border-black/5">
-                    <div className="flex items-center justify-between gap-2 bg-black/[0.03] px-2 py-1">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-                        Barème · {feeStatusLabel(selectedClassSchedule.status, selectedClassSchedule.locked)}
-                      </p>
-                      <p className="text-xs tabular-nums">{formatAr(selectedClassSchedule.total_amount)}</p>
-                    </div>
-                    <table className="w-full text-xs">
-                      <tbody>
-                        {selectedClassSchedule.items.map((item) => (
-                          <tr key={item.id ?? item.label} className="border-t border-black/5">
-                            <td className="px-2 py-1 text-neutral-500">{feeCategoryLabel(item.category)}</td>
-                            <td className="px-2 py-1">{item.label}</td>
-                            <td className="px-2 py-1 text-right tabular-nums">{formatAr(item.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Aucun barème pour ce niveau. Paramétrez-le dans l’onglet Frais avant les inscriptions.
-                  </p>
-                )}
-              </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
-              <input className={`${inputClass} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un élève" />
-              <Pager page={page} total={filteredEnrollments.length} onPage={setPage} />
-            </div>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className="px-3 py-1.5 font-medium">Élève</th>
-                    <th className="px-3 py-1.5 font-medium">Classe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedEnrollments.map((row) => (
-                    <tr key={row.id} className="border-t border-black/5">
-                      <td className="px-3 py-1.5 font-medium">
-                        {row.person?.first_name} {row.person?.last_name}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <select
-                          className={inputClass}
-                          value={row.classroom_id ?? ''}
-                          onChange={(event) => {
-                            if (event.target.value) void assignClassroom(row.id, event.target.value)
-                          }}
-                        >
-                          <option value="">Sans classe</option>
-                          {classrooms.map((classroom) => (
-                            <option key={classroom.id} value={classroom.id}>
-                              {classroom.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {classFile ? (
+              <ClassFilePanel
+                schoolId={schoolId}
+                auth={auth}
+                file={classFile}
+                staff={staff}
+                terms={terms}
+                classrooms={classrooms}
+                busy={busy}
+                onBusy={setBusy}
+                onMessage={setMessage}
+                onReload={async () => {
+                  if (selectedClassId) await loadClassFile(selectedClassId)
+                  await Promise.all([loadCore(), loadEnrollments()])
+                }}
+                onAssignClassroom={assignClassroom}
+              />
+            ) : (
+              <p className="px-3 py-8 text-center text-sm text-neutral-500">
+                Ouvrez une classe pour son dossier : titulaire, effectif, emploi du temps, conseil et activités.
+              </p>
+            )}
           </Panel>
         </div>
       ) : null}
 
-      {tab === 'frais' ? (
-        <FeeSettingsPanel
-          schoolId={schoolId}
-          auth={auth}
-          years={years}
-          grades={grades}
-          currentYearId={yearId}
-          schedules={feeSchedules}
-          busy={busy}
-          onBusy={setBusy}
-          onMessage={setMessage}
-          onRefresh={async () => {
-            await Promise.all([loadFeeSchedules(), loadCore()])
-          }}
-        />
+      {tab === 'finance' ? (
+        <div className="space-y-3">
+          <div className="flex w-fit rounded-md bg-black/5 p-0.5">
+            <button type="button" className={modeTab(financePane === 'baremes')} onClick={() => setFinancePane('baremes')}>
+              Barèmes
+            </button>
+            <button type="button" className={modeTab(financePane === 'achats')} onClick={() => setFinancePane('achats')}>
+              Achats
+            </button>
+          </div>
+          {financePane === 'baremes' ? (
+            <FeeSettingsPanel
+              schoolId={schoolId}
+              auth={auth}
+              years={years}
+              grades={grades}
+              currentYearId={yearId}
+              schedules={feeSchedules}
+              busy={busy}
+              onBusy={setBusy}
+              onMessage={setMessage}
+              onRefresh={async () => {
+                await Promise.all([loadFeeSchedules(), loadCore()])
+              }}
+            />
+          ) : (
+            <ExpensesPanel
+              schoolId={schoolId}
+              auth={auth}
+              years={years}
+              currentYearId={yearId}
+              busy={busy}
+              onBusy={setBusy}
+              onMessage={setMessage}
+            />
+          )}
+        </div>
       ) : null}
 
       {tab === 'caisse' ? (
@@ -2583,6 +3375,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const schoolId = session.schoolId ?? session.schools[0].id
   const [classrooms, setClassrooms] = useState<ClassroomRow[]>([])
   const [selectedClassroom, setSelectedClassroom] = useState('')
+  const [classFile, setClassFile] = useState<ClassFile | null>(null)
   const [students, setStudents] = useState<RosterStudent[]>([])
   const [query, setQuery] = useState('')
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -2609,6 +3402,11 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
     setStudents(payload.data.students)
   }
 
+  async function loadClassFile(classroomId: string) {
+    const payload = await api<{ data: ClassFile }>(`/api/v1/schools/${schoolId}/classrooms/${classroomId}`, auth)
+    setClassFile(payload.data)
+  }
+
   async function loadAttendance(classroomId: string, date: string) {
     const payload = await api<{
       data: Array<{ enrollment_id: string; attendance: { status: string } | null }>
@@ -2628,6 +3426,11 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
     if (!selectedClassroom) return
     loadRoster(selectedClassroom).catch((error: Error) => setMessage(error.message))
   }, [selectedClassroom, schoolId, session.token])
+
+  useEffect(() => {
+    if (!selectedClassroom || tab !== 'classe') return
+    loadClassFile(selectedClassroom).catch((error: Error) => setMessage(error.message))
+  }, [selectedClassroom, tab, schoolId, session.token])
 
   useEffect(() => {
     if (!selectedClassroom || tab !== 'appel') return
@@ -2668,7 +3471,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       ) : null}
 
       {tab === 'classe' && classrooms.length > 0 ? (
-        <Panel>
+        <Panel className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
             <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
               {classrooms.map((classroom) => (
@@ -2677,21 +3480,26 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
                 </option>
               ))}
             </select>
-            <input className={`${inputClass} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrer l’effectif" />
-            <span className="ml-auto text-xs text-neutral-500">{visibleStudents.length} élève(s)</span>
           </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {visibleStudents.map((row) => (
-                <tr key={row.enrollment_id} className="border-t border-black/5">
-                  <td className="px-3 py-1.5 font-medium">
-                    {row.person?.first_name} {row.person?.last_name}
-                  </td>
-                  <td className="px-3 py-1.5 font-mono text-xs text-neutral-500">{row.person?.public_id}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {classFile ? (
+            <ClassFilePanel
+              schoolId={schoolId}
+              auth={auth}
+              file={classFile}
+              staff={[]}
+              terms={[]}
+              classrooms={classrooms}
+              busy={busy}
+              readOnly
+              onBusy={setBusy}
+              onMessage={setMessage}
+              onReload={async () => {
+                if (selectedClassroom) await loadClassFile(selectedClassroom)
+              }}
+            />
+          ) : (
+            <p className="px-3 py-6 text-sm text-neutral-600">Chargement du dossier…</p>
+          )}
         </Panel>
       ) : null}
 

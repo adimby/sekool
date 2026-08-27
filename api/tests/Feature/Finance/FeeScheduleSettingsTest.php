@@ -210,12 +210,13 @@ it('prefers a grade-level barème over the school-wide fallback when invoicing',
         ->assertCreated()
         ->assertJsonPath('data.net_amount', 10_000);
 
-    $this->actingAs($school['account'], 'sanctum')
+    $roster = $this->actingAs($school['account'], 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}/roster")
         ->assertOk()
-        ->assertJsonPath('data.fee_schedule.locked', true)
-        ->assertJsonPath('data.fee_schedule.total_amount', 10_000)
-        ->assertJsonPath('data.classroom.grade_level.name', '6ème');
+        ->assertJsonPath('data.classroom.grade_level.name', '6ème')
+        ->json('data');
+
+    expect($roster)->not->toHaveKey('fee_schedule');
 });
 
 it('lets finance read barèmes but not change them, and hides them from teachers', function () {

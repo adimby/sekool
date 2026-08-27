@@ -23,6 +23,8 @@ class Classroom extends Model
         'name',
         'capacity',
         'main_teacher_person_id',
+        'delegate_person_id',
+        'vice_delegate_person_id',
     ];
 
     protected function casts(): array
@@ -50,6 +52,36 @@ class Classroom extends Model
     public function mainTeacher(): BelongsTo
     {
         return $this->belongsTo(Person::class, 'main_teacher_person_id');
+    }
+
+    public function delegate(): BelongsTo
+    {
+        return $this->belongsTo(Person::class, 'delegate_person_id');
+    }
+
+    public function viceDelegate(): BelongsTo
+    {
+        return $this->belongsTo(Person::class, 'vice_delegate_person_id');
+    }
+
+    public function teachers(): HasMany
+    {
+        return $this->hasMany(ClassroomTeacher::class);
+    }
+
+    public function timetableSlots(): HasMany
+    {
+        return $this->hasMany(TimetableSlot::class);
+    }
+
+    public function councils(): HasMany
+    {
+        return $this->hasMany(ClassCouncil::class);
+    }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(ClassActivity::class);
     }
 
     public function enrollments(): HasMany
