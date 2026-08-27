@@ -69,7 +69,15 @@ final class SessionPayload
             'person_id' => $account->person_id,
             'person' => PersonPayload::forParent($account->person),
             'schools' => $schools,
-            'is_parent' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Parent || $role === PersonRoleType::Parent->value),
+            'is_parent' => $openRoles->contains(function (mixed $role): bool {
+                $value = $role instanceof PersonRoleType ? $role->value : (string) $role;
+
+                return in_array($value, [
+                    PersonRoleType::Parent->value,
+                    PersonRoleType::Guardian->value,
+                    PersonRoleType::FinancialContact->value,
+                ], true);
+            }),
             'is_student' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Student || $role === PersonRoleType::Student->value),
         ];
     }

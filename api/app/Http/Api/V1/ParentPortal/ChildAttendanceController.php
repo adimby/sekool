@@ -14,7 +14,7 @@ final class ChildAttendanceController extends Controller
 {
     public function __invoke(Request $request, string $person): JsonResponse
     {
-        if (! ParentAuthorization::isLegalGuardianOf($request->user()->person_id, $person)) {
+        if (! ParentAuthorization::canSeeAttendance($request->user()->person_id, $person)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 

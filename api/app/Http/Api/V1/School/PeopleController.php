@@ -2,11 +2,13 @@
 
 namespace App\Http\Api\V1\School;
 
+use App\Domain\Identity\Actions\UpdatePersonCivilData;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Identity\Models\SchoolPersonLink;
 use App\Domain\Identity\Support\PersonPayload;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 final class PeopleController extends Controller
 {
@@ -33,5 +35,33 @@ final class PeopleController extends Controller
         }
 
         return response()->json(['data' => PersonPayload::forSchool($model, $link)]);
+    }
+
+    public function update(Request $request, string $school, string $person, UpdatePersonCivilData $update): JsonResponse
+    {
+        $link = SchoolPersonLink::query()->where('person_id', $person)->first();
+        if ($link === null) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $model = Person::query()->find($person);
+        if ($model === null) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $data = $request->validate([
+            'first_name' => ['sometimes', 'string', 'max:120'],
+            'last_name' => ['sometimes', 'string', 'max:120'],
+            'birth_date' => ['sometimes', 'nullable', 'date'],
+            'birth_date_precision' => ['sometimes', 'nullable', 'string'],
+            'sex' => ['sometimes', 'nullable', 'string'],
+            'phone' => ['sometimes', 'nullable', 'string'],
+            'email' => ['sometimes', 'nullable', 'email'],
+            'preferred_language' => ['sometimes', 'nullable', 'string', 'max:8'],
+        ]);
+
+        $updated = $update->execute($model, $data, (bool) $link->grants_contact_access);
+
+        return response()->json(['data' => PersonPayload::forSchool($updated, $link->refresh())]);
     }
 }

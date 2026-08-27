@@ -18,6 +18,64 @@ type PersonRow = {
   kind?: string
   phone_e164?: string
   email?: string
+  access?: 'guardian' | 'finance'
+  enrollments?: Array<{ id: string; school_id: string }>
+}
+
+type FamilyMemberRow = PersonRow & {
+  person_id?: string
+  role_in_family?: string
+  relationship_types?: string[]
+  has_account?: boolean
+  invitation_pending?: boolean
+}
+
+type FamilyRow = {
+  id: string
+  label: string
+  primary_language?: string
+  members: FamilyMemberRow[]
+}
+
+type TransferRow = {
+  id: string
+  status: string
+  person: { id: string; first_name: string; last_name: string } | null
+  origin_school?: string | null
+  destination_school?: string | null
+  parent_approved_at?: string | null
+}
+
+type AttendanceRow = {
+  id: string
+  date: string
+  session: string
+  status: string
+}
+
+type ConsentRow = {
+  id: string
+  subject_person_id: string
+  school_name?: string | null
+  scope: string
+  purpose: string
+  active: boolean
+  granted_at?: string | null
+}
+
+type LinkRequestRow = {
+  id: string
+  school_name?: string | null
+  status: string
+  expires_at?: string
+}
+
+type AccessLogRow = {
+  id: string
+  occurred_at?: string | null
+  action: string
+  resource_type: string
+  outcome: string
 }
 
 type ClassroomRow = {
@@ -97,7 +155,7 @@ type ParentInboxMessage = {
 type ChildFinance = {
   remaining_amount: number
   data: Array<{
-    school: { name: string } | null
+    school: { id?: string; name: string } | null
     classroom: { name: string } | null
     invoice: InvoiceRow | null
     payments: Array<{ amount: number; received_on: string; receipt_number: string | null }>
@@ -153,6 +211,7 @@ type ReliabilityOverview = {
 
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'caisse' | 'indices'
 type TeacherTab = 'classe' | 'appel'
+type ParentTab = 'enfants' | 'messages' | 'compte'
 
 const PAGE_SIZE = 40
 
@@ -167,6 +226,12 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
   { id: 'classe', label: 'Effectif' },
+]
+
+const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
+  { id: 'enfants', label: 'Enfants' },
+  { id: 'messages', label: 'Messages' },
+  { id: 'compte', label: 'Compte' },
 ]
 
 const WORKSPACE_LABEL: Record<Workspace, string> = {
@@ -184,6 +249,7 @@ export default function App() {
   })
   const [directionTab, setDirectionTab] = useState<DirectionTab>('accueil')
   const [teacherTab, setTeacherTab] = useState<TeacherTab>('appel')
+  const [parentTab, setParentTab] = useState<ParentTab>('enfants')
 
   function signedIn(next: Session) {
     const schoolId = next.schoolId ?? next.schools[0]?.id
@@ -269,6 +335,15 @@ export default function App() {
             ))}
           </nav>
         ) : null}
+        {workspace === 'parent' ? (
+          <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Famille">
+            {PARENT_NAV.map((item) => (
+              <button key={item.id} type="button" className={chromeTab(parentTab === item.id)} onClick={() => setParentTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </header>
       {workspace === 'direction' ? (
         <DirectionScreen session={session} tab={directionTab} onTab={setDirectionTab} />
@@ -277,7 +352,7 @@ export default function App() {
       ) : workspace === 'student' ? (
         <StudentScreen session={session} />
       ) : (
-        <ParentScreen session={session} />
+        <ParentScreen session={session} tab={parentTab} />
       )}
     </div>
   )
@@ -318,6 +393,44 @@ function kindLabel(kind?: string): string {
   if (kind === 'parent') return 'Parent'
   if (kind === 'staff') return 'Personnel'
   return kind ?? 'Personne'
+}
+
+function relationshipLabel(type?: string): string {
+  if (type === 'parent_of') return 'Parent'
+  if (type === 'guardian_of') return 'Tuteur'
+  if (type === 'financial_contact_for') return 'Contact financier'
+  if (type === 'pickup_authorized_for') return 'Autorisé à récupérer'
+  return type ?? ''
+}
+
+function memberPersonId(member: FamilyMemberRow): string {
+  return member.id || member.person_id || ''
+}
+
+function familySearchText(family: FamilyRow): string {
+  const names = family.members.map((member) => `${member.first_name ?? ''} ${member.last_name ?? ''}`).join(' ')
+  return `${family.label} ${names}`
+}
+
+function transferLabel(status?: string): string {
+  if (status === 'pending_parent') return 'Attente parent'
+  if (status === 'pending_origin_school') return 'Attente école'
+  if (status === 'approved') return 'Validé'
+  if (status === 'completed') return 'Terminé'
+  if (status === 'rejected') return 'Refusé'
+  if (status === 'cancelled') return 'Annulé'
+  return status ?? ''
+}
+
+function consentLabel(scope?: string): string {
+  if (scope === 'identity.core') return 'Identité'
+  if (scope === 'identity.contact') return 'Coordonnées'
+  if (scope === 'academic.records') return 'Bulletins'
+  if (scope === 'academic.attendance') return 'Présence'
+  if (scope === 'finance.history') return 'Écolage'
+  if (scope === 'documents.external') return 'Documents'
+  if (scope === 'documents.certificates') return 'Certificats'
+  return scope ?? ''
 }
 
 function invoiceLabel(status?: string): string {
@@ -574,19 +687,28 @@ function DirectionScreen({
   const [reliability, setReliability] = useState<ReliabilityOverview | null>(null)
   const [compareNote, setCompareNote] = useState<string | null>(null)
   const [openFamilyId, setOpenFamilyId] = useState<string | null>(null)
+  const [families, setFamilies] = useState<FamilyRow[]>([])
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null)
+  const [familyPane, setFamilyPane] = useState<'foyers' | 'personnes'>('foyers')
+  const [shareTokenInput, setShareTokenInput] = useState('')
+  const [publicIdInput, setPublicIdInput] = useState('')
+  const [transfers, setTransfers] = useState<TransferRow[]>([])
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
   const filteredPeople = people.filter((person) =>
     matchesQuery(`${person.first_name} ${person.last_name} ${person.public_id}`, query),
   )
+  const filteredFamilies = families.filter((family) => matchesQuery(familySearchText(family), query))
   const filteredEnrollments = activeEnrollments.filter((row) => {
     const text = `${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`
     return matchesQuery(text, query) && (classFilter === '' || row.classroom_id === classFilter)
   })
   const pagedPeople = pageOf(filteredPeople, page)
+  const pagedFamilies = pageOf(filteredFamilies, page)
   const pagedEnrollments = pageOf(filteredEnrollments, page)
   const selectedStudent = activeEnrollments.find((row) => row.id === selectedEnrollment)
+  const selectedFamily = families.find((family) => family.id === selectedFamilyId) ?? null
 
   async function loadCore() {
     const years = await api<{ data: Array<{ id: string; is_current: boolean; label: string }> }>(
@@ -612,6 +734,16 @@ function DirectionScreen({
     setPeople(list.data)
   }
 
+  async function loadFamilies() {
+    const list = await api<{ data: FamilyRow[] }>(`/api/v1/schools/${schoolId}/families`, auth)
+    setFamilies(list.data)
+  }
+
+  async function loadTransfers() {
+    const list = await api<{ data: TransferRow[] }>(`/api/v1/schools/${schoolId}/transfers`, auth)
+    setTransfers(list.data)
+  }
+
   async function loadReliability() {
     const payload = await api<{ data: ReliabilityOverview }>(`/api/v1/schools/${schoolId}/reliability/overview`, auth)
     setReliability(payload.data)
@@ -631,7 +763,7 @@ function DirectionScreen({
 
   useEffect(() => {
     if (tab === 'famille') {
-      loadPeople().catch((error: Error) => setMessage(error.message))
+      Promise.all([loadPeople(), loadFamilies(), loadTransfers()]).catch((error: Error) => setMessage(error.message))
     }
     if (tab === 'classe' || tab === 'caisse') {
       loadEnrollments().catch((error: Error) => setMessage(error.message))
@@ -653,7 +785,7 @@ function DirectionScreen({
     setMessage(null)
     setInvitation(null)
     try {
-      const created = await api<{ invitation_code: string }>(`/api/v1/schools/${schoolId}/families`, {
+      const created = await api<{ invitation_code: string; family_id: string }>(`/api/v1/schools/${schoolId}/families`, {
         ...auth,
         method: 'POST',
         body: JSON.stringify({
@@ -672,10 +804,69 @@ function DirectionScreen({
         }),
       })
       setInvitation(created.invitation_code)
+      setSelectedFamilyId(created.family_id)
+      setFamilyPane('foyers')
       setMessage('Famille inscrite. Remettez le code d’invitation au parent.')
-      await Promise.all([loadPeople(), loadEnrollments(), loadCore()])
+      await Promise.all([loadPeople(), loadFamilies(), loadEnrollments(), loadCore()])
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Inscription impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function redeemShareToken(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/share-tokens/redeem`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({ token: shareTokenInput }),
+      })
+      setShareTokenInput('')
+      setMessage('Lien parent racheté. Les identités sont maintenant rattachées à l’école.')
+      await Promise.all([loadPeople(), loadFamilies()])
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Lien impossible à racheter.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function requestPublicId(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      const payload = await api<{ message: string }>(`/api/v1/schools/${schoolId}/person-link-requests`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({ public_id: publicIdInput }),
+      })
+      setPublicIdInput('')
+      setMessage(payload.message)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Demande impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolveSchoolTransfer(transferId: string, action: 'approve' | 'refuse') {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/transfers/${transferId}/${action}`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setMessage(action === 'approve' ? 'Transfert validé par l’école.' : 'Transfert refusé.')
+      await loadTransfers()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Transfert impossible à traiter.')
     } finally {
       setBusy(false)
     }
@@ -909,61 +1100,163 @@ function DirectionScreen({
 
       {tab === 'famille' ? (
         <div className="grid gap-3 lg:grid-cols-[18rem_1fr]">
-          <Panel className="p-3">
-            <h2 className="text-sm font-semibold">Nouvelle famille</h2>
-            <form onSubmit={createFamily} className="mt-3 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <input className={inputClass} value={form.parent_first} onChange={(e) => setForm({ ...form, parent_first: e.target.value })} placeholder="Prénom parent" required />
-                <input className={inputClass} value={form.parent_last} onChange={(e) => setForm({ ...form, parent_last: e.target.value })} placeholder="Nom parent" required />
-              </div>
-              <input className={inputClass} value={form.parent_phone} onChange={(e) => setForm({ ...form, parent_phone: e.target.value })} placeholder="Téléphone" />
-              <input className={inputClass} type="email" value={form.parent_email} onChange={(e) => setForm({ ...form, parent_email: e.target.value })} placeholder="Email (facultatif)" />
-              <div className="grid grid-cols-2 gap-2">
-                <input className={inputClass} value={form.student_first} onChange={(e) => setForm({ ...form, student_first: e.target.value })} placeholder="Prénom élève" required />
-                <input className={inputClass} value={form.student_last} onChange={(e) => setForm({ ...form, student_last: e.target.value })} placeholder="Nom élève" required />
-              </div>
-              <input className={inputClass} type="date" value={form.student_birth} onChange={(e) => setForm({ ...form, student_birth: e.target.value })} required />
-              <button type="submit" disabled={busy || !yearId} className={btnBlock}>
-                {busy ? 'Enregistrement…' : 'Inscrire'}
-              </button>
-            </form>
-            {invitation ? (
-              <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-fanabe-mist px-2 py-2 text-xs">
-                <strong className="font-mono">{invitation}</strong>
-                <button type="button" className={btnGhost} onClick={() => copyText(invitation)}>
-                  Copier
+          <div className="space-y-3">
+            <Panel className="p-3">
+              <h2 className="text-sm font-semibold">Nouvelle famille</h2>
+              <form onSubmit={createFamily} className="mt-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={inputClass} value={form.parent_first} onChange={(e) => setForm({ ...form, parent_first: e.target.value })} placeholder="Prénom parent" required />
+                  <input className={inputClass} value={form.parent_last} onChange={(e) => setForm({ ...form, parent_last: e.target.value })} placeholder="Nom parent" required />
+                </div>
+                <input className={inputClass} value={form.parent_phone} onChange={(e) => setForm({ ...form, parent_phone: e.target.value })} placeholder="Téléphone" />
+                <input className={inputClass} type="email" value={form.parent_email} onChange={(e) => setForm({ ...form, parent_email: e.target.value })} placeholder="Email (facultatif)" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={inputClass} value={form.student_first} onChange={(e) => setForm({ ...form, student_first: e.target.value })} placeholder="Prénom élève" required />
+                  <input className={inputClass} value={form.student_last} onChange={(e) => setForm({ ...form, student_last: e.target.value })} placeholder="Nom élève" required />
+                </div>
+                <input className={inputClass} type="date" value={form.student_birth} onChange={(e) => setForm({ ...form, student_birth: e.target.value })} required />
+                <button type="submit" disabled={busy || !yearId} className={btnBlock}>
+                  {busy ? 'Enregistrement…' : 'Inscrire'}
                 </button>
-              </div>
-            ) : null}
-          </Panel>
-          <Panel className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
-              <input className={`${inputClass} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom ou identifiant" />
-              <Pager page={page} total={filteredPeople.length} onPage={setPage} />
-            </div>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
-                  <tr>
-                    <th className="px-3 py-1.5 font-medium">Nom</th>
-                    <th className="px-3 py-1.5 font-medium">Rôle</th>
-                    <th className="px-3 py-1.5 font-medium">Identifiant</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedPeople.map((person) => (
-                    <tr key={`${person.id}-${person.kind ?? ''}`} className="border-t border-black/5">
-                      <td className="px-3 py-1.5 font-medium">
-                        {person.first_name} {person.last_name}
-                      </td>
-                      <td className="px-3 py-1.5 text-neutral-600">{kindLabel(person.kind)}</td>
-                      <td className="px-3 py-1.5 font-mono text-xs text-neutral-600">{person.public_id}</td>
-                    </tr>
+              </form>
+              {invitation ? (
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-fanabe-mist px-2 py-2 text-xs">
+                  <strong className="font-mono">{invitation}</strong>
+                  <button type="button" className={btnGhost} onClick={() => copyText(invitation)}>
+                    Copier
+                  </button>
+                </div>
+              ) : null}
+            </Panel>
+            <Panel className="p-3">
+              <h2 className="text-sm font-semibold">Lien existant</h2>
+              <form onSubmit={redeemShareToken} className="mt-3 space-y-2">
+                <input className={inputClass} value={shareTokenInput} onChange={(e) => setShareTokenInput(e.target.value)} placeholder="Jeton parent" />
+                <button type="submit" disabled={busy || shareTokenInput.trim() === ''} className={btnBlock}>
+                  Racheter le lien
+                </button>
+              </form>
+              <form onSubmit={requestPublicId} className="mt-3 space-y-2">
+                <input className={inputClass} value={publicIdInput} onChange={(e) => setPublicIdInput(e.target.value)} placeholder="Identifiant 7-XXXXXXXX-C" />
+                <button type="submit" disabled={busy || publicIdInput.trim() === ''} className={btnBlock}>
+                  Demander le rattachement
+                </button>
+              </form>
+            </Panel>
+            {transfers.length > 0 ? (
+              <Panel className="p-3">
+                <h2 className="text-sm font-semibold">Transferts</h2>
+                <ul className="mt-2 space-y-2 text-xs">
+                  {transfers.map((row) => (
+                    <li key={row.id} className="rounded-md border border-black/8 p-2">
+                      <p className="font-medium">
+                        {row.person ? `${row.person.first_name} ${row.person.last_name}` : 'Élève'}
+                      </p>
+                      <p className="text-neutral-600">
+                        {row.origin_school} → {row.destination_school} · {transferLabel(row.status)}
+                      </p>
+                      {row.status === 'pending_origin_school' || row.status === 'pending_parent' ? (
+                        <div className="mt-2 flex gap-1">
+                          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void resolveSchoolTransfer(row.id, 'approve')}>
+                            Valider
+                          </button>
+                          <button type="button" className={btnGhost} disabled={busy} onClick={() => void resolveSchoolTransfer(row.id, 'refuse')}>
+                            Refuser
+                          </button>
+                        </div>
+                      ) : null}
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+                </ul>
+              </Panel>
+            ) : null}
+          </div>
+          {selectedFamily ? (
+            <FamilyEditor
+              family={selectedFamily}
+              schoolId={schoolId}
+              yearId={yearId}
+              auth={auth}
+              busy={busy}
+              onBusy={setBusy}
+              onMessage={setMessage}
+              onInvitation={setInvitation}
+              onReload={async () => {
+                await Promise.all([loadFamilies(), loadPeople(), loadEnrollments()])
+              }}
+              onClose={() => setSelectedFamilyId(null)}
+            />
+          ) : (
+            <Panel className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
+                <div className="flex rounded-md bg-black/5 p-0.5">
+                  <button type="button" className={modeTab(familyPane === 'foyers')} onClick={() => setFamilyPane('foyers')}>
+                    Foyers
+                  </button>
+                  <button type="button" className={modeTab(familyPane === 'personnes')} onClick={() => setFamilyPane('personnes')}>
+                    Personnes
+                  </button>
+                </div>
+                <input className={`${inputClass} max-w-xs`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom ou identifiant" />
+                <Pager
+                  page={page}
+                  total={familyPane === 'foyers' ? filteredFamilies.length : filteredPeople.length}
+                  onPage={setPage}
+                />
+              </div>
+              <div className="overflow-auto">
+                {familyPane === 'foyers' ? (
+                  <table className="w-full text-sm">
+                    <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                      <tr>
+                        <th className="px-3 py-1.5 font-medium">Foyer</th>
+                        <th className="px-3 py-1.5 font-medium">Enfants</th>
+                        <th className="px-3 py-1.5 font-medium">Adultes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedFamilies.map((family) => {
+                        const children = family.members.filter((member) => member.role_in_family === 'child')
+                        const adults = family.members.filter((member) => member.role_in_family === 'adult')
+                        return (
+                          <tr key={family.id} className="cursor-pointer border-t border-black/5 hover:bg-black/[0.03]" onClick={() => setSelectedFamilyId(family.id)}>
+                            <td className="px-3 py-1.5 font-medium">{family.label}</td>
+                            <td className="px-3 py-1.5 text-neutral-600">
+                              {children.map((member) => `${member.first_name} ${member.last_name}`).join(', ') || '—'}
+                            </td>
+                            <td className="px-3 py-1.5 text-neutral-600">
+                              {adults.map((member) => `${member.first_name} ${member.last_name}`).join(', ') || '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                      <tr>
+                        <th className="px-3 py-1.5 font-medium">Nom</th>
+                        <th className="px-3 py-1.5 font-medium">Rôle</th>
+                        <th className="px-3 py-1.5 font-medium">Identifiant</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedPeople.map((person) => (
+                        <tr key={`${person.id}-${person.kind ?? ''}`} className="border-t border-black/5">
+                          <td className="px-3 py-1.5 font-medium">
+                            {person.first_name} {person.last_name}
+                          </td>
+                          <td className="px-3 py-1.5 text-neutral-600">{kindLabel(person.kind)}</td>
+                          <td className="px-3 py-1.5 font-mono text-xs text-neutral-600">{person.public_id}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </Panel>
+          )}
         </div>
       ) : null}
 
@@ -1550,100 +1843,709 @@ function StudentScreen({ session }: { session: Session }) {
   )
 }
 
-function ParentScreen({ session }: { session: Session }) {
-  const [children, setChildren] = useState<PersonRow[]>([])
-  const [finances, setFinances] = useState<Record<string, ChildFinance>>({})
-  const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
-  const [message, setMessage] = useState<string | null>(null)
+function FamilyEditor({
+  family,
+  schoolId,
+  yearId,
+  auth,
+  busy,
+  onBusy,
+  onMessage,
+  onInvitation,
+  onReload,
+  onClose,
+}: {
+  family: FamilyRow
+  schoolId: string
+  yearId: string
+  auth: { token: string }
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+  onInvitation: (value: string | null) => void
+  onReload: () => Promise<void>
+  onClose: () => void
+}) {
+  const [label, setLabel] = useState(family.label)
+  const [drafts, setDrafts] = useState<Record<string, { first_name: string; last_name: string; phone: string }>>({})
+  const [sibling, setSibling] = useState({ first_name: '', last_name: family.members.find((m) => m.role_in_family === 'child')?.last_name ?? '', birth_date: '' })
+  const [adult, setAdult] = useState({ first_name: '', last_name: '', phone: '', relationship: 'parent_of' })
 
   useEffect(() => {
-    api<{ data: PersonRow[] }>('/api/v1/parent/children', { token: session.token })
-      .then(async (payload) => {
-        setChildren(payload.data)
-        const [entries, notes] = await Promise.all([
-          Promise.all(
-            payload.data.map(async (child) => {
-              const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, {
-                token: session.token,
-              })
-              return [child.id, finance] as const
-            }),
-          ),
-          api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', { token: session.token }),
-        ])
-        setFinances(Object.fromEntries(entries))
-        setInbox(notes.data)
+    setLabel(family.label)
+    setDrafts(
+      Object.fromEntries(
+        family.members.map((member) => [
+          memberPersonId(member),
+          {
+            first_name: member.first_name ?? '',
+            last_name: member.last_name ?? '',
+            phone: member.phone_e164 ?? '',
+          },
+        ]),
+      ),
+    )
+  }, [family])
+
+  async function saveLabel(event: FormEvent) {
+    event.preventDefault()
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/families/${family.id}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify({ label }),
       })
-      .catch((error: Error) => setMessage(error.message))
+      onMessage('Foyer mis à jour.')
+      await onReload()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Foyer impossible à modifier.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function saveMember(member: FamilyMemberRow) {
+    const id = memberPersonId(member)
+    const draft = drafts[id]
+    if (!draft) return
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/families/${family.id}/members/${id}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify({
+          first_name: draft.first_name,
+          last_name: draft.last_name,
+          phone: member.role_in_family === 'adult' ? draft.phone || null : undefined,
+        }),
+      })
+      onMessage(`${draft.first_name} ${draft.last_name} enregistré.`)
+      await onReload()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Personne impossible à modifier.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function addSibling(event: FormEvent) {
+    event.preventDefault()
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/families/${family.id}/children`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          school_year_id: yearId,
+          first_name: sibling.first_name,
+          last_name: sibling.last_name,
+          birth_date: sibling.birth_date || undefined,
+        }),
+      })
+      setSibling({ first_name: '', last_name: sibling.last_name, birth_date: '' })
+      onMessage('Fratrie inscrite.')
+      await onReload()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Enfant impossible à ajouter.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function addAdult(event: FormEvent) {
+    event.preventDefault()
+    onBusy(true)
+    onMessage(null)
+    onInvitation(null)
+    try {
+      const created = await api<{ invitation_code: string | null }>(`/api/v1/schools/${schoolId}/families/${family.id}/adults`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify(adult),
+      })
+      setAdult({ first_name: '', last_name: '', phone: '', relationship: 'parent_of' })
+      if (created.invitation_code) {
+        onInvitation(created.invitation_code)
+        onMessage('Adulte ajouté. Remettez le code d’invitation.')
+      } else {
+        onMessage('Personne autorisée à récupérer l’enfant — pas d’accès à l’espace famille.')
+      }
+      await onReload()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Adulte impossible à ajouter.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function reissue(personId: string) {
+    onBusy(true)
+    onMessage(null)
+    onInvitation(null)
+    try {
+      const payload = await api<{ invitation_code: string }>(`/api/v1/schools/${schoolId}/families/${family.id}/invite`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({ person_id: personId }),
+      })
+      onInvitation(payload.invitation_code)
+      onMessage('Nouveau code d’invitation émis.')
+      await onReload()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Invitation impossible à réémettre.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  return (
+    <Panel className="min-w-0">
+      <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2">
+        <button type="button" className={btnGhost} onClick={onClose}>
+          Retour
+        </button>
+        <h2 className="text-sm font-semibold">{family.label}</h2>
+      </div>
+      <div className="space-y-4 p-3">
+        <form onSubmit={saveLabel} className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[12rem] flex-1">
+            <Field label="Nom du foyer">
+              <input className={inputClass} value={label} onChange={(e) => setLabel(e.target.value)} />
+            </Field>
+          </div>
+          <button type="submit" disabled={busy} className={btnPrimary}>
+            Enregistrer
+          </button>
+        </form>
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Membres</h3>
+          <ul className="mt-2 divide-y divide-black/5">
+            {family.members.map((member) => {
+              const id = memberPersonId(member)
+              const draft = drafts[id] ?? { first_name: '', last_name: '', phone: '' }
+              const types = (member.relationship_types ?? []).map(relationshipLabel).filter(Boolean)
+              const canInvite =
+                member.role_in_family === 'adult' &&
+                !member.has_account &&
+                (member.relationship_types ?? []).some((type) =>
+                  ['parent_of', 'guardian_of', 'financial_contact_for'].includes(type),
+                )
+              return (
+                <li key={id} className="py-2">
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input
+                      className={inputClass}
+                      value={draft.first_name}
+                      onChange={(e) => setDrafts({ ...drafts, [id]: { ...draft, first_name: e.target.value } })}
+                    />
+                    <input
+                      className={inputClass}
+                      value={draft.last_name}
+                      onChange={(e) => setDrafts({ ...drafts, [id]: { ...draft, last_name: e.target.value } })}
+                    />
+                    <button type="button" className={btnPrimary} disabled={busy} onClick={() => void saveMember(member)}>
+                      Sauver
+                    </button>
+                  </div>
+                  {member.role_in_family === 'adult' ? (
+                    <input
+                      className={`${inputClass} mt-2`}
+                      value={draft.phone}
+                      onChange={(e) => setDrafts({ ...drafts, [id]: { ...draft, phone: e.target.value } })}
+                      placeholder="Téléphone"
+                    />
+                  ) : null}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+                    <span>{member.role_in_family === 'child' ? 'Élève' : 'Adulte'}</span>
+                    {types.length > 0 ? <span>{types.join(' · ')}</span> : null}
+                    {member.public_id ? <span className="font-mono">{member.public_id}</span> : null}
+                    {member.has_account ? <span>Compte actif</span> : null}
+                    {member.invitation_pending ? <span>Invitation en cours</span> : null}
+                    {canInvite ? (
+                      <button type="button" className="underline" disabled={busy} onClick={() => void reissue(id)}>
+                        Réémettre l’invitation
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+        <form onSubmit={addSibling} className="space-y-2 rounded-md bg-black/[0.03] p-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Ajouter un enfant</h3>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <input className={inputClass} value={sibling.first_name} onChange={(e) => setSibling({ ...sibling, first_name: e.target.value })} placeholder="Prénom" required />
+            <input className={inputClass} value={sibling.last_name} onChange={(e) => setSibling({ ...sibling, last_name: e.target.value })} placeholder="Nom" required />
+            <input className={inputClass} type="date" value={sibling.birth_date} onChange={(e) => setSibling({ ...sibling, birth_date: e.target.value })} />
+          </div>
+          <button type="submit" disabled={busy || !yearId} className={btnPrimary}>
+            Inscrire la fratrie
+          </button>
+        </form>
+        <form onSubmit={addAdult} className="space-y-2 rounded-md bg-black/[0.03] p-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Ajouter un adulte</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input className={inputClass} value={adult.first_name} onChange={(e) => setAdult({ ...adult, first_name: e.target.value })} placeholder="Prénom" required />
+            <input className={inputClass} value={adult.last_name} onChange={(e) => setAdult({ ...adult, last_name: e.target.value })} placeholder="Nom" required />
+          </div>
+          <input className={inputClass} value={adult.phone} onChange={(e) => setAdult({ ...adult, phone: e.target.value })} placeholder="Téléphone" />
+          <select className={inputClass} value={adult.relationship} onChange={(e) => setAdult({ ...adult, relationship: e.target.value })}>
+            <option value="parent_of">Parent — espace famille</option>
+            <option value="guardian_of">Tuteur — espace famille</option>
+            <option value="financial_contact_for">Contact financier — écolage seulement</option>
+            <option value="pickup_authorized_for">Autorisé à récupérer — pas d’espace famille</option>
+          </select>
+          <button type="submit" disabled={busy} className={btnPrimary}>
+            Ajouter
+          </button>
+        </form>
+      </div>
+    </Panel>
+  )
+}
+
+function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
+  const auth = useMemo(() => ({ token: session.token }), [session.token])
+  const [children, setChildren] = useState<PersonRow[]>([])
+  const [finances, setFinances] = useState<Record<string, ChildFinance>>({})
+  const [attendance, setAttendance] = useState<Record<string, AttendanceRow[]>>({})
+  const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
+  const [consents, setConsents] = useState<ConsentRow[]>([])
+  const [linkRequests, setLinkRequests] = useState<LinkRequestRow[]>([])
+  const [transfers, setTransfers] = useState<TransferRow[]>([])
+  const [accessLog, setAccessLog] = useState<AccessLogRow[]>([])
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState<Record<string, { first_name: string; last_name: string }>>({})
+  const [shareChildIds, setShareChildIds] = useState<string[]>([])
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [consentForm, setConsentForm] = useState({ childId: '', schoolId: '', scope: 'academic.records', purpose: 'Partage avec l’école' })
+
+  async function loadFamily() {
+    const payload = await api<{ data: PersonRow[] }>('/api/v1/parent/children', auth)
+    setChildren(payload.data)
+    setEditing(
+      Object.fromEntries(payload.data.map((child) => [child.id, { first_name: child.first_name, last_name: child.last_name }])),
+    )
+    setShareChildIds(payload.data.filter((child) => child.access === 'guardian').map((child) => child.id))
+    const firstGuardian = payload.data.find((child) => child.access === 'guardian')
+    const schoolId = firstGuardian?.enrollments?.[0]?.school_id ?? payload.data[0]?.enrollments?.[0]?.school_id ?? ''
+    setConsentForm((prev) => ({
+      ...prev,
+      childId: prev.childId || firstGuardian?.id || payload.data[0]?.id || '',
+      schoolId: prev.schoolId || schoolId,
+    }))
+    const [entries, presence, notes] = await Promise.all([
+      Promise.all(
+        payload.data.map(async (child) => {
+          const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, auth)
+          return [child.id, finance] as const
+        }),
+      ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const rows = await api<{ data: AttendanceRow[] }>(`/api/v1/parent/children/${child.id}/attendance`, auth)
+            return [child.id, rows.data] as const
+          }),
+      ),
+      api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', auth),
+    ])
+    setFinances(Object.fromEntries(entries))
+    setAttendance(Object.fromEntries(presence))
+    setInbox(notes.data)
+  }
+
+  async function loadAccount() {
+    const [consentList, requests, transferList, log] = await Promise.all([
+      api<{ data: ConsentRow[] }>('/api/v1/parent/consents', auth),
+      api<{ data: LinkRequestRow[] }>('/api/v1/parent/link-requests', auth),
+      api<{ data: TransferRow[] }>('/api/v1/parent/transfers', auth),
+      api<{ data: AccessLogRow[] }>('/api/v1/parent/access-log', auth),
+    ])
+    setConsents(consentList.data)
+    setLinkRequests(requests.data)
+    setTransfers(transferList.data)
+    setAccessLog(log.data)
+  }
+
+  useEffect(() => {
+    loadFamily().catch((error: Error) => setMessage(error.message))
   }, [session.token])
 
+  useEffect(() => {
+    if (tab !== 'compte') return
+    loadAccount().catch((error: Error) => setMessage(error.message))
+  }, [tab, session.token])
+
   const totalRemaining = Object.values(finances).reduce((sum, row) => sum + row.remaining_amount, 0)
+  const guardians = children.filter((child) => child.access === 'guardian')
+
+  async function saveChild(childId: string) {
+    const draft = editing[childId]
+    if (!draft) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/parent/children/${childId}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify(draft),
+      })
+      setMessage('État civil mis à jour.')
+      await loadFamily()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Modification impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createShareToken(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      const payload = await api<{ token: string }>('/api/v1/parent/share-tokens', {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({ child_person_ids: shareChildIds }),
+      })
+      setShareToken(payload.token)
+      setMessage('Lien créé. Remettez-le à l’école d’accueil.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Lien impossible à créer.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolveLink(id: string, action: 'approve' | 'refuse') {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/parent/link-requests/${id}/${action}`, { ...auth, method: 'POST', body: JSON.stringify({}) })
+      setMessage(action === 'approve' ? 'Rattachement accepté.' : 'Rattachement refusé.')
+      await loadAccount()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Demande impossible à traiter.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolveTransfer(id: string, action: 'approve' | 'refuse') {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/parent/transfers/${id}/${action}`, { ...auth, method: 'POST', body: JSON.stringify({}) })
+      setMessage(action === 'approve' ? 'Transfert accepté.' : 'Transfert refusé.')
+      await loadAccount()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Transfert impossible à traiter.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function grantConsent(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api('/api/v1/parent/consents', {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          subject_person_id: consentForm.childId,
+          grantee_school_id: consentForm.schoolId,
+          scope: consentForm.scope,
+          purpose: consentForm.purpose,
+        }),
+      })
+      setMessage('Consentement enregistré.')
+      await loadAccount()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Consentement impossible à enregistrer.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function revokeConsent(id: string) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/parent/consents/${id}/revoke`, { ...auth, method: 'POST', body: JSON.stringify({}) })
+      setMessage('Consentement révoqué.')
+      await loadAccount()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Révocation impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <main className="mx-auto max-w-2xl px-3 py-3">
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
-      <div className="flex items-end justify-between gap-3">
-        <p className="text-sm text-neutral-600">{session.person.first_name}</p>
-        <p className={`text-sm font-semibold ${totalRemaining > 0 ? 'text-fanabe-clay' : 'text-fanabe-leaf'}`}>
-          {formatAr(totalRemaining)}
-        </p>
-      </div>
-      {inbox.length > 0 ? (
-        <Panel className="mt-3">
-          <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Messages</h2>
-          <ul className="divide-y divide-black/5">
-            {inbox.map((note) => (
-              <li key={note.id} className="px-3 py-2">
-                <p className="text-sm font-medium">{note.subject}</p>
-                <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-600">{note.body}</p>
-              </li>
-            ))}
+
+      {tab === 'enfants' ? (
+        <div className="space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <p className="text-sm text-neutral-600">{session.person.first_name}</p>
+            <p className={`text-sm font-semibold ${totalRemaining > 0 ? 'text-fanabe-clay' : 'text-fanabe-leaf'}`}>
+              {formatAr(totalRemaining)}
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {children.map((child) => {
+              const finance = finances[child.id]
+              const presence = attendance[child.id] ?? []
+              const draft = editing[child.id]
+              const canEdit = child.access === 'guardian'
+              return (
+                <li key={child.id}>
+                  <Panel className="p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      {canEdit && draft ? (
+                        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                          <input
+                            className={`${inputClass} max-w-[8rem]`}
+                            value={draft.first_name}
+                            onChange={(e) => setEditing({ ...editing, [child.id]: { ...draft, first_name: e.target.value } })}
+                          />
+                          <input
+                            className={`${inputClass} max-w-[8rem]`}
+                            value={draft.last_name}
+                            onChange={(e) => setEditing({ ...editing, [child.id]: { ...draft, last_name: e.target.value } })}
+                          />
+                          <button type="button" className={btnGhost} disabled={busy} onClick={() => void saveChild(child.id)}>
+                            Sauver
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold">
+                          {child.first_name} {child.last_name}
+                        </p>
+                      )}
+                      {finance ? (
+                        <p className={`text-sm font-semibold ${finance.remaining_amount > 0 ? 'text-fanabe-clay' : 'text-fanabe-leaf'}`}>
+                          {formatAr(finance.remaining_amount)}
+                        </p>
+                      ) : null}
+                    </div>
+                    {child.access === 'finance' ? (
+                      <p className="mt-1 text-[11px] text-neutral-500">Contact financier — écolage seulement.</p>
+                    ) : null}
+                    {finance?.data.map((row, index) => (
+                      <div key={index} className="mt-2 text-xs text-neutral-600">
+                        <p>
+                          {row.school?.name}
+                          {row.classroom ? ` · ${row.classroom.name}` : ''}
+                        </p>
+                        {row.invoice ? (
+                          <ul className="mt-1 space-y-0.5">
+                            {row.invoice.installments.map((item) => (
+                              <li key={item.id} className="flex justify-between">
+                                <span>{formatDate(item.due_on)}</span>
+                                <span>{formatAr(item.remaining_amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1">Pas encore de facture.</p>
+                        )}
+                      </div>
+                    ))}
+                    {canEdit ? (
+                      <div className="mt-3">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Présence</h3>
+                        {presence.length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Rien sur les 14 derniers jours.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 text-xs">
+                            {presence.map((row) => (
+                              <li key={row.id} className="flex justify-between">
+                                <span>{formatDate(row.date)}</span>
+                                <span>{attendanceLabel(row.status)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : null}
+                  </Panel>
+                </li>
+              )
+            })}
           </ul>
+          {children.length === 0 && !message ? (
+            <p className="mt-6 text-center text-sm text-neutral-600">Aucun enfant rattaché. Demandez un code à l’école.</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === 'messages' ? (
+        <Panel>
+          <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Messages</h2>
+          {inbox.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-neutral-600">Aucun message pour le moment.</p>
+          ) : (
+            <ul className="divide-y divide-black/5">
+              {inbox.map((note) => (
+                <li key={note.id} className="px-3 py-2">
+                  <p className="text-sm font-medium">{note.subject}</p>
+                  <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-600">{note.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       ) : null}
-      <ul className="mt-3 space-y-2">
-        {children.map((child) => {
-          const finance = finances[child.id]
-          return (
-            <li key={child.id}>
-              <Panel className="p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">
-                    {child.first_name} {child.last_name}
-                  </p>
-                  {finance ? (
-                    <p className={`text-sm font-semibold ${finance.remaining_amount > 0 ? 'text-fanabe-clay' : 'text-fanabe-leaf'}`}>
-                      {formatAr(finance.remaining_amount)}
-                    </p>
-                  ) : null}
-                </div>
-                {finance?.data.map((row, index) => (
-                  <div key={index} className="mt-2 text-xs text-neutral-600">
-                    <p>
-                      {row.school?.name}
-                      {row.classroom ? ` · ${row.classroom.name}` : ''}
-                    </p>
-                    {row.invoice ? (
-                      <ul className="mt-1 space-y-0.5">
-                        {row.invoice.installments.map((item) => (
-                          <li key={item.id} className="flex justify-between">
-                            <span>{formatDate(item.due_on)}</span>
-                            <span>{formatAr(item.remaining_amount)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-1">Pas encore de facture.</p>
-                    )}
-                  </div>
+
+      {tab === 'compte' ? (
+        <div className="space-y-3">
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">Lien pour une autre école</h2>
+            <p className="mt-1 text-xs text-neutral-500">Le jeton ne donne accès qu’aux enfants que vous autorisez.</p>
+            <form onSubmit={createShareToken} className="mt-2 space-y-2">
+              {guardians.map((child) => (
+                <label key={child.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={shareChildIds.includes(child.id)}
+                    onChange={(event) => {
+                      setShareChildIds((prev) =>
+                        event.target.checked ? [...prev, child.id] : prev.filter((id) => id !== child.id),
+                      )
+                    }}
+                  />
+                  {child.first_name} {child.last_name}
+                </label>
+              ))}
+              <button type="submit" disabled={busy || shareChildIds.length === 0} className={btnPrimary}>
+                Créer un lien
+              </button>
+            </form>
+            {shareToken ? (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-fanabe-mist px-2 py-2 text-xs">
+                <strong className="break-all font-mono">{shareToken}</strong>
+                <button type="button" className={btnGhost} onClick={() => copyText(shareToken)}>
+                  Copier
+                </button>
+              </div>
+            ) : null}
+          </Panel>
+          {linkRequests.length > 0 ? (
+            <Panel className="p-3">
+              <h2 className="text-sm font-semibold">Demandes de rattachement</h2>
+              <ul className="mt-2 space-y-2 text-sm">
+                {linkRequests.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between gap-2">
+                    <span>{row.school_name ?? 'École'}</span>
+                    <div className="flex gap-1">
+                      <button type="button" className={btnPrimary} disabled={busy} onClick={() => void resolveLink(row.id, 'approve')}>
+                        Accepter
+                      </button>
+                      <button type="button" className={btnGhost} disabled={busy} onClick={() => void resolveLink(row.id, 'refuse')}>
+                        Refuser
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </Panel>
-            </li>
-          )
-        })}
-      </ul>
-      {children.length === 0 && !message ? (
-        <p className="mt-6 text-center text-sm text-neutral-600">Aucun enfant rattaché. Demandez un code à l’école.</p>
+              </ul>
+            </Panel>
+          ) : null}
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">Transferts</h2>
+            {transfers.length === 0 ? (
+              <p className="mt-2 text-xs text-neutral-600">Aucun transfert en cours.</p>
+            ) : (
+              <ul className="mt-2 space-y-2 text-sm">
+                {transfers.map((row) => (
+                  <li key={row.id}>
+                    <p>
+                      {row.person ? `${row.person.first_name} ${row.person.last_name}` : 'Élève'} · {transferLabel(row.status)}
+                    </p>
+                    <p className="text-xs text-neutral-600">
+                      {row.origin_school} → {row.destination_school}
+                    </p>
+                    {row.status === 'pending_parent' ? (
+                      <div className="mt-1 flex gap-1">
+                        <button type="button" className={btnPrimary} disabled={busy} onClick={() => void resolveTransfer(row.id, 'approve')}>
+                          Accepter
+                        </button>
+                        <button type="button" className={btnGhost} disabled={busy} onClick={() => void resolveTransfer(row.id, 'refuse')}>
+                          Refuser
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">Consentements</h2>
+            <form onSubmit={grantConsent} className="mt-2 space-y-2">
+              <select className={inputClass} value={consentForm.childId} onChange={(e) => setConsentForm({ ...consentForm, childId: e.target.value })}>
+                {guardians.map((child) => (
+                  <option key={child.id} value={child.id}>
+                    {child.first_name} {child.last_name}
+                  </option>
+                ))}
+              </select>
+              <select className={inputClass} value={consentForm.scope} onChange={(e) => setConsentForm({ ...consentForm, scope: e.target.value })}>
+                <option value="academic.records">Bulletins</option>
+                <option value="academic.attendance">Présence</option>
+                <option value="finance.history">Écolage</option>
+                <option value="identity.core">Identité</option>
+                <option value="identity.contact">Coordonnées</option>
+              </select>
+              <input className={inputClass} value={consentForm.purpose} onChange={(e) => setConsentForm({ ...consentForm, purpose: e.target.value })} required />
+              <button type="submit" disabled={busy || !consentForm.childId || !consentForm.schoolId} className={btnPrimary}>
+                Accorder
+              </button>
+            </form>
+            <ul className="mt-3 space-y-1 text-xs">
+              {consents.map((row) => (
+                <li key={row.id} className="flex items-center justify-between gap-2">
+                  <span>
+                    {consentLabel(row.scope)} · {row.school_name ?? 'École'}
+                    {row.active ? '' : ' · révoqué'}
+                  </span>
+                  {row.active ? (
+                    <button type="button" className="underline" disabled={busy} onClick={() => void revokeConsent(row.id)}>
+                      Révoquer
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+          <Panel>
+            <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Journal d’accès</h2>
+            {accessLog.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-neutral-600">Aucun événement.</p>
+            ) : (
+              <ul className="divide-y divide-black/5 text-xs">
+                {accessLog.slice(0, 20).map((row) => (
+                  <li key={row.id} className="flex justify-between gap-2 px-3 py-1.5">
+                    <span>{row.action}</span>
+                    <span className="text-neutral-500">{row.occurred_at ? new Date(row.occurred_at).toLocaleString('fr-FR') : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
       ) : null}
     </main>
   )

@@ -5,6 +5,7 @@ namespace App\Http\Api\V1\ParentPortal;
 use App\Domain\Identity\Actions\ResolvePersonLinkRequest;
 use App\Domain\Identity\Models\PersonLinkRequest;
 use App\Domain\Platform\Tenancy\TenantContext;
+use App\Domain\School\Models\School;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,9 +21,12 @@ final class LinkRequestController extends Controller
             ->where('expires_at', '>', now())
             ->get());
 
+        $schools = School::query()->whereIn('id', $rows->pluck('school_id'))->get()->keyBy('id');
+
         return response()->json(['data' => $rows->map(fn (PersonLinkRequest $row) => [
             'id' => $row->id,
             'school_id' => $row->school_id,
+            'school_name' => $schools->get($row->school_id)?->name,
             'status' => $row->status,
             'expires_at' => $row->expires_at,
         ])->values()]);

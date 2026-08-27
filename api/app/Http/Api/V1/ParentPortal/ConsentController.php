@@ -8,6 +8,7 @@ use App\Domain\Consent\Enums\ConsentScope;
 use App\Domain\Consent\Models\Consent;
 use App\Domain\Identity\Support\ParentAuthorization;
 use App\Domain\Platform\Exceptions\DomainException;
+use App\Domain\School\Models\School;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,8 +21,22 @@ final class ConsentController extends Controller
         $subjectIds = array_merge([$parentId], ParentAuthorization::authorizedChildIds($parentId));
 
         $rows = Consent::query()->whereIn('subject_person_id', $subjectIds)->orderByDesc('granted_at')->get();
+        $schools = School::query()->whereIn('id', $rows->pluck('grantee_school_id'))->get()->keyBy('id');
 
-        return response()->json(['data' => $rows]);
+        return response()->json([
+            'data' => $rows->map(fn (Consent $row): array => [
+                'id' => $row->id,
+                'subject_person_id' => $row->subject_person_id,
+                'grantee_school_id' => $row->grantee_school_id,
+                'school_name' => $schools->get($row->grantee_school_id)?->name,
+                'scope' => $row->scope instanceof \BackedEnum ? $row->scope->value : (string) $row->scope,
+                'purpose' => $row->purpose,
+                'granted_at' => $row->granted_at?->toIso8601String(),
+                'expires_at' => $row->expires_at?->toIso8601String(),
+                'revoked_at' => $row->revoked_at?->toIso8601String(),
+                'active' => $row->isActive(),
+            ])->values(),
+        ]);
     }
 
     public function store(Request $request, GrantConsent $grant): JsonResponse

@@ -21,6 +21,12 @@ final class AccessLogController extends Controller
             ->limit(100)
             ->get();
 
-        return response()->json(['data' => $rows]);
+        return response()->json(['data' => $rows->map(fn (AuditEvent $row): array => [
+            'id' => $row->id,
+            'occurred_at' => $row->occurred_at?->toIso8601String(),
+            'action' => $row->action,
+            'resource_type' => $row->resource_type,
+            'outcome' => $row->outcome,
+        ])->values()]);
     }
 }

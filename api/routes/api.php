@@ -65,8 +65,16 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/grade-levels', [GradeLevelController::class, 'store']);
         Route::post('/schools/{school}/classrooms', [ClassroomController::class, 'store']);
         Route::post('/schools/{school}/families', [FamilyController::class, 'store']);
+        Route::get('/schools/{school}/families', [FamilyController::class, 'index']);
+        Route::get('/schools/{school}/families/{family}', [FamilyController::class, 'show']);
+        Route::patch('/schools/{school}/families/{family}', [FamilyController::class, 'update']);
+        Route::post('/schools/{school}/families/{family}/children', [FamilyController::class, 'addChild']);
+        Route::post('/schools/{school}/families/{family}/adults', [FamilyController::class, 'addAdult']);
+        Route::post('/schools/{school}/families/{family}/invite', [FamilyController::class, 'invite']);
+        Route::patch('/schools/{school}/families/{family}/members/{person}', [FamilyController::class, 'updateMember']);
         Route::get('/schools/{school}/people', [PeopleController::class, 'index']);
         Route::get('/schools/{school}/people/{person}', [PeopleController::class, 'show']);
+        Route::patch('/schools/{school}/people/{person}', [PeopleController::class, 'update']);
         Route::get('/schools/{school}/people/{person}/academic-history', AcademicHistoryController::class);
         Route::get('/schools/{school}/enrollments', [EnrollmentController::class, 'index']);
         Route::post('/schools/{school}/enrollments', [EnrollmentController::class, 'store']);
@@ -107,6 +115,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
 Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->group(function (): void {
     Route::get('/children', [ChildrenController::class, 'index']);
     Route::get('/children/{person}', [ChildrenController::class, 'show']);
+    Route::patch('/children/{person}', [ChildrenController::class, 'update']);
     Route::get('/children/{person}/finance', ChildFinanceController::class);
     Route::get('/children/{person}/attendance', ChildAttendanceController::class);
     Route::get('/messages', ParentMessageController::class);
@@ -116,6 +125,7 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::post('/link-requests/{linkRequest}/approve', [LinkRequestController::class, 'approve']);
     Route::post('/link-requests/{linkRequest}/refuse', [LinkRequestController::class, 'refuse']);
 
+    Route::get('/transfers', [ParentTransferController::class, 'index']);
     Route::post('/transfers/{transfer}/approve', [ParentTransferController::class, 'approve']);
     Route::post('/transfers/{transfer}/refuse', [ParentTransferController::class, 'refuse']);
 
