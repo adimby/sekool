@@ -57,6 +57,7 @@ final class CreateFamilyWithStudent
         array $student,
         RelationshipType $relationship = RelationshipType::ParentOf,
         ?string $studentNumber = null,
+        ?string $familyLabel = null,
     ): array {
         SchoolYear::query()->findOrFail($schoolYearId);
 
@@ -68,6 +69,7 @@ final class CreateFamilyWithStudent
             $student,
             $relationship,
             $studentNumber,
+            $familyLabel,
         ): array {
             $parentPerson = Person::createWithUniquePublicId($this->civilAttributes($parent, includeContacts: true));
             app(AcquirePersonRole::class)->execute($parentPerson->id, PersonRoleType::Parent);
@@ -82,8 +84,11 @@ final class CreateFamilyWithStudent
                 verifiedByPersonId: $actorPersonId,
             );
 
+            $trimmedLabel = is_string($familyLabel) ? trim($familyLabel) : '';
             $family = Family::query()->create([
-                'label' => $parentPerson->last_name,
+                'label' => $trimmedLabel !== ''
+                    ? $trimmedLabel
+                    : (string) ($student['last_name'] ?? $parentPerson->last_name),
                 'primary_language' => $parentPerson->preferred_language ?? 'fr',
                 'created_by_person_id' => $actorPersonId,
             ]);

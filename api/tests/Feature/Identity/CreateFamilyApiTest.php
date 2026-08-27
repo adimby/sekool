@@ -24,6 +24,7 @@ it('lets a school create a family, a student and a parent invitation', function 
         ->assertJsonPath('parent.first_name', 'Voahangy')
         ->assertJsonPath('parent.phone_e164', '+261349876543')
         ->assertJsonPath('student.first_name', 'Tiana')
+        ->assertJsonPath('family_label', 'Rasoa')
         ->assertJsonStructure(['invitation_code', 'family_id', 'enrollment_id']);
 
     $code = $response->json('invitation_code');
@@ -33,4 +34,26 @@ it('lets a school create a family, a student and a parent invitation', function 
         'email' => 'voahangy.login@fanabe.test',
         'password' => 'secret-pass',
     ])->assertOk()->assertJsonStructure(['token', 'person_id']);
+});
+
+it('names the family after the student unless a label is given', function () {
+    $school = $this->provisionSchool();
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$school['school']->id}/families", [
+            'school_year_id' => $school['year']->id,
+            'label' => 'Rasoa-Rakoto',
+            'parent' => [
+                'first_name' => 'Voahangy',
+                'last_name' => 'Andria',
+                'phone' => '0349876544',
+            ],
+            'student' => [
+                'first_name' => 'Tiana',
+                'last_name' => 'Rasoa',
+                'birth_date' => '2014-06-20',
+            ],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('family_label', 'Rasoa-Rakoto');
 });

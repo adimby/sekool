@@ -209,6 +209,7 @@ final class FamilyController extends Controller
             'student.sex' => ['nullable', 'string'],
             'relationship' => ['nullable', 'string'],
             'student_number' => ['nullable', 'string', 'max:32'],
+            'label' => ['nullable', 'string', 'max:120'],
         ]);
 
         $relationship = RelationshipType::tryFrom($data['relationship'] ?? 'parent_of') ?? RelationshipType::ParentOf;
@@ -221,6 +222,7 @@ final class FamilyController extends Controller
             student: $data['student'],
             relationship: $relationship,
             studentNumber: $data['student_number'] ?? null,
+            familyLabel: $data['label'] ?? null,
         );
 
         $parentLink = SchoolPersonLink::query()
@@ -234,6 +236,7 @@ final class FamilyController extends Controller
 
         return response()->json([
             'family_id' => $result['family']->id,
+            'family_label' => $result['family']->label,
             'invitation_code' => $result['invitation_code'],
             'parent' => PersonPayload::forSchool($result['parent'], $parentLink),
             'student' => PersonPayload::forSchool($result['student'], $studentLink),

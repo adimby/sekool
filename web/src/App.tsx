@@ -645,6 +645,354 @@ function modeTab(active: boolean): string {
   return `h-8 rounded-md text-sm font-medium ${active ? 'bg-white shadow-sm' : 'text-neutral-600'}`
 }
 
+function sexLabel(sex?: string): string {
+  if (sex === 'female') return 'Fille'
+  if (sex === 'male') return 'Garçon'
+  return 'Non précisé'
+}
+
+function EnrollmentWizard({
+  yearId,
+  yearLabel,
+  schoolId,
+  auth,
+  families,
+  busy,
+  onBusy,
+  onClose,
+  onEnrolled,
+}: {
+  yearId: string
+  yearLabel: string
+  schoolId: string
+  auth: { token: string }
+  families: FamilyRow[]
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onClose: () => void
+  onEnrolled: (result: { familyId: string; invitation: string | null }) => Promise<void>
+}) {
+  const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
+  const [error, setError] = useState<string | null>(null)
+  const [student, setStudent] = useState({ first_name: '', last_name: '', birth_date: '', sex: 'unspecified' })
+  const [foyerMode, setFoyerMode] = useState<'new' | 'existing'>('new')
+  const [familyQuery, setFamilyQuery] = useState('')
+  const [familyId, setFamilyId] = useState('')
+  const [label, setLabel] = useState('')
+  const [parent, setParent] = useState({
+    first_name: '',
+    last_name: '',
+    phone: '',
+    email: '',
+    relationship: 'parent_of',
+  })
+  const [invitation, setInvitation] = useState<string | null>(null)
+  const [doneName, setDoneName] = useState('')
+
+  const matchedFamilies = families.filter((family) => matchesQuery(familySearchText(family), familyQuery))
+  const chosenFamily = families.find((family) => family.id === familyId) ?? null
+  const studentReady = student.first_name.trim() !== '' && student.last_name.trim() !== '' && student.birth_date !== ''
+  const foyerReady =
+    foyerMode === 'existing'
+      ? familyId !== ''
+      : parent.first_name.trim() !== '' && parent.last_name.trim() !== ''
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
+
+  function goFoyer() {
+    setError(null)
+    setParent((prev) => ({ ...prev, last_name: prev.last_name || student.last_name }))
+    setLabel((prev) => prev || student.last_name)
+    setStep(2)
+  }
+
+  async function submit() {
+    onBusy(true)
+    setError(null)
+    try {
+      if (foyerMode === 'existing' && familyId) {
+        await api(`/api/v1/schools/${schoolId}/families/${familyId}/children`, {
+          ...auth,
+          method: 'POST',
+          body: JSON.stringify({
+            school_year_id: yearId,
+            first_name: student.first_name,
+            last_name: student.last_name,
+            birth_date: student.birth_date,
+            sex: student.sex,
+          }),
+        })
+        setInvitation(null)
+        setDoneName(`${student.first_name} ${student.last_name}`)
+        setStep('done')
+        await onEnrolled({ familyId, invitation: null }).catch(() => undefined)
+        return
+      }
+
+      const created = await api<{ invitation_code: string; family_id: string }>(`/api/v1/schools/${schoolId}/families`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          school_year_id: yearId,
+          label: label || student.last_name,
+          relationship: parent.relationship,
+          parent: {
+            first_name: parent.first_name,
+            last_name: parent.last_name,
+            phone: parent.phone || undefined,
+            email: parent.email || undefined,
+          },
+          student: {
+            first_name: student.first_name,
+            last_name: student.last_name,
+            birth_date: student.birth_date,
+            sex: student.sex,
+          },
+        }),
+      })
+      setInvitation(created.invitation_code)
+      setDoneName(`${student.first_name} ${student.last_name}`)
+      setStep('done')
+      await onEnrolled({ familyId: created.family_id, invitation: created.invitation_code }).catch(() => undefined)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Inscription impossible.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  const steps = [
+    { id: 1, label: 'Élève' },
+    { id: 2, label: 'Foyer' },
+    { id: 3, label: 'Confirmer' },
+  ] as const
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-3 sm:items-center" onClick={() => !busy && step !== 'done' && onClose()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="enroll-title"
+        className="w-full max-w-lg rounded-lg bg-fanabe-paper shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-black/5 px-4 py-2.5">
+          <div>
+            <h2 id="enroll-title" className="text-sm font-semibold">
+              Inscrire un élève
+            </h2>
+            <p className="text-[11px] text-neutral-500">{yearLabel}</p>
+          </div>
+          <button type="button" className="h-7 w-7 text-lg leading-none text-neutral-500" onClick={onClose} aria-label="Fermer">
+            ×
+          </button>
+        </div>
+        {step !== 'done' ? (
+          <div className="flex gap-1 border-b border-black/5 px-4 py-2">
+            {steps.map((item) => (
+              <span
+                key={item.id}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+                  step === item.id ? 'bg-fanabe-mist text-fanabe-leaf-dark' : 'text-neutral-500'
+                }`}
+              >
+                {item.id} {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="px-4 py-3">
+          {error ? <Banner message={error} onClear={() => setError(null)} /> : null}
+
+          {step === 1 ? (
+            <div className="space-y-2">
+              <p className="text-xs text-neutral-600">D’abord l’élève, ensuite le foyer qui en a la charge.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Prénom">
+                  <input className={inputClass} value={student.first_name} onChange={(e) => setStudent({ ...student, first_name: e.target.value })} autoFocus required />
+                </Field>
+                <Field label="Nom">
+                  <input className={inputClass} value={student.last_name} onChange={(e) => setStudent({ ...student, last_name: e.target.value })} required />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Naissance">
+                  <input className={inputClass} type="date" value={student.birth_date} onChange={(e) => setStudent({ ...student, birth_date: e.target.value })} required />
+                </Field>
+                <Field label="Sexe">
+                  <select className={inputClass} value={student.sex} onChange={(e) => setStudent({ ...student, sex: e.target.value })}>
+                    <option value="unspecified">Non précisé</option>
+                    <option value="female">Fille</option>
+                    <option value="male">Garçon</option>
+                  </select>
+                </Field>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-black/5 p-0.5">
+                <button type="button" className={modeTab(foyerMode === 'new')} onClick={() => setFoyerMode('new')}>
+                  Nouveau foyer
+                </button>
+                <button type="button" className={modeTab(foyerMode === 'existing')} onClick={() => setFoyerMode('existing')}>
+                  Foyer déjà inscrit
+                </button>
+              </div>
+              {foyerMode === 'new' ? (
+                <div className="space-y-2">
+                  <Field label="Nom du foyer">
+                    <input className={inputClass} value={label} onChange={(e) => setLabel(e.target.value)} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Prénom du responsable">
+                      <input className={inputClass} value={parent.first_name} onChange={(e) => setParent({ ...parent, first_name: e.target.value })} />
+                    </Field>
+                    <Field label="Nom">
+                      <input className={inputClass} value={parent.last_name} onChange={(e) => setParent({ ...parent, last_name: e.target.value })} />
+                    </Field>
+                  </div>
+                  <Field label="Téléphone">
+                    <input className={inputClass} value={parent.phone} onChange={(e) => setParent({ ...parent, phone: e.target.value })} placeholder="034 00 000 00" />
+                  </Field>
+                  <Field label="Email (facultatif)">
+                    <input className={inputClass} type="email" value={parent.email} onChange={(e) => setParent({ ...parent, email: e.target.value })} />
+                  </Field>
+                  <Field label="Lien avec l’élève">
+                    <select className={inputClass} value={parent.relationship} onChange={(e) => setParent({ ...parent, relationship: e.target.value })}>
+                      <option value="parent_of">Parent</option>
+                      <option value="guardian_of">Tuteur</option>
+                      <option value="financial_contact_for">Contact financier</option>
+                    </select>
+                  </Field>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Field label="Rechercher un foyer">
+                    <input className={inputClass} value={familyQuery} onChange={(e) => setFamilyQuery(e.target.value)} placeholder="Nom de l’élève ou du parent" />
+                  </Field>
+                  <ul className="max-h-48 overflow-auto rounded-md border border-black/10">
+                    {matchedFamilies.map((family) => {
+                      const children = family.members.filter((member) => member.role_in_family === 'child')
+                      const selected = family.id === familyId
+                      return (
+                        <li key={family.id}>
+                          <button
+                            type="button"
+                            className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm ${selected ? 'bg-fanabe-mist' : 'hover:bg-black/[0.03]'}`}
+                            onClick={() => setFamilyId(family.id)}
+                          >
+                            <span className="font-medium">{family.label}</span>
+                            <span className="text-[11px] text-neutral-500">
+                              {children.map((member) => `${member.first_name} ${member.last_name}`).join(', ') || 'Aucun enfant'}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                    {matchedFamilies.length === 0 ? (
+                      <li className="px-3 py-3 text-xs text-neutral-500">Aucun foyer ne correspond.</li>
+                    ) : null}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-neutral-500">Élève</dt>
+                <dd className="text-right font-medium">
+                  {student.first_name} {student.last_name}
+                  <span className="block text-xs font-normal text-neutral-500">
+                    {formatDate(student.birth_date)} · {sexLabel(student.sex)}
+                  </span>
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-neutral-500">Foyer</dt>
+                <dd className="text-right font-medium">
+                  {foyerMode === 'existing' ? chosenFamily?.label : label || student.last_name}
+                  {foyerMode === 'new' ? (
+                    <span className="block text-xs font-normal text-neutral-500">
+                      {relationshipLabel(parent.relationship)} · {parent.first_name} {parent.last_name}
+                      {parent.phone ? ` · ${parent.phone}` : ''}
+                    </span>
+                  ) : (
+                    <span className="block text-xs font-normal text-neutral-500">Fratrie d’un foyer déjà inscrit</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+
+          {step === 'done' ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                <strong>{doneName}</strong> est inscrit{foyerMode === 'existing' ? ` au foyer ${chosenFamily?.label ?? ''}` : ` au foyer ${label || student.last_name}`}.
+              </p>
+              {invitation ? (
+                <div>
+                  <p className="text-xs text-neutral-600">Remettez ce code au responsable pour activer l’espace famille.</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-fanabe-mist px-3 py-2">
+                    <strong className="font-mono text-sm">{invitation}</strong>
+                    <button type="button" className={btnGhost} onClick={() => void copyText(invitation)}>
+                      Copier
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-600">Les adultes déjà liés à ce foyer restent responsables.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-black/5 px-4 py-2.5">
+          {step === 1 ? (
+            <button type="button" className={btnGhost} onClick={onClose}>
+              Annuler
+            </button>
+          ) : step === 'done' ? (
+            <span />
+          ) : (
+            <button type="button" className={btnGhost} onClick={() => setStep(step === 3 ? 2 : 1)} disabled={busy}>
+              Retour
+            </button>
+          )}
+          {step === 1 ? (
+            <button type="button" className={btnPrimary} disabled={!studentReady} onClick={goFoyer}>
+              Continuer
+            </button>
+          ) : null}
+          {step === 2 ? (
+            <button type="button" className={btnPrimary} disabled={!foyerReady} onClick={() => setStep(3)}>
+              Continuer
+            </button>
+          ) : null}
+          {step === 3 ? (
+            <button type="button" className={btnPrimary} disabled={busy || !yearId} onClick={() => void submit()}>
+              {busy ? 'Enregistrement…' : 'Inscrire'}
+            </button>
+          ) : null}
+          {step === 'done' ? (
+            <button type="button" className={btnPrimary} onClick={onClose}>
+              Terminer
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DirectionScreen({
   session,
   tab,
@@ -667,15 +1015,7 @@ function DirectionScreen({
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState('')
-  const [form, setForm] = useState({
-    parent_first: 'Voahangy',
-    parent_last: 'Rasoa',
-    parent_phone: '0349876543',
-    parent_email: '',
-    student_first: 'Tiana',
-    student_last: 'Rasoa',
-    student_birth: '2014-06-20',
-  })
+  const [enrollOpen, setEnrollOpen] = useState(false)
   const [newClassName, setNewClassName] = useState('6ème B')
   const [newClassGrade, setNewClassGrade] = useState('')
   const [selectedEnrollment, setSelectedEnrollment] = useState('')
@@ -778,42 +1118,6 @@ function DirectionScreen({
   useEffect(() => {
     setPage(1)
   }, [query, classFilter])
-
-  async function createFamily(event: FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setMessage(null)
-    setInvitation(null)
-    try {
-      const created = await api<{ invitation_code: string; family_id: string }>(`/api/v1/schools/${schoolId}/families`, {
-        ...auth,
-        method: 'POST',
-        body: JSON.stringify({
-          school_year_id: yearId,
-          parent: {
-            first_name: form.parent_first,
-            last_name: form.parent_last,
-            phone: form.parent_phone,
-            email: form.parent_email || undefined,
-          },
-          student: {
-            first_name: form.student_first,
-            last_name: form.student_last,
-            birth_date: form.student_birth,
-          },
-        }),
-      })
-      setInvitation(created.invitation_code)
-      setSelectedFamilyId(created.family_id)
-      setFamilyPane('foyers')
-      setMessage('Famille inscrite. Remettez le code d’invitation au parent.')
-      await Promise.all([loadPeople(), loadFamilies(), loadEnrollments(), loadCore()])
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Inscription impossible.')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   async function redeemShareToken(event: FormEvent) {
     event.preventDefault()
@@ -1033,6 +1337,7 @@ function DirectionScreen({
   const pagedReliabilityFamilies = pageOf(filteredReliabilityFamilies, page)
 
   return (
+    <>
     <main className="px-3 py-3 sm:px-4">
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
 
@@ -1085,8 +1390,16 @@ function DirectionScreen({
             </table>
           </Panel>
           <div className="flex flex-wrap gap-2 text-xs">
-            <button type="button" className={btnGhost} onClick={() => onTab('famille')}>
-              Inscrire une famille
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={() => {
+                onTab('famille')
+                setEnrollOpen(true)
+                loadFamilies().catch((error: Error) => setMessage(error.message))
+              }}
+            >
+              Inscrire un élève
             </button>
             <button type="button" className={btnGhost} onClick={() => onTab('classe')}>
               Classes
@@ -1102,23 +1415,14 @@ function DirectionScreen({
         <div className="grid gap-3 lg:grid-cols-[18rem_1fr]">
           <div className="space-y-3">
             <Panel className="p-3">
-              <h2 className="text-sm font-semibold">Nouvelle famille</h2>
-              <form onSubmit={createFamily} className="mt-3 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <input className={inputClass} value={form.parent_first} onChange={(e) => setForm({ ...form, parent_first: e.target.value })} placeholder="Prénom parent" required />
-                  <input className={inputClass} value={form.parent_last} onChange={(e) => setForm({ ...form, parent_last: e.target.value })} placeholder="Nom parent" required />
-                </div>
-                <input className={inputClass} value={form.parent_phone} onChange={(e) => setForm({ ...form, parent_phone: e.target.value })} placeholder="Téléphone" />
-                <input className={inputClass} type="email" value={form.parent_email} onChange={(e) => setForm({ ...form, parent_email: e.target.value })} placeholder="Email (facultatif)" />
-                <div className="grid grid-cols-2 gap-2">
-                  <input className={inputClass} value={form.student_first} onChange={(e) => setForm({ ...form, student_first: e.target.value })} placeholder="Prénom élève" required />
-                  <input className={inputClass} value={form.student_last} onChange={(e) => setForm({ ...form, student_last: e.target.value })} placeholder="Nom élève" required />
-                </div>
-                <input className={inputClass} type="date" value={form.student_birth} onChange={(e) => setForm({ ...form, student_birth: e.target.value })} required />
-                <button type="submit" disabled={busy || !yearId} className={btnBlock}>
-                  {busy ? 'Enregistrement…' : 'Inscrire'}
-                </button>
-              </form>
+              <h2 className="text-sm font-semibold">Inscription</h2>
+              <p className="mt-1 text-xs text-neutral-500">Élève d’abord, puis le foyer.</p>
+              <button type="button" className={`${btnBlock} mt-3`} disabled={!yearId} onClick={() => {
+                setEnrollOpen(true)
+                loadFamilies().catch((error: Error) => setMessage(error.message))
+              }}>
+                Inscrire un élève
+              </button>
               {invitation ? (
                 <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-fanabe-mist px-2 py-2 text-xs">
                   <strong className="font-mono">{invitation}</strong>
@@ -1573,6 +1877,25 @@ function DirectionScreen({
         </div>
       ) : null}
     </main>
+    {enrollOpen ? (
+      <EnrollmentWizard
+        yearId={yearId}
+        yearLabel={yearLabel}
+        schoolId={schoolId}
+        auth={auth}
+        families={families}
+        busy={busy}
+        onBusy={setBusy}
+        onClose={() => setEnrollOpen(false)}
+        onEnrolled={async ({ familyId, invitation: code }) => {
+          setInvitation(code)
+          setSelectedFamilyId(familyId)
+          setFamilyPane('foyers')
+          await Promise.all([loadPeople(), loadFamilies(), loadEnrollments(), loadCore()])
+        }}
+      />
+    ) : null}
+    </>
   )
 }
 
