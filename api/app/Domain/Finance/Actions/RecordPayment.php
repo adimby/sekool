@@ -15,7 +15,10 @@ use App\Domain\Finance\Models\Receipt;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
 use App\Domain\Reliability\Actions\ComputeFamilyReliability;
+use App\Domain\Reliability\Actions\ComputeRelationshipHealth;
+use App\Domain\Reliability\Actions\ComputeSchoolReliability;
 use App\Domain\Reliability\Models\TrustEvent;
+use App\Domain\Reliability\Support\ReliabilityIndexes;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -140,7 +143,7 @@ final class RecordPayment
 
                 $enrollment = $invoice->enrollment;
                 TrustEvent::emit(
-                    'family',
+                    ReliabilityIndexes::SUBJECT_FAMILY,
                     $payer->family_id,
                     $late ? 'payment_late' : 'payment_on_time',
                     $schoolId,
@@ -150,6 +153,18 @@ final class RecordPayment
                         'amount' => $amount,
                         'invoice_id' => $invoice->id,
                         'received_on' => $receivedOn,
+                    ],
+                );
+                TrustEvent::emit(
+                    ReliabilityIndexes::SUBJECT_SCHOOL,
+                    $schoolId,
+                    'payment_recorded',
+                    $schoolId,
+                    'payment',
+                    (string) $payment->id,
+                    [
+                        'amount' => $amount,
+                        'invoice_id' => $invoice->id,
                     ],
                 );
 
@@ -170,6 +185,8 @@ final class RecordPayment
                     app(ResolveSettledCollectionTasks::class)->execute($schoolId, (string) $enrollment->id);
                 }
                 app(ComputeFamilyReliability::class)->execute($schoolId, (string) $payer->family_id);
+                app(ComputeSchoolReliability::class)->execute($schoolId);
+                app(ComputeRelationshipHealth::class)->execute($schoolId, (string) $payer->family_id);
 
                 return [
                     'payment' => $payment->load('allocations'),

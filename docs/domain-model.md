@@ -418,7 +418,9 @@ INDEX (event_type, occurred_at)
 
 ### `reliability_scores`, `reliability_score_factors`
 
-`reliability_scores` : `subject_type`, `subject_id`, `index_type` (`family_reliability` / `school_reliability` / `relationship_health`), `value`, `band`, `calculator_version`, `computed_at`, `inputs_digest`, `event_count`.
+`reliability_scores` : `subject_type`, `subject_id`, `index_type` (`family_reliability` / `school_reliability` / `relationship_health`), `value`, `band`, `calculator_version`, `computed_at`, `inputs_digest`, `event_count`. Unique `(school_id, subject_type, subject_id, index_type, calculator_version)` : une nouvelle version de calculateur conserve l'historique.
+
+`reliability_score_factors` : `score_id`, `event_type`, `human_label`, `contribution`, `event_count`, `sample_event_ids`.
 
 `reliability_score_factors` : `score_id`, `event_type`, `human_label`, `contribution`, `event_count`, `sample_event_ids`.
 

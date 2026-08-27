@@ -7,7 +7,10 @@ use App\Domain\Communication\Models\MessageDelivery;
 use App\Domain\Communication\Models\MessageTemplate;
 use App\Domain\Communication\Ports\SmsGateway;
 use App\Domain\Communication\Support\MessageRenderer;
+use App\Domain\Family\Models\FamilyMember;
 use App\Domain\Platform\Exceptions\DomainException;
+use App\Domain\Reliability\Models\TrustEvent;
+use App\Domain\Reliability\Support\ReliabilityIndexes;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 final class DispatchFamilyMessage
@@ -92,6 +95,7 @@ final class DispatchFamilyMessage
                 'provider_reference' => $result['provider_reference'],
                 'error_code' => $result['error'],
             ]);
+            $this->emitTrust($schoolId, $subjectPersonId, $message, $channel, $status);
 
             return $message;
         }
@@ -102,7 +106,69 @@ final class DispatchFamilyMessage
             'status' => $status,
             'occurred_at' => now(),
         ]);
+        $this->emitTrust($schoolId, $subjectPersonId, $message, $channel, $status);
 
         return $message;
+    }
+
+    private function emitTrust(
+        string $schoolId,
+        string $subjectPersonId,
+        Message $message,
+        string $channel,
+        string $status,
+    ): void {
+        $familyId = FamilyMember::query()
+            ->where('person_id', $subjectPersonId)
+            ->whereNull('left_at')
+            ->value('family_id');
+
+        if (in_array($status, ['delivered', 'ready_to_print'], true)) {
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_SCHOOL,
+                $schoolId,
+                'family_contacted',
+                $schoolId,
+                'message',
+                (string) $message->id,
+                ['channel' => $channel, 'status' => $status],
+            );
+        }
+
+        if ($familyId === null) {
+            return;
+        }
+
+        $instrumented = ($channel === 'in_app' && $status === 'delivered')
+            || ($channel === 'sms' && $status === 'delivered');
+
+        if ($instrumented) {
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_RELATIONSHIP,
+                (string) $familyId,
+                'message_delivered',
+                $schoolId,
+                'message',
+                (string) $message->id,
+                ['channel' => $channel, 'status' => $status],
+            );
+
+            return;
+        }
+
+        if ($channel === 'print' || in_array($status, ['ready_to_print', 'unknown'], true)) {
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_RELATIONSHIP,
+                (string) $familyId,
+                'message_uninstrumented',
+                $schoolId,
+                'message',
+                (string) $message->id,
+                [
+                    'channel' => $channel,
+                    'status' => $status === 'ready_to_print' ? 'unknown' : $status,
+                ],
+            );
+        }
     }
 }

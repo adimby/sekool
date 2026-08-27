@@ -17,6 +17,10 @@ use App\Domain\Finance\Models\PayerAccount;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
 use App\Domain\Platform\Support\Money;
+use App\Domain\Reliability\Actions\ComputeSchoolReliability;
+use App\Domain\Reliability\Models\TrustEvent;
+use App\Domain\Reliability\Support\ReliabilityIndexes;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 final class GenerateInvoice
@@ -146,12 +150,23 @@ final class GenerateInvoice
                 ['number' => $number, 'net_amount' => $net->amount, 'actor_person_id' => $actorPersonId],
             );
 
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_SCHOOL,
+                $schoolId,
+                'invoice_issued',
+                $schoolId,
+                'invoice',
+                (string) $invoice->id,
+                ['number' => $number],
+            );
+            app(ComputeSchoolReliability::class)->execute($schoolId);
+
             return ['invoice' => $invoice->load(['lines', 'installments']), 'created' => true];
         });
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, FeeItem>
+     * @return Collection<int, FeeItem>
      */
     private function feeItemsFor(Enrollment $enrollment)
     {

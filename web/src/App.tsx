@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
   api,
   clearSession,
@@ -119,7 +119,39 @@ type StudentOverview = {
   }
 }
 
-type DirectionTab = 'accueil' | 'famille' | 'classe' | 'caisse'
+type ReliabilityFactor = {
+  event_type: string
+  human_label: string
+  contribution: number
+  event_count: number
+}
+
+type ReliabilityScoreView = {
+  id: string | null
+  subject_type: string
+  subject_id: string
+  index_type?: string
+  value: number | null
+  band: string
+  displayable?: boolean
+  calculator_version: string
+  computed_at: string | null
+  event_count: number
+  minimum_events?: number | null
+  factors: ReliabilityFactor[]
+}
+
+type ReliabilityOverview = {
+  school: ReliabilityScoreView
+  families: Array<{
+    family_id: string
+    students: Array<{ id: string; first_name: string; last_name: string }>
+    family_reliability: ReliabilityScoreView
+    relationship_health: ReliabilityScoreView
+  }>
+}
+
+type DirectionTab = 'accueil' | 'famille' | 'classe' | 'caisse' | 'indices'
 type TeacherTab = 'classe' | 'appel'
 
 const PAGE_SIZE = 40
@@ -129,6 +161,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
   { id: 'famille', label: 'Familles' },
   { id: 'classe', label: 'Classes' },
   { id: 'caisse', label: 'Caisse' },
+  { id: 'indices', label: 'Indices' },
 ]
 
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
@@ -292,6 +325,17 @@ function invoiceLabel(status?: string): string {
   if (status === 'partially_paid') return 'Partiel'
   if (status === 'issued') return 'À payer'
   return status ?? ''
+}
+
+function scoreLabel(score?: ReliabilityScoreView): string {
+  if (!score) return '—'
+  if (score.displayable === false || score.band === 'insufficient') {
+    const need = score.minimum_events ?? 5
+    return `Pas assez de faits (${score.event_count}/${need})`
+  }
+  const bands: Record<string, string> = { high: 'Élevée', medium: 'Moyenne', low: 'Faible' }
+  const band = bands[score.band] ?? score.band
+  return score.value === null ? band : `${score.value} · ${band}`
 }
 
 function attendanceLabel(status?: string): string {
@@ -527,6 +571,9 @@ function DirectionScreen({
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [receipt, setReceipt] = useState<string | null>(null)
   const [cockpit, setCockpit] = useState<Cockpit | null>(null)
+  const [reliability, setReliability] = useState<ReliabilityOverview | null>(null)
+  const [compareNote, setCompareNote] = useState<string | null>(null)
+  const [openFamilyId, setOpenFamilyId] = useState<string | null>(null)
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
@@ -565,6 +612,12 @@ function DirectionScreen({
     setPeople(list.data)
   }
 
+  async function loadReliability() {
+    const payload = await api<{ data: ReliabilityOverview }>(`/api/v1/schools/${schoolId}/reliability/overview`, auth)
+    setReliability(payload.data)
+    setCompareNote(null)
+  }
+
   async function loadEnrollments() {
     const enrollmentList = await api<{ data: EnrollmentRow[] }>(`/api/v1/schools/${schoolId}/enrollments`, auth)
     setEnrollments(enrollmentList.data)
@@ -582,6 +635,9 @@ function DirectionScreen({
     }
     if (tab === 'classe' || tab === 'caisse') {
       loadEnrollments().catch((error: Error) => setMessage(error.message))
+    }
+    if (tab === 'indices') {
+      loadReliability().catch((error: Error) => setMessage(error.message))
     }
     setQuery('')
     setPage(1)
@@ -756,6 +812,34 @@ function DirectionScreen({
     link.click()
     URL.revokeObjectURL(url)
   }
+
+  async function verifySchoolRecalc() {
+    setBusy(true)
+    setCompareNote(null)
+    try {
+      const payload = await api<{ data: { digest_match: boolean; version_match: boolean } }>(
+        `/api/v1/schools/${schoolId}/reliability/school/compare`,
+        auth,
+      )
+      if (payload.data.digest_match && payload.data.version_match) {
+        setCompareNote('Recalcul identique — mêmes faits, même version.')
+      } else if (!payload.data.version_match) {
+        setCompareNote('La version du calculateur a changé.')
+      } else {
+        setCompareNote('Le digest a changé : les faits ont bougé depuis le dernier enregistrement.')
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Comparaison impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const filteredReliabilityFamilies = (reliability?.families ?? []).filter((row) => {
+    const names = row.students.map((student) => `${student.first_name} ${student.last_name}`).join(' ')
+    return matchesQuery(names, query)
+  })
+  const pagedReliabilityFamilies = pageOf(filteredReliabilityFamilies, page)
 
   return (
     <main className="px-3 py-3 sm:px-4">
@@ -1068,6 +1152,130 @@ function DirectionScreen({
                 </button>
               </div>
             ) : null}
+          </Panel>
+        </div>
+      ) : null}
+
+      {tab === 'indices' ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-black/8 bg-black/[0.04] lg:grid-cols-4">
+            <Kpi
+              label="École"
+              value={scoreLabel(reliability?.school)}
+              hint={reliability?.school.calculator_version ?? 'school-reliability.v1'}
+            />
+            <Kpi
+              label="Faits"
+              value={String(reliability?.school.event_count ?? 0)}
+              hint="factures, paiements, relances"
+            />
+            <Kpi
+              label="Familles"
+              value={String(reliability?.families.length ?? 0)}
+              hint="foyers inscrits"
+            />
+            <Kpi label="Visibilité" value="Direction" hint="jamais un parent, jamais une autre école" />
+          </div>
+          <Panel className="p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Fiabilité de l’établissement</h2>
+              <button type="button" className={btnGhost} disabled={busy} onClick={verifySchoolRecalc}>
+                Vérifier le recalcul
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-neutral-500">
+              Indice versionné, décomposable, reproductible. Il n’autorise ni ne bloque rien.
+            </p>
+            {compareNote ? <p className="mt-2 text-xs text-fanabe-leaf-dark">{compareNote}</p> : null}
+            <ul className="mt-3 space-y-1 text-sm">
+              {(reliability?.school?.factors ?? []).map((factor) => (
+                <li key={factor.event_type} className="flex justify-between gap-3">
+                  <span>
+                    {factor.human_label}{' '}
+                    <span className="text-xs text-neutral-500">({factor.event_count})</span>
+                  </span>
+                  <span className="tabular-nums">{factor.contribution > 0 ? `+${factor.contribution}` : factor.contribution}</span>
+                </li>
+              ))}
+              {(reliability?.school?.factors.length ?? 0) === 0 ? (
+                <li className="text-xs text-neutral-500">Pas encore de faits d’école.</li>
+              ) : null}
+            </ul>
+          </Panel>
+          <Panel>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 px-3 py-2">
+              <h2 className="text-sm font-semibold">Familles</h2>
+              <input
+                className={`${inputClass} max-w-56`}
+                placeholder="Rechercher"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-1.5 font-medium">Élèves</th>
+                  <th className="px-3 py-1.5 font-medium">Famille</th>
+                  <th className="px-3 py-1.5 font-medium">Relation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedReliabilityFamilies.map((row) => {
+                  const open = openFamilyId === row.family_id
+                  return (
+                    <Fragment key={row.family_id}>
+                      <tr
+                        className="cursor-pointer border-t border-black/5 hover:bg-black/[0.03]"
+                        onClick={() => setOpenFamilyId(open ? null : row.family_id)}
+                      >
+                        <td className="px-3 py-1.5">
+                          {row.students.map((student) => `${student.first_name} ${student.last_name}`).join(', ') || '—'}
+                        </td>
+                        <td className="px-3 py-1.5">{scoreLabel(row.family_reliability)}</td>
+                        <td className="px-3 py-1.5">{scoreLabel(row.relationship_health)}</td>
+                      </tr>
+                      {open ? (
+                        <tr className="border-t border-black/5 bg-black/[0.02]">
+                          <td colSpan={3} className="px-3 py-2 text-xs text-neutral-600">
+                            <p className="font-medium text-neutral-800">Explicabilité</p>
+                            <p className="mt-1">
+                              Famille {row.family_reliability.calculator_version}
+                              {' · '}
+                              Relation {row.relationship_health.calculator_version}
+                            </p>
+                            <ul className="mt-2 space-y-0.5">
+                              {row.family_reliability.factors.map((factor) => (
+                                <li key={`f-${factor.event_type}`} className="flex justify-between gap-3">
+                                  <span>{factor.human_label}</span>
+                                  <span className="tabular-nums">
+                                    {factor.contribution > 0 ? `+${factor.contribution}` : factor.contribution}
+                                  </span>
+                                </li>
+                              ))}
+                              {row.relationship_health.factors.map((factor) => (
+                                <li key={`r-${factor.event_type}`} className="flex justify-between gap-3">
+                                  <span>{factor.human_label}</span>
+                                  <span className="tabular-nums">
+                                    {factor.contribution > 0 ? `+${factor.contribution}` : factor.contribution}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            {row.family_reliability.factors.length + row.relationship_health.factors.length === 0 ? (
+                              <p className="mt-1">Aucun facteur pour l’instant.</p>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="border-t border-black/5 px-3 py-2">
+              <Pager page={page} total={filteredReliabilityFamilies.length} onPage={setPage} />
+            </div>
           </Panel>
         </div>
       ) : null}

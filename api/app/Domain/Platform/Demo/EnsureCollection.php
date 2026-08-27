@@ -6,12 +6,14 @@ use App\Domain\Academic\Actions\RecordAttendance;
 use App\Domain\Academic\Enums\AttendanceSession;
 use App\Domain\Academic\Enums\AttendanceStatus;
 use App\Domain\Collection\Actions\RecomputeCollection;
+use App\Domain\Collection\Support\FamilyRecipients;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Family\Models\Family;
 use App\Domain\Family\Models\FamilyMember;
 use App\Domain\Finance\Actions\GenerateInvoice;
 use App\Domain\Finance\Models\Installment;
+use App\Domain\Finance\Models\Invoice;
 use App\Domain\Identity\Actions\AcquirePersonRole;
 use App\Domain\Identity\Actions\EstablishRelationship;
 use App\Domain\Identity\Actions\GrantSchoolPersonLink;
@@ -23,9 +25,14 @@ use App\Domain\Identity\Enums\Sex;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
+use App\Domain\Reliability\Actions\ComputeRelationshipHealth;
+use App\Domain\Reliability\Models\TrustEvent;
+use App\Domain\Reliability\Support\RelationshipHealthCalculator;
+use App\Domain\Reliability\Support\ReliabilityIndexes;
 use App\Domain\School\Models\School;
 use App\Domain\Workflow\Actions\EnsureWorkflowCatalog;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 final class EnsureCollection
 {
@@ -102,7 +109,68 @@ final class EnsureCollection
             }
         }
 
+        $this->backfillSchoolInvoiceEvents((string) $school->id);
+        $this->ensureFanjaRelationshipFacts($enrollments->get('Fanja'), (string) $school->id);
+
         app(RecomputeCollection::class)->execute((string) $school->id, live: true);
+    }
+
+    private function backfillSchoolInvoiceEvents(string $schoolId): void
+    {
+        foreach (Invoice::query()->where('status', '!=', 'cancelled')->get() as $invoice) {
+            $exists = TrustEvent::query()
+                ->where('event_type', 'invoice_issued')
+                ->where('source_type', 'invoice')
+                ->where('source_id', $invoice->id)
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_SCHOOL,
+                $schoolId,
+                'invoice_issued',
+                $schoolId,
+                'invoice',
+                (string) $invoice->id,
+                ['number' => $invoice->number],
+            );
+        }
+    }
+
+    private function ensureFanjaRelationshipFacts(?Enrollment $enrollment, string $schoolId): void
+    {
+        if ($enrollment === null) {
+            return;
+        }
+
+        $familyId = FamilyRecipients::familyIdForStudent((string) $enrollment->person_id);
+        if ($familyId === null) {
+            return;
+        }
+
+        $existing = TrustEvent::query()
+            ->where('subject_type', ReliabilityIndexes::SUBJECT_RELATIONSHIP)
+            ->where('subject_id', $familyId)
+            ->where('school_id', $schoolId)
+            ->where('event_type', 'message_delivered')
+            ->count();
+
+        $needed = max(0, RelationshipHealthCalculator::MIN_EVENTS - $existing);
+        for ($i = 0; $i < $needed; $i++) {
+            TrustEvent::emit(
+                ReliabilityIndexes::SUBJECT_RELATIONSHIP,
+                $familyId,
+                'message_delivered',
+                $schoolId,
+                'seed',
+                (string) Str::uuid(),
+            );
+        }
+
+        if ($needed > 0) {
+            app(ComputeRelationshipHealth::class)->execute($schoolId, $familyId);
+        }
     }
 
     private function backdateFirstInstallment(?Enrollment $enrollment, string $dueOn): void

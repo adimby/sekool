@@ -7,6 +7,8 @@ use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\Reliability\Actions\ComputeFamilyReliability;
+use App\Domain\Reliability\Actions\ComputeRelationshipHealth;
+use App\Domain\Reliability\Actions\ComputeSchoolReliability;
 use App\Domain\School\Models\School;
 use App\Domain\Workflow\Actions\EnsureWorkflowCatalog;
 use App\Domain\Workflow\Actions\EvaluateWorkflows;
@@ -17,7 +19,9 @@ final class RecomputeCollection
         private readonly AssessEnrollmentRisk $risk,
         private readonly ComputeCollectionForecast $forecast,
         private readonly EvaluateWorkflows $workflows,
-        private readonly ComputeFamilyReliability $reliability,
+        private readonly ComputeFamilyReliability $familyReliability,
+        private readonly ComputeRelationshipHealth $relationshipHealth,
+        private readonly ComputeSchoolReliability $schoolReliability,
         private readonly EnsureWorkflowCatalog $catalog,
     ) {}
 
@@ -41,8 +45,10 @@ final class RecomputeCollection
                 $this->forecast->execute((string) $school->id);
                 $this->workflows->execute((string) $school->id, forceLive: $live);
                 foreach ($familyIds as $id) {
-                    $this->reliability->execute((string) $school->id, $id);
+                    $this->familyReliability->execute((string) $school->id, $id);
+                    $this->relationshipHealth->execute((string) $school->id, $id);
                 }
+                $this->schoolReliability->execute((string) $school->id);
             });
         }
     }

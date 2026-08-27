@@ -53,7 +53,7 @@ Un test de recette formulable en une phrase : *une direction ouvre FANABE le mat
 | Cockpit | Vue du jour, actions prioritaires, élèves à suivre |
 | Documents | Téléversement, provenance, statuts de vérification, périodes externes |
 | Transparence | Historique des accès visible du parent, export des données |
-| Reliability | `TrustEvent` émis dès la phase 1 ; Family Reliability calculé en fin de MVP |
+| Reliability | `TrustEvent` émis dès la phase 1 ; Family Reliability, School Reliability et Relationship Health calculés (phase 4) |
 
 ### 2.1 Trois inclusions à justifier
 
@@ -71,14 +71,14 @@ Un test de recette formulable en une phrase : *une direction ouvre FANABE le mat
 | P0 | School Core minimal | Oui (présence incluse, notes exclues) |
 | P0 | Collection Intelligence | Oui |
 | P0 | Communication multi-canal de base | Oui (application, papier ; SMS en option) |
-| P0 | Reliability familial et relationnel | Family Reliability oui ; Relationship Health en phase 4 |
+| P0 | Reliability familial et relationnel | Family Reliability, School Reliability et Relationship Health |
 | P0 | School Day Cockpit | Oui |
 | P1 | School Kit | Non — phase 6 |
 | P1 | Certificat vérifiable + QR | Non — phase 5 |
 | P1 | Student Early Warning | Non — phase 7 |
 | P2 | Marketplace, réseaux | Non |
 
-Le seul écart avec §20 porte sur Relationship Health, dont le calcul suppose des signaux de communication accumulés sur plusieurs mois. Le calculer sur deux semaines de données produirait un indice sans signification — ce qui serait pire que de ne pas l'afficher.
+Le calcul de Relationship Health suppose des signaux de communication accumulés. Sur trop peu de faits, **aucun chiffre n'est affiché** (`band = insufficient`, seuil de 5 événements instrumentés). Le papier et le statut `unknown` sont exclus (`G-07`) : l'absence d'indice n'est jamais un mauvais indice.
 
 ---
 
@@ -86,7 +86,7 @@ Le seul écart avec §20 porte sur Relationship Health, dont le calcul suppose d
 
 Explicitement exclu, sans que cela remette en cause la roadmap :
 
-**Reporté à une phase ultérieure :** notes et bulletins, Student Early Warning, certificats et QR, School Kit, School et Relationship Reliability, WhatsApp, réseaux d'établissements, réinscription automatisée, cantine, emploi du temps, remplacements.
+**Reporté à une phase ultérieure :** notes et bulletins, Student Early Warning, certificats et QR, School Kit, WhatsApp, réseaux d'établissements, réinscription automatisée, cantine, emploi du temps, remplacements.
 
 **Exclu par le cahier des charges lui-même (§25) :** comptabilité complète, marketplace ouverte, réseau social scolaire, identité biométrique, signature qualifiée comme prérequis, partage automatique entre écoles.
 
@@ -106,7 +106,7 @@ Ordre du brief §6 respecté, sans parallélisation ni saut d'étape. Chaque pha
 | **1 — Identity Foundation** | Person, FANABE ID, comptes, foyer, relations, inscription, permissions, audit, lien parent, transferts | Oui | **levé** (`Q-05` avis juridique en parallèle) |
 | **2 — School Core** | Écoles, classes, élèves, inscriptions, présence, frais, paiements | Oui | `Q-06`, `Q-11`, `Q-14` |
 | **3 — Collection Intelligence** | Moteur de risque, dashboard, alertes, workflows | Oui | `Q-08`, `Q-13` |
-| **4 — Reliability** | TrustEvent, Family / School Reliability, Relationship Health | Family Reliability | — |
+| **4 — Reliability** | TrustEvent, Family / School Reliability, Relationship Health | Oui | — |
 | **5 — Documents** | Documents, certificats, vérification QR | Non | `Q-09`, `Q-10`, `Q-17` |
 | **6 — School Kit** | Catalogue, packs, fournisseurs, commandes | Non | `Q-03` |
 | **7 — Intelligence avancée** | Early Warning, cockpit enrichi, recommandations | Non | — |
@@ -153,11 +153,13 @@ Contenu : ancienneté de créance et tranches ; taux de ponctualité ; **moteur 
 
 Calculateur versionné, facteurs explicatifs, affichage réservé au personnel, et le test `S-30` qui prouve qu'aucune autorisation ne dépend d'un score.
 
+### Phase 4 — Reliability (livrée)
+
+School Reliability (visible du seul établissement concerné), Relationship Health (aucun chiffre affiché sous 5 faits instrumentés — `G-07` exclut le papier et le statut `unknown`), versionnement et comparaison des calculateurs (`calculator_version`, `inputs_digest`), tableau d'explicabilité (`reliability_score_factors`).
+
 ---
 
 ## 6. Phases post-MVP
-
-**Phase 4 — Reliability.** School Reliability (visible du seul établissement concerné), Relationship Health, versionnement et comparaison des calculateurs, tableau d'explicabilité.
 
 **Phase 5 — Documents.** Émission de certificats, rendu PDF immuable et haché, jetons et endpoint public de vérification, révocation, `DocumentSigner`, attestation de documents externes. Prérequis : `Q-09`, `Q-10`, et `Q-17` (le domaine du QR est imprimé sur des documents durables — le changer après émission invaliderait des certificats en circulation).
 

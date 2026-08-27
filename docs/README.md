@@ -2,7 +2,7 @@
 
 > **FANABE — L'école, la famille, connectées.**
 >
-> **État du projet : conception validée le 21 août 2026. Phases 0 à 3 livrées, plus Family Reliability.**
+> **État du projet : conception validée le 21 août 2026. Phases 0 à 4 livrées.**
 > Décisions figées dans [`decisions.md`](./decisions.md).
 
 ## Source de vérité

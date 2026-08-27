@@ -27,6 +27,7 @@ use App\Http\Api\V1\School\OutboxController;
 use App\Http\Api\V1\School\PaymentController;
 use App\Http\Api\V1\School\PeopleController;
 use App\Http\Api\V1\School\PersonLinkRequestController;
+use App\Http\Api\V1\School\ReliabilityController;
 use App\Http\Api\V1\School\RiskAssessmentController;
 use App\Http\Api\V1\School\SchoolYearController;
 use App\Http\Api\V1\School\ShareTokenRedeemController;
@@ -86,6 +87,12 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/workflows/run', WorkflowRunController::class);
         Route::get('/schools/{school}/messages/outbox', OutboxController::class);
         Route::get('/schools/{school}/families/{family}/reliability', FamilyReliabilityController::class);
+        Route::get('/schools/{school}/families/{family}/reliability/compare', [ReliabilityController::class, 'familyCompare']);
+        Route::get('/schools/{school}/families/{family}/relationship', [ReliabilityController::class, 'relationship']);
+        Route::get('/schools/{school}/families/{family}/relationship/compare', [ReliabilityController::class, 'relationshipCompare']);
+        Route::get('/schools/{school}/reliability/overview', [ReliabilityController::class, 'overview']);
+        Route::get('/schools/{school}/reliability/school', [ReliabilityController::class, 'school']);
+        Route::get('/schools/{school}/reliability/school/compare', [ReliabilityController::class, 'schoolCompare']);
     });
 
     Route::middleware('school.role:finance')->group(function (): void {

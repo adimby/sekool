@@ -98,21 +98,52 @@ final class CollectionPayload
 
     public static function reliability(ReliabilityScore $score): array
     {
+        $displayable = $score->band !== 'insufficient';
+
         return [
             'id' => $score->id,
             'subject_type' => $score->subject_type,
             'subject_id' => $score->subject_id,
-            'value' => $score->value,
+            'index_type' => $score->index_type,
+            'value' => $displayable ? $score->value : null,
             'band' => $score->band,
+            'displayable' => $displayable,
             'calculator_version' => $score->calculator_version,
             'computed_at' => $score->computed_at?->toIso8601String(),
             'event_count' => $score->event_count,
+            'minimum_events' => $score->index_type === 'relationship_health' ? 5 : null,
+            'inputs_digest' => $score->inputs_digest,
             'factors' => $score->factors->map(fn ($factor): array => [
                 'event_type' => $factor->event_type,
                 'human_label' => $factor->human_label,
                 'contribution' => $factor->contribution,
                 'event_count' => $factor->event_count,
             ])->values()->all(),
+        ];
+    }
+
+    /**
+     * @param  array{value: int, band: string, calculator_version: string, event_count: int, inputs_digest: string, factors: list<array{event_type: string, human_label: string, contribution: int, event_count: int}>}  $computed
+     * @return array<string, mixed>
+     */
+    public static function reliabilityComputed(array $computed, string $subjectType, string $subjectId, string $indexType): array
+    {
+        $displayable = $computed['band'] !== 'insufficient';
+
+        return [
+            'id' => null,
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'index_type' => $indexType,
+            'value' => $displayable ? $computed['value'] : null,
+            'band' => $computed['band'],
+            'displayable' => $displayable,
+            'calculator_version' => $computed['calculator_version'],
+            'computed_at' => null,
+            'event_count' => $computed['event_count'],
+            'minimum_events' => $indexType === 'relationship_health' ? 5 : null,
+            'inputs_digest' => $computed['inputs_digest'],
+            'factors' => $computed['factors'],
         ];
     }
 }
