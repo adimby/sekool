@@ -7,8 +7,8 @@
   --color-fanabe-leaf: #1f6b4a;
   --color-fanabe-leaf-dark: #154c35;
   --color-fanabe-mist: #e4efe8;
-  --color-fanabe-sand: #f3eee4;
-  --color-fanabe-paper: #fffcf7;
+  --color-fanabe-sand: #eef1ee;
+  --color-fanabe-paper: #ffffff;
   --color-fanabe-clay: #b5522a;
   --color-fanabe-gold: #b8860b;
 }
@@ -21,14 +21,11 @@ body,
 
 body {
   margin: 0;
-  background:
-    radial-gradient(1200px 480px at 12% -10%, rgba(31, 107, 74, 0.12), transparent 55%),
-    radial-gradient(900px 420px at 110% 8%, rgba(181, 82, 42, 0.08), transparent 50%),
-    var(--color-fanabe-sand);
+  background: var(--color-fanabe-sand);
   color: var(--color-fanabe-ink);
 }
 
 ::selection {
   background: #1f6b4a;
-  color: #fffcf7;
+  color: #fff;
 }
