@@ -80,6 +80,7 @@ final class FamilyController extends Controller
             'birth_date' => ['nullable', 'date'],
             'sex' => ['nullable', 'string'],
             'adult_person_id' => ['nullable', 'uuid'],
+            'classroom_id' => ['nullable', 'uuid'],
         ]);
 
         $result = $add->execute(
@@ -89,6 +90,7 @@ final class FamilyController extends Controller
             $request->user()->person_id,
             $data,
             $data['adult_person_id'] ?? null,
+            $data['classroom_id'] ?? null,
         );
 
         $link = SchoolPersonLink::query()
@@ -100,6 +102,9 @@ final class FamilyController extends Controller
             'student' => PersonPayload::forSchool($result['student'], $link),
             'enrollment_id' => is_object($result['enrollment']) && isset($result['enrollment']->id)
                 ? $result['enrollment']->id
+                : null,
+            'classroom_id' => is_object($result['enrollment']) && isset($result['enrollment']->classroom_id)
+                ? $result['enrollment']->classroom_id
                 : null,
         ], 201);
     }
@@ -210,6 +215,7 @@ final class FamilyController extends Controller
             'relationship' => ['nullable', 'string'],
             'student_number' => ['nullable', 'string', 'max:32'],
             'label' => ['nullable', 'string', 'max:120'],
+            'classroom_id' => ['nullable', 'uuid'],
         ]);
 
         $relationship = RelationshipType::tryFrom($data['relationship'] ?? 'parent_of') ?? RelationshipType::ParentOf;
@@ -223,6 +229,7 @@ final class FamilyController extends Controller
             relationship: $relationship,
             studentNumber: $data['student_number'] ?? null,
             familyLabel: $data['label'] ?? null,
+            classroomId: $data['classroom_id'] ?? null,
         );
 
         $parentLink = SchoolPersonLink::query()
@@ -241,6 +248,7 @@ final class FamilyController extends Controller
             'parent' => PersonPayload::forSchool($result['parent'], $parentLink),
             'student' => PersonPayload::forSchool($result['student'], $studentLink),
             'enrollment_id' => $result['enrollment']->id,
+            'classroom_id' => $result['enrollment']->classroom_id,
         ], 201);
     }
 

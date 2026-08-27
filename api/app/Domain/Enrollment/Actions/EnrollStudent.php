@@ -2,6 +2,7 @@
 
 namespace App\Domain\Enrollment\Actions;
 
+use App\Domain\Academic\Models\Classroom;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentStatusChange;
@@ -27,12 +28,15 @@ final class EnrollStudent
         string $actorPersonId,
         ?string $studentNumber = null,
         bool $skipAuthorization = false,
+        ?string $classroomId = null,
     ): Enrollment|EnrollmentTransfer {
         SchoolYear::query()->findOrFail($schoolYearId);
 
         if (! $skipAuthorization && ! $this->hasStudentLink($schoolId, $studentPersonId)) {
             throw new DomainException('Aucun lien ne permet d\'inscrire cette personne.', 403);
         }
+
+        $resolvedClassroomId = $this->validatedClassroomId($schoolId, $schoolYearId, $classroomId);
 
         $active = $this->activeEnrollment($studentPersonId);
 
@@ -50,7 +54,7 @@ final class EnrollStudent
             );
         }
 
-        return $this->createActive($schoolId, $schoolYearId, $studentPersonId, $actorPersonId, $studentNumber);
+        return $this->createActive($schoolId, $schoolYearId, $studentPersonId, $actorPersonId, $studentNumber, $resolvedClassroomId);
     }
 
     private function hasStudentLink(string $schoolId, string $studentPersonId): bool
@@ -77,12 +81,14 @@ final class EnrollStudent
         string $studentPersonId,
         string $actorPersonId,
         ?string $studentNumber,
+        ?string $classroomId,
     ): Enrollment {
         try {
-            return DB::transaction(function () use ($schoolId, $schoolYearId, $studentPersonId, $actorPersonId, $studentNumber): Enrollment {
+            return DB::transaction(function () use ($schoolId, $schoolYearId, $studentPersonId, $actorPersonId, $studentNumber, $classroomId): Enrollment {
                 $enrollment = Enrollment::query()->create([
                     'school_id' => $schoolId,
                     'school_year_id' => $schoolYearId,
+                    'classroom_id' => $classroomId,
                     'person_id' => $studentPersonId,
                     'student_number' => $studentNumber,
                     'status' => EnrollmentStatus::Active,
@@ -116,5 +122,23 @@ final class EnrollStudent
         } catch (UniqueConstraintViolationException) {
             throw new DomainException('Cet élève a déjà une inscription active dans le réseau FANABE.', 409);
         }
+    }
+
+    private function validatedClassroomId(string $schoolId, string $schoolYearId, ?string $classroomId): ?string
+    {
+        if ($classroomId === null || $classroomId === '') {
+            return null;
+        }
+
+        $classroom = Classroom::query()->find($classroomId);
+        if ($classroom === null || (string) $classroom->school_id !== $schoolId) {
+            throw new DomainException('Classe introuvable.', 404);
+        }
+
+        if ((string) $classroom->school_year_id !== $schoolYearId) {
+            throw new DomainException('La classe n\'appartient pas à la même année scolaire.');
+        }
+
+        return $classroom->id;
     }
 }

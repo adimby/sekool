@@ -82,6 +82,7 @@ type ClassroomRow = {
   id: string
   name: string
   grade_level_id: string
+  school_year_id?: string
   grade_level?: { name: string }
 }
 
@@ -651,12 +652,18 @@ function sexLabel(sex?: string): string {
   return 'Non précisé'
 }
 
+function classroomLabel(classroom?: ClassroomRow | null): string {
+  if (!classroom) return '—'
+  return classroom.grade_level?.name ? `${classroom.name} · ${classroom.grade_level.name}` : classroom.name
+}
+
 function EnrollmentWizard({
   yearId,
   yearLabel,
   schoolId,
   auth,
   families,
+  classrooms,
   busy,
   onBusy,
   onClose,
@@ -667,6 +674,7 @@ function EnrollmentWizard({
   schoolId: string
   auth: { token: string }
   families: FamilyRow[]
+  classrooms: ClassroomRow[]
   busy: boolean
   onBusy: (value: boolean) => void
   onClose: () => void
@@ -674,7 +682,7 @@ function EnrollmentWizard({
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 'done'>(1)
   const [error, setError] = useState<string | null>(null)
-  const [student, setStudent] = useState({ first_name: '', last_name: '', birth_date: '', sex: 'unspecified' })
+  const [student, setStudent] = useState({ first_name: '', last_name: '', birth_date: '', sex: 'unspecified', classroom_id: '' })
   const [foyerMode, setFoyerMode] = useState<'new' | 'existing'>('new')
   const [familyQuery, setFamilyQuery] = useState('')
   const [familyId, setFamilyId] = useState('')
@@ -691,7 +699,13 @@ function EnrollmentWizard({
 
   const matchedFamilies = families.filter((family) => matchesQuery(familySearchText(family), familyQuery))
   const chosenFamily = families.find((family) => family.id === familyId) ?? null
-  const studentReady = student.first_name.trim() !== '' && student.last_name.trim() !== '' && student.birth_date !== ''
+  const yearClassrooms = classrooms.filter((classroom) => !classroom.school_year_id || classroom.school_year_id === yearId)
+  const chosenClassroom = yearClassrooms.find((classroom) => classroom.id === student.classroom_id) ?? null
+  const studentReady =
+    student.first_name.trim() !== '' &&
+    student.last_name.trim() !== '' &&
+    student.birth_date !== '' &&
+    student.classroom_id !== ''
   const foyerReady =
     foyerMode === 'existing'
       ? familyId !== ''
@@ -726,6 +740,7 @@ function EnrollmentWizard({
             last_name: student.last_name,
             birth_date: student.birth_date,
             sex: student.sex,
+            classroom_id: student.classroom_id,
           }),
         })
         setInvitation(null)
@@ -752,10 +767,11 @@ function EnrollmentWizard({
             first_name: student.first_name,
             last_name: student.last_name,
             birth_date: student.birth_date,
-            sex: student.sex,
-          },
-        }),
-      })
+              sex: student.sex,
+            },
+            classroom_id: student.classroom_id,
+          }),
+        })
       setInvitation(created.invitation_code)
       setDoneName(`${student.first_name} ${student.last_name}`)
       setStep('done')
@@ -833,6 +849,26 @@ function EnrollmentWizard({
                   </select>
                 </Field>
               </div>
+              <Field label="Classe">
+                <select
+                  className={inputClass}
+                  value={student.classroom_id}
+                  onChange={(e) => setStudent({ ...student, classroom_id: e.target.value })}
+                  required
+                >
+                  <option value="">Choisir la classe</option>
+                  {yearClassrooms.map((classroom) => (
+                    <option key={classroom.id} value={classroom.id}>
+                      {classroomLabel(classroom)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {yearClassrooms.length === 0 ? (
+                <p className="text-[11px] text-fanabe-clay">Créez d’abord une classe dans l’onglet Classes.</p>
+              ) : (
+                <p className="text-[11px] text-neutral-500">Les frais (droit d’inscription, écolage) dépendent de la classe et de l’année {yearLabel}.</p>
+              )}
             </div>
           ) : null}
 
@@ -914,6 +950,7 @@ function EnrollmentWizard({
                   {student.first_name} {student.last_name}
                   <span className="block text-xs font-normal text-neutral-500">
                     {formatDate(student.birth_date)} · {sexLabel(student.sex)}
+                    {chosenClassroom ? ` · ${classroomLabel(chosenClassroom)}` : ''}
                   </span>
                 </dd>
               </div>
@@ -937,7 +974,9 @@ function EnrollmentWizard({
           {step === 'done' ? (
             <div className="space-y-3">
               <p className="text-sm">
-                <strong>{doneName}</strong> est inscrit{foyerMode === 'existing' ? ` au foyer ${chosenFamily?.label ?? ''}` : ` au foyer ${label || student.last_name}`}.
+                <strong>{doneName}</strong> est inscrit
+                {chosenClassroom ? ` en ${classroomLabel(chosenClassroom)}` : ''}
+                {foyerMode === 'existing' ? ` au foyer ${chosenFamily?.label ?? ''}` : ` au foyer ${label || student.last_name}`}.
               </p>
               {invitation ? (
                 <div>
@@ -1480,6 +1519,7 @@ function DirectionScreen({
               family={selectedFamily}
               schoolId={schoolId}
               yearId={yearId}
+              classrooms={classrooms}
               auth={auth}
               busy={busy}
               onBusy={setBusy}
@@ -1884,6 +1924,7 @@ function DirectionScreen({
         schoolId={schoolId}
         auth={auth}
         families={families}
+        classrooms={classrooms}
         busy={busy}
         onBusy={setBusy}
         onClose={() => setEnrollOpen(false)}
@@ -2170,6 +2211,7 @@ function FamilyEditor({
   family,
   schoolId,
   yearId,
+  classrooms,
   auth,
   busy,
   onBusy,
@@ -2181,6 +2223,7 @@ function FamilyEditor({
   family: FamilyRow
   schoolId: string
   yearId: string
+  classrooms: ClassroomRow[]
   auth: { token: string }
   busy: boolean
   onBusy: (value: boolean) => void
@@ -2191,7 +2234,12 @@ function FamilyEditor({
 }) {
   const [label, setLabel] = useState(family.label)
   const [drafts, setDrafts] = useState<Record<string, { first_name: string; last_name: string; phone: string }>>({})
-  const [sibling, setSibling] = useState({ first_name: '', last_name: family.members.find((m) => m.role_in_family === 'child')?.last_name ?? '', birth_date: '' })
+  const [sibling, setSibling] = useState({
+    first_name: '',
+    last_name: family.members.find((m) => m.role_in_family === 'child')?.last_name ?? '',
+    birth_date: '',
+    classroom_id: '',
+  })
   const [adult, setAdult] = useState({ first_name: '', last_name: '', phone: '', relationship: 'parent_of' })
 
   useEffect(() => {
@@ -2267,9 +2315,10 @@ function FamilyEditor({
           first_name: sibling.first_name,
           last_name: sibling.last_name,
           birth_date: sibling.birth_date || undefined,
+          classroom_id: sibling.classroom_id || undefined,
         }),
       })
-      setSibling({ first_name: '', last_name: sibling.last_name, birth_date: '' })
+      setSibling({ first_name: '', last_name: sibling.last_name, birth_date: '', classroom_id: sibling.classroom_id })
       onMessage('Fratrie inscrite.')
       await onReload()
     } catch (error) {
@@ -2401,12 +2450,22 @@ function FamilyEditor({
         </div>
         <form onSubmit={addSibling} className="space-y-2 rounded-md bg-black/[0.03] p-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Ajouter un enfant</h3>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             <input className={inputClass} value={sibling.first_name} onChange={(e) => setSibling({ ...sibling, first_name: e.target.value })} placeholder="Prénom" required />
             <input className={inputClass} value={sibling.last_name} onChange={(e) => setSibling({ ...sibling, last_name: e.target.value })} placeholder="Nom" required />
             <input className={inputClass} type="date" value={sibling.birth_date} onChange={(e) => setSibling({ ...sibling, birth_date: e.target.value })} />
+            <select className={inputClass} value={sibling.classroom_id} onChange={(e) => setSibling({ ...sibling, classroom_id: e.target.value })} required>
+              <option value="">Classe</option>
+              {classrooms
+                .filter((classroom) => !classroom.school_year_id || classroom.school_year_id === yearId)
+                .map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>
+                    {classroomLabel(classroom)}
+                  </option>
+                ))}
+            </select>
           </div>
-          <button type="submit" disabled={busy || !yearId} className={btnPrimary}>
+          <button type="submit" disabled={busy || !yearId || sibling.classroom_id === ''} className={btnPrimary}>
             Inscrire la fratrie
           </button>
         </form>

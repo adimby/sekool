@@ -28,12 +28,13 @@ final class AddChildToFamily
         string $actorPersonId,
         array $student,
         ?string $adultPersonId = null,
+        ?string $classroomId = null,
     ): array {
         if (! FamilyHasSchoolEnrollment::exists($familyId)) {
             throw new DomainException('Foyer introuvable.', 404);
         }
 
-        return DB::transaction(function () use ($schoolId, $schoolYearId, $familyId, $actorPersonId, $student, $adultPersonId): array {
+        return DB::transaction(function () use ($schoolId, $schoolYearId, $familyId, $actorPersonId, $student, $adultPersonId, $classroomId): array {
             $studentPerson = Person::createWithUniquePublicId([
                 'first_name' => $student['first_name'],
                 'last_name' => $student['last_name'],
@@ -98,6 +99,7 @@ final class AddChildToFamily
                 studentPersonId: $studentPerson->id,
                 actorPersonId: $actorPersonId,
                 skipAuthorization: true,
+                classroomId: $classroomId ?? ($student['classroom_id'] ?? null),
             );
 
             Auditor::record('family.child_added', 'family', $familyId, $studentPerson->id);

@@ -58,6 +58,7 @@ final class CreateFamilyWithStudent
         RelationshipType $relationship = RelationshipType::ParentOf,
         ?string $studentNumber = null,
         ?string $familyLabel = null,
+        ?string $classroomId = null,
     ): array {
         SchoolYear::query()->findOrFail($schoolYearId);
 
@@ -70,6 +71,7 @@ final class CreateFamilyWithStudent
             $relationship,
             $studentNumber,
             $familyLabel,
+            $classroomId,
         ): array {
             $parentPerson = Person::createWithUniquePublicId($this->civilAttributes($parent, includeContacts: true));
             app(AcquirePersonRole::class)->execute($parentPerson->id, PersonRoleType::Parent);
@@ -138,6 +140,7 @@ final class CreateFamilyWithStudent
                 actorPersonId: $actorPersonId,
                 studentNumber: $studentNumber,
                 skipAuthorization: true,
+                classroomId: $classroomId,
             );
 
             Auditor::record('family.created', 'family', $family->id, $parentPerson->id);

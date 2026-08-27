@@ -57,3 +57,47 @@ it('names the family after the student unless a label is given', function () {
         ->assertCreated()
         ->assertJsonPath('family_label', 'Rasoa-Rakoto');
 });
+
+it('assigns the chosen classroom at enrollment', function () {
+    $school = $this->provisionSchool();
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $created = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/families", [
+            'school_year_id' => $school['year']->id,
+            'classroom_id' => $classroom['id'],
+            'parent' => [
+                'first_name' => 'Voahangy',
+                'last_name' => 'Rasoa',
+                'phone' => '0349876545',
+            ],
+            'student' => [
+                'first_name' => 'Tiana',
+                'last_name' => 'Rasoa',
+                'birth_date' => '2014-06-20',
+            ],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('classroom_id', $classroom['id']);
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/families/{$created->json('family_id')}/children", [
+            'school_year_id' => $school['year']->id,
+            'classroom_id' => $classroom['id'],
+            'first_name' => 'Soa',
+            'last_name' => 'Rasoa',
+            'birth_date' => '2016-03-12',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('classroom_id', $classroom['id']);
+});
