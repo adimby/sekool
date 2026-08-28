@@ -68,7 +68,7 @@ it('records grades, builds a bulletin, and hides notes from preschool and financ
             'email' => 'soa.'.uniqid().'@fanabe.test',
             'relationship' => RelationshipType::FinancialContactFor->value,
         ])
-        ->assertOk()
+        ->assertSuccessful()
         ->json('adult');
 
     $financeAccount = UserAccount::factory()->create([

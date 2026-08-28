@@ -42,7 +42,11 @@ final class DetectStudentAlerts
             $existing = StudentAlert::query()
                 ->where('enrollment_id', $enrollment->id)
                 ->where('category', StudentAlertCategory::AbsenceIncrease)
-                ->where('status', StudentAlertStatus::Open)
+                ->whereIn('status', [
+                    StudentAlertStatus::Open,
+                    StudentAlertStatus::Acknowledged,
+                    StudentAlertStatus::InProgress,
+                ])
                 ->first();
 
             if ($existing !== null) {
