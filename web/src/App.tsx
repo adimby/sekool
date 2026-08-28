@@ -1248,7 +1248,12 @@ function EnrollmentWizard({
               {yearClassrooms.length === 0 ? (
                 <p className="text-[11px] text-fanabe-clay">Créez d’abord une classe dans l’onglet Classes.</p>
               ) : (
-                <p className="text-[11px] text-neutral-500">Les frais (droit d’inscription, écolage) dépendent de la classe et de l’année {yearLabel}.</p>
+                <p className="text-[11px] text-neutral-500">
+                  Les frais (droit d’inscription, écolage) dépendent de la classe et de l’année {yearLabel}.
+                  {chosenClassroom
+                    ? ' Le parent verra ensuite la liste de fournitures du niveau : commander chez le partenaire (éco, standard, luxe) ou fournir lui-même.'
+                    : ''}
+                </p>
               )}
             </div>
           ) : null}
@@ -3044,8 +3049,9 @@ function KitsPanel({
       <Panel className="p-3">
         <h2 className="text-sm font-semibold">Fournitures de l’année</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Liste par niveau, publiée à l’inscription. Trois gammes (éco, standard, luxe) : marque et prix unitaires.
-          Le parent commande chez le partenaire ou fournit lui-même. FANABE n’encaisse pas.
+          Liste par niveau, publiée à l’inscription. Trois gammes (éco, standard, luxe) : marque et prix unitaires,
+          fournis par le partenaire ou le service achat. Le parent commande chez le partenaire ou fournit lui-même.
+          FANABE n’encaisse pas.
         </p>
         <form onSubmit={saveList} className="mt-3 space-y-2">
           <div className="grid gap-2 sm:grid-cols-2">
@@ -3070,7 +3076,7 @@ function KitsPanel({
             ) : (
               <p className="self-center text-xs text-neutral-500">Service achat de l’école.</p>
             )}
-            {canManageOrders && previousYears.length > 0 ? (
+            {previousYears.length > 0 ? (
               <button type="button" className={btnGhost} disabled={busy} onClick={() => void copyPrevious()}>
                 Reprendre {previousYears[0].label}
               </button>
@@ -4547,23 +4553,43 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       ) : null}
 
       {tab === 'kits' && classrooms.length > 0 ? (
-        <KitsPanel
-          schoolId={schoolId}
-          auth={auth}
-          yearId={yearId}
-          years={years}
-          grades={classrooms
-            .map((row) => ({
-              id: row.grade_level?.id ?? row.grade_level_id,
-              name: row.grade_level?.name ?? row.name,
-            }))
-            .filter((row, index, list) => row.id && list.findIndex((item) => item.id === row.id) === index)}
-          busy={busy}
-          onBusy={setBusy}
-          onMessage={setMessage}
-          canManageOrders={false}
-          lockedGradeId={currentClass?.grade_level?.id ?? currentClass?.grade_level_id}
-        />
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
+              {classrooms.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
+            {currentClass?.grade_level?.name ? (
+              <p className="text-[11px] text-neutral-500">
+                Liste du niveau {currentClass.grade_level.name} — titulaire de {currentClass.name}.
+              </p>
+            ) : null}
+          </div>
+          <KitsPanel
+            schoolId={schoolId}
+            auth={auth}
+            yearId={yearId}
+            years={years}
+            grades={
+              currentClass
+                ? [
+                    {
+                      id: currentClass.grade_level?.id ?? currentClass.grade_level_id ?? '',
+                      name: currentClass.grade_level?.name ?? currentClass.name,
+                    },
+                  ].filter((row) => row.id)
+                : []
+            }
+            busy={busy}
+            onBusy={setBusy}
+            onMessage={setMessage}
+            canManageOrders={false}
+            lockedGradeId={currentClass?.grade_level?.id ?? currentClass?.grade_level_id}
+          />
+        </div>
       ) : null}
 
       {currentClass && tab === 'appel' ? <p className="mt-2 text-[11px] text-neutral-500">Appel de {currentClass.name} — professeur de la classe uniquement.</p> : null}
@@ -4957,7 +4983,14 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [attendance, setAttendance] = useState<Record<string, AttendanceRow[]>>({})
   const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
   const [kits, setKits] = useState<{
-    children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string; grade_level_id?: string | null }>
+    children: Array<{
+      person_id: string
+      enrollment_id: string
+      first_name: string
+      last_name: string
+      classroom?: string | null
+      grade_level_id?: string | null
+    }>
     catalog: KitDefinitionRow[]
     orders: KitOrderRow[]
   }>({ children: [], catalog: [], orders: [] })
@@ -5005,7 +5038,14 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       ),
       api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', auth),
       api<{
-        children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string; grade_level_id?: string | null }>
+        children: Array<{
+          person_id: string
+          enrollment_id: string
+          first_name: string
+          last_name: string
+          classroom?: string | null
+          grade_level_id?: string | null
+        }>
         catalog: KitDefinitionRow[]
         orders: KitOrderRow[]
       }>('/api/v1/parent/kits', auth),
@@ -5302,93 +5342,102 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
           <Panel className="p-3">
             <h2 className="text-sm font-semibold">Fournitures</h2>
             <p className="mt-1 text-xs text-neutral-500">
-              Liste du niveau pour l’année. Commander une gamme chez le partenaire, ou fournir les articles vous-même.
-              FANABE n’encaisse pas.
+              Liste du niveau pour l’année. Commander une gamme chez le partenaire (éco, standard, luxe), ou fournir les
+              articles vous-même. FANABE n’encaisse pas.
             </p>
-            {kits.catalog.map((definition) => {
-              const child =
-                kits.children.find((row) => row.grade_level_id && row.grade_level_id === definition.grade_level_id) ??
-                kits.children[0]
+            {kits.children.map((child) => {
+              const definition = kits.catalog.find(
+                (row) => row.grade_level_id && row.grade_level_id === child.grade_level_id,
+              )
               const already = kits.orders.some(
                 (row) =>
                   row.status !== 'cancelled' &&
-                  row.enrollment_id === child?.enrollment_id &&
-                  (row.kit_definition_id == null || row.kit_definition_id === definition.id),
+                  row.enrollment_id === child.enrollment_id &&
+                  (row.kit_definition_id == null || row.kit_definition_id === definition?.id),
               )
               return (
-                <div key={definition.id} className="mt-3 border-t border-black/5 pt-2">
+                <div key={child.enrollment_id} className="mt-3 border-t border-black/5 pt-2">
                   <p className="text-sm font-medium">
-                    {definition.name}
-                    {definition.grade_level ? <span className="ml-2 text-xs font-normal text-neutral-500">{definition.grade_level}</span> : null}
+                    {child.first_name} {child.last_name}
+                    {child.classroom ? <span className="ml-2 text-xs font-normal text-neutral-500">{child.classroom}</span> : null}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-neutral-500">
-                    {definition.price_source_label}
-                    {definition.packs[0]?.supplier?.name ? ` · ${definition.packs[0].supplier.name}` : ''}
-                  </p>
-                  <KitSupplyTable definition={definition} />
-                  {already ? (
-                    <p className="mt-2 text-xs text-neutral-500">Un choix est déjà enregistré pour cet élève.</p>
+                  {definition ? (
+                    <>
+                      <p className="mt-0.5 text-[11px] text-neutral-500">
+                        {definition.name}
+                        {definition.price_source_label ? ` · ${definition.price_source_label}` : ''}
+                        {definition.packs[0]?.supplier?.name ? ` · ${definition.packs[0].supplier.name}` : ''}
+                      </p>
+                      <KitSupplyTable definition={definition} />
+                      {already ? (
+                        <p className="mt-2 text-xs text-neutral-500">Un choix est déjà enregistré pour {child.first_name}.</p>
+                      ) : (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {definition.packs.map((pack) => (
+                            <button
+                              key={pack.id}
+                              type="button"
+                              className={btnGhost}
+                              disabled={busy}
+                              onClick={() => {
+                                setBusy(true)
+                                setMessage(null)
+                                api('/api/v1/parent/kit-orders', {
+                                  ...auth,
+                                  method: 'POST',
+                                  body: JSON.stringify({
+                                    enrollment_id: child.enrollment_id,
+                                    fulfillment: 'partner',
+                                    kit_pack_id: pack.id,
+                                  }),
+                                })
+                                  .then(() => loadFamily())
+                                  .then(() =>
+                                    setMessage(`Commande ${pack.tier_label} pour ${child.first_name}. ${pack.pay_instruction}`),
+                                  )
+                                  .catch((error: Error) => setMessage(error.message))
+                                  .finally(() => setBusy(false))
+                              }}
+                            >
+                              Commander {pack.tier_label} · {formatAr(pack.total_amount)}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className={btnGhost}
+                            disabled={busy}
+                            onClick={() => {
+                              setBusy(true)
+                              setMessage(null)
+                              api('/api/v1/parent/kit-orders', {
+                                ...auth,
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  enrollment_id: child.enrollment_id,
+                                  fulfillment: 'self',
+                                  kit_definition_id: definition.id,
+                                }),
+                              })
+                                .then(() => loadFamily())
+                                .then(() => setMessage(`Vous fournissez la liste pour ${child.first_name}.`))
+                                .catch((error: Error) => setMessage(error.message))
+                                .finally(() => setBusy(false))
+                            }}
+                          >
+                            Je fournis moi-même
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {definition.packs.map((pack) => (
-                        <button
-                          key={pack.id}
-                          type="button"
-                          className={btnGhost}
-                          disabled={busy || !child}
-                          onClick={() => {
-                            if (!child) return
-                            setBusy(true)
-                            setMessage(null)
-                            api('/api/v1/parent/kit-orders', {
-                              ...auth,
-                              method: 'POST',
-                              body: JSON.stringify({
-                                enrollment_id: child.enrollment_id,
-                                fulfillment: 'partner',
-                                kit_pack_id: pack.id,
-                              }),
-                            })
-                              .then(() => loadFamily())
-                              .then(() => setMessage(`Commande ${pack.tier_label} pour ${child.first_name}. ${pack.pay_instruction}`))
-                              .catch((error: Error) => setMessage(error.message))
-                              .finally(() => setBusy(false))
-                          }}
-                        >
-                          Commander {pack.tier_label} · {formatAr(pack.total_amount)}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className={btnGhost}
-                        disabled={busy || !child}
-                        onClick={() => {
-                          if (!child) return
-                          setBusy(true)
-                          setMessage(null)
-                          api('/api/v1/parent/kit-orders', {
-                            ...auth,
-                            method: 'POST',
-                            body: JSON.stringify({
-                              enrollment_id: child.enrollment_id,
-                              fulfillment: 'self',
-                              kit_definition_id: definition.id,
-                            }),
-                          })
-                            .then(() => loadFamily())
-                            .then(() => setMessage(`Vous fournissez la liste pour ${child.first_name}.`))
-                            .catch((error: Error) => setMessage(error.message))
-                            .finally(() => setBusy(false))
-                        }}
-                      >
-                        Je fournis moi-même
-                      </button>
-                    </div>
+                    <p className="mt-1 text-xs text-neutral-600">Liste pas encore publiée pour ce niveau.</p>
                   )}
                 </div>
               )
             })}
-            {kits.catalog.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Aucune liste de fournitures pour le moment.</p> : null}
+            {kits.children.length === 0 ? (
+              <p className="mt-3 text-sm text-neutral-600">Aucun enfant inscrit pour voir une liste de fournitures.</p>
+            ) : null}
           </Panel>
           {kits.orders.length > 0 ? (
             <Panel>
@@ -5398,6 +5447,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                   <li key={row.id} className="px-3 py-2">
                     <p className="font-medium">
                       {row.student_name}
+                      {row.fulfillment_label ? ` · ${row.fulfillment_label}` : ''}
                       {row.total_amount > 0 ? ` · ${formatAr(row.total_amount)}` : ''}
                     </p>
                     <p className="text-xs text-neutral-500">

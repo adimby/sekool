@@ -31,7 +31,7 @@ final class PlaceKitOrder
             $fulfillment = KitFulfillment::tryFrom((string) ($data['fulfillment'] ?? KitFulfillment::Partner->value))
                 ?? KitFulfillment::Partner;
 
-            $enrollment = Enrollment::query()->withoutGlobalScopes()->find($data['enrollment_id']);
+            $enrollment = Enrollment::query()->withoutGlobalScopes()->with('classroom')->find($data['enrollment_id']);
             if ($enrollment === null || $enrollment->status !== EnrollmentStatus::Active) {
                 throw new DomainException('Inscription introuvable.', 404);
             }
@@ -52,6 +52,20 @@ final class PlaceKitOrder
                     : null;
                 if ($definition === null || (string) $definition->school_id !== (string) $enrollment->school_id) {
                     throw new DomainException('Liste de fournitures introuvable.', 404);
+                }
+            }
+
+            if ($definition !== null) {
+                if ($definition->school_year_id !== null
+                    && $enrollment->school_year_id !== null
+                    && (string) $definition->school_year_id !== (string) $enrollment->school_year_id) {
+                    throw new DomainException('Cette liste ne correspond pas à l’année d’inscription.');
+                }
+                $enrollmentGrade = $enrollment->classroom?->grade_level_id;
+                if ($definition->grade_level_id !== null
+                    && $enrollmentGrade !== null
+                    && (string) $enrollmentGrade !== (string) $definition->grade_level_id) {
+                    throw new DomainException('Cette liste ne correspond pas au niveau de l’élève.');
                 }
             }
 

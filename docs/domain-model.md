@@ -537,6 +537,8 @@ Table utile à trois titres : elle alimente le KPI « nombre de certificats vér
 `kit_pack_items` : `kit_pack_id`, `need_id`, `brand`, `product_reference`, `unit_amount`, `quantity`.
 `kit_orders` : `school_id`, `payer_account_id`, `enrollment_id`, `kit_definition_id`, `kit_pack_id` (null si le parent fournit), `fulfillment` (`partner` / `self`), `status` (`draft` / `submitted` / `confirmed` / `fulfilled` / `self_supplied` / `cancelled`), `total_amount`, `commission_amount`, `supplier_id`, `placed_at`.
 
+À l’inscription (ou au début d’année), l’école publie **une liste par niveau**. Direction ou titulaire de classe. Marques et prix des trois gammes (éco / standard / luxe) viennent du fournisseur partenaire **ou** du service achat. Le parent commande une gamme chez le partenaire, ou fournit lui-même. La liste se recopie d’une année sur l’autre.
+
 Chaîne `School → FANABE → Supplier → Parent` (brief §3). Aucun encaissement par FANABE au MVP (`Q-03`), aucun catalogue transverse, aucune mise en concurrence (`A-06`).
 
 ---

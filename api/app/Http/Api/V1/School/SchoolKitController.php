@@ -77,7 +77,12 @@ final class SchoolKitController extends Controller
         ]);
 
         try {
-            $rows = $copy->execute($school, $data['from_year_id'], $data['to_year_id']);
+            $rows = $copy->execute(
+                $school,
+                $data['from_year_id'],
+                $data['to_year_id'],
+                SchoolGate::visibleKitGradeIds($request),
+            );
         } catch (DomainException $e) {
             throw $e;
         }

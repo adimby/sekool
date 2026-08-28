@@ -220,3 +220,128 @@ it('copies last year’s supply list onto the new year', function () {
         ->and($copied[0]['copied_from_id'])->not->toBeNull()
         ->and($copied[0]['school_year_id'])->toBe($nextYear->id);
 });
+
+it('refuses a pack from another grade for the enrolled student', function () {
+    $school = $this->provisionSchool();
+    $family = $this->provisionEnrolledFamily($school);
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])->json('data');
+
+    TenantContext::runWithRlsBypass(function () use ($family, $classroom): void {
+        $family['enrollment']->forceFill(['classroom_id' => $classroom['id']])->save();
+    });
+
+    $otherGrade = null;
+    TenantContext::runWithRlsBypass(function () use ($school, &$otherGrade): void {
+        $otherGrade = GradeLevel::query()->create([
+            'school_id' => $school['school']->id,
+            'name' => '5ème',
+            'stage' => GradeStage::Middle,
+            'sequence' => 5,
+        ]);
+    });
+
+    $otherList = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/kit-definitions", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $otherGrade->id,
+            'supplier_name' => 'Librairie Analakely',
+            'needs' => [[
+                'label' => 'Compas',
+                'quantity' => 1,
+                'offers' => [['tier' => 'eco', 'brand' => 'Maped', 'unit_amount' => 8_000]],
+            ]],
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $eco = collect($otherList['packs'])->firstWhere('tier', 'eco');
+
+    $this->actingAs($family['parentAccount'], 'sanctum')
+        ->postJson('/api/v1/parent/kit-orders', [
+            'enrollment_id' => $family['enrollment']->id,
+            'fulfillment' => 'partner',
+            'kit_pack_id' => $eco['id'],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Cette liste ne correspond pas au niveau de l’élève.');
+});
+
+it('lets the class teacher copy last year’s list for their grade only', function () {
+    $school = $this->provisionSchool();
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])->json('data');
+
+    $otherGrade = null;
+    TenantContext::runWithRlsBypass(function () use ($school, &$otherGrade): void {
+        $otherGrade = GradeLevel::query()->create([
+            'school_id' => $school['school']->id,
+            'name' => '5ème',
+            'stage' => GradeStage::Middle,
+            'sequence' => 5,
+        ]);
+    });
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/kit-definitions", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'supplier_name' => 'Librairie Analakely',
+            'needs' => [[
+                'label' => 'Cahier 6ème',
+                'quantity' => 4,
+                'offers' => [['tier' => 'eco', 'brand' => 'Oxford', 'unit_amount' => 4_000]],
+            ]],
+        ])
+        ->assertCreated();
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/kit-definitions", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $otherGrade->id,
+            'supplier_name' => 'Librairie Analakely',
+            'needs' => [[
+                'label' => 'Cahier 5ème',
+                'quantity' => 6,
+                'offers' => [['tier' => 'eco', 'brand' => 'Oxford', 'unit_amount' => 4_000]],
+            ]],
+        ])
+        ->assertCreated();
+
+    $nextYear = null;
+    TenantContext::runWithRlsBypass(function () use ($school, &$nextYear): void {
+        $nextYear = SchoolYear::factory()->create([
+            'school_id' => $school['school']->id,
+            'label' => '2027-2028',
+            'is_current' => false,
+        ]);
+    });
+
+    $teacher = $this->provisionTeacher($school, $classroom['id']);
+
+    $copied = $this->actingAs($teacher['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/kit-definitions/copy-year", [
+            'from_year_id' => $school['year']->id,
+            'to_year_id' => $nextYear->id,
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    expect($copied)->toHaveCount(1)
+        ->and($copied[0]['grade_level_id'])->toBe($core['grade']->id)
+        ->and($copied[0]['needs'][0]['label'])->toBe('Cahier 6ème');
+});

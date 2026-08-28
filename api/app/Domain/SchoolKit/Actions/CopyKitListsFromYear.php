@@ -14,9 +14,10 @@ final class CopyKitListsFromYear
     public function __construct(private readonly SaveKitCatalog $save) {}
 
     /**
+     * @param  list<string>|null  $gradeIds  null = every grade
      * @return list<KitDefinition>
      */
-    public function execute(string $schoolId, string $sourceYearId, string $targetYearId): array
+    public function execute(string $schoolId, string $sourceYearId, string $targetYearId, ?array $gradeIds = null): array
     {
         if ($sourceYearId === $targetYearId) {
             throw new DomainException('Choisissez l’année précédente, pas la même année.');
@@ -34,6 +35,7 @@ final class CopyKitListsFromYear
         $sources = KitDefinition::query()
             ->with(['needs', 'packs.supplier', 'packs.items', 'gradeLevel'])
             ->where('school_year_id', $sourceYearId)
+            ->when($gradeIds !== null, fn ($query) => $query->whereIn('grade_level_id', $gradeIds))
             ->orderBy('name')
             ->get();
 

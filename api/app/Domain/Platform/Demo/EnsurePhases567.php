@@ -16,6 +16,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
+use App\Domain\School\Models\SchoolYear;
 use App\Domain\SchoolKit\Actions\SaveKitCatalog;
 
 final class EnsurePhases567
@@ -114,46 +115,50 @@ final class EnsurePhases567
         }
 
         if ($sixieme !== null) {
-            app(SaveKitCatalog::class)->execute((string) $school->id, [
-                'school_year_id' => $year->id,
-                'grade_level_id' => $sixieme->id,
-                'name' => 'Fournitures 6ème',
-                'price_source' => 'supplier',
-                'needs' => [
-                    [
-                        'label' => 'Cahier 200 pages',
-                        'quantity' => 4,
-                        'offers' => [
-                            ['tier' => 'eco', 'brand' => 'Oxford', 'unit_amount' => 4_000],
-                            ['tier' => 'standard', 'brand' => 'Clairefontaine', 'unit_amount' => 6_500],
-                            ['tier' => 'luxe', 'brand' => 'Rhodia', 'unit_amount' => 9_000],
-                        ],
-                    ],
-                    [
-                        'label' => 'Stylos',
-                        'quantity' => 6,
-                        'offers' => [
-                            ['tier' => 'eco', 'brand' => 'BIC', 'unit_amount' => 1_500],
-                            ['tier' => 'standard', 'brand' => 'Schneider', 'unit_amount' => 2_500],
-                            ['tier' => 'luxe', 'brand' => 'Pilot', 'unit_amount' => 3_500],
-                        ],
-                    ],
-                    [
-                        'label' => 'Classeur',
-                        'quantity' => 2,
-                        'offers' => [
-                            ['tier' => 'eco', 'brand' => 'Générique', 'unit_amount' => 10_000],
-                            ['tier' => 'standard', 'brand' => 'Exacompta', 'unit_amount' => 15_500],
-                            ['tier' => 'luxe', 'brand' => 'Leitz', 'unit_amount' => 20_500],
-                        ],
-                    ],
-                ],
-                'supplier_name' => 'Librairie Analakely',
-                'supplier_contact' => 'Analakely',
-                'commission_rate_bps' => 250,
+            $this->seedSupplyList($school, $year, $sixieme, 'Fournitures 6ème', [
+                ['label' => 'Cahier 200 pages', 'quantity' => 4, 'eco' => ['Oxford', 4_000], 'standard' => ['Clairefontaine', 6_500], 'luxe' => ['Rhodia', 9_000]],
+                ['label' => 'Stylos', 'quantity' => 6, 'eco' => ['BIC', 1_500], 'standard' => ['Schneider', 2_500], 'luxe' => ['Pilot', 3_500]],
+                ['label' => 'Classeur', 'quantity' => 2, 'eco' => ['Générique', 10_000], 'standard' => ['Exacompta', 15_500], 'luxe' => ['Leitz', 20_500]],
+            ]);
+        }
+
+        $cinquieme = GradeLevel::query()
+            ->where('school_id', $school->id)
+            ->where('name', '5ème')
+            ->first();
+        if ($cinquieme !== null) {
+            $this->seedSupplyList($school, $year, $cinquieme, 'Fournitures 5ème', [
+                ['label' => 'Cahier 200 pages', 'quantity' => 6, 'eco' => ['Oxford', 4_000], 'standard' => ['Clairefontaine', 6_500], 'luxe' => ['Rhodia', 9_000]],
+                ['label' => 'Stylos', 'quantity' => 8, 'eco' => ['BIC', 1_500], 'standard' => ['Schneider', 2_500], 'luxe' => ['Pilot', 3_500]],
+                ['label' => 'Compas', 'quantity' => 1, 'eco' => ['Maped', 8_000], 'standard' => ['Staedtler', 14_000], 'luxe' => ['Rotring', 22_000]],
             ]);
         }
 
         app(DetectStudentAlerts::class)->execute();
+    }
+
+    /**
+     * @param  list<array{label: string, quantity: int, eco: array{0: string, 1: int}, standard: array{0: string, 1: int}, luxe: array{0: string, 1: int}}>  $articles
+     */
+    private function seedSupplyList(School $school, SchoolYear $year, GradeLevel $grade, string $name, array $articles): void
+    {
+        app(SaveKitCatalog::class)->execute((string) $school->id, [
+            'school_year_id' => $year->id,
+            'grade_level_id' => $grade->id,
+            'name' => $name,
+            'price_source' => 'supplier',
+            'needs' => array_map(fn (array $article): array => [
+                'label' => $article['label'],
+                'quantity' => $article['quantity'],
+                'offers' => [
+                    ['tier' => 'eco', 'brand' => $article['eco'][0], 'unit_amount' => $article['eco'][1]],
+                    ['tier' => 'standard', 'brand' => $article['standard'][0], 'unit_amount' => $article['standard'][1]],
+                    ['tier' => 'luxe', 'brand' => $article['luxe'][0], 'unit_amount' => $article['luxe'][1]],
+                ],
+            ], $articles),
+            'supplier_name' => 'Librairie Analakely',
+            'supplier_contact' => 'Analakely',
+            'commission_rate_bps' => 250,
+        ]);
     }
 }

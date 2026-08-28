@@ -230,7 +230,7 @@ retards           ~25 échéances en retard, réparties sur les 4 paliers
 alertes           quelques alertes d'absence et de retard de paiement
 documents         quelques natifs, quelques externes non vérifiés
                   et un attesté par l'école
-School Kits       3 définitions avec packs Eco/Standard/Premium
+School Kits       listes de fournitures par niveau (Éco / Standard / Luxe, marque + prix)
 ```
 
 ### 9.1 Les trois cas obligatoires

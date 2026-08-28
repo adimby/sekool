@@ -77,6 +77,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/certificates', [CertificateController::class, 'index']);
         Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
         Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
+        Route::post('/schools/{school}/kit-definitions/copy-year', [SchoolKitController::class, 'copyYear']);
     });
 
     Route::middleware('school.role:teacher')->group(function (): void {
@@ -143,7 +144,6 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/documents/{document}/attest', DocumentAttestController::class);
         Route::get('/schools/{school}/kit-orders', [SchoolKitController::class, 'orders']);
         Route::patch('/schools/{school}/kit-orders/{order}', [SchoolKitController::class, 'updateOrder']);
-        Route::post('/schools/{school}/kit-definitions/copy-year', [SchoolKitController::class, 'copyYear']);
         Route::get('/schools/{school}/alerts', [StudentAlertController::class, 'index']);
         Route::post('/schools/{school}/alerts/{alert}/acknowledge', [StudentAlertController::class, 'acknowledge']);
         Route::post('/schools/{school}/fee-schedules', [FeeScheduleController::class, 'store']);
