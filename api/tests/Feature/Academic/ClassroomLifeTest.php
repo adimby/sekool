@@ -104,6 +104,54 @@ it('lets direction run a class file: titulaire, enseignants, délégués, EDT, c
         ->assertForbidden();
 });
 
+it('exposes the grade stage on the class file', function () {
+    $school = $this->provisionSchool();
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.grade_level.stage', 'middle')
+        ->assertJsonPath('data.grade_level.stage_label', 'Collège');
+});
+
+it('returns a preschool class file without a delegate', function () {
+    $school = $this->provisionSchool();
+    $schoolId = $school['school']->id;
+
+    $grade = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/grade-levels", [
+            'name' => 'GS',
+            'stage' => 'preschool',
+            'sequence' => 0,
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $grade['id'],
+            'name' => 'GS A',
+            'capacity' => 25,
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
+        ->assertOk()
+        ->assertJsonPath('data.classroom.grade_level.stage', 'preschool')
+        ->assertJsonPath('data.classroom.grade_level.stage_label', 'Maternelle')
+        ->assertJsonPath('data.classroom.delegate', null)
+        ->assertJsonPath('data.headcount', 0);
+});
+
 it('refuses a delegate who is not in the class', function () {
     $school = $this->provisionSchool();
     $family = $this->provisionEnrolledFamily($school);

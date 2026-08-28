@@ -4,6 +4,7 @@ namespace App\Domain\Academic\Support;
 
 use App\Domain\Academic\Enums\ClassActivityType;
 use App\Domain\Academic\Enums\ClassCouncilStatus;
+use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\ClassActivity;
 use App\Domain\Academic\Models\ClassCouncil;
 use App\Domain\Academic\Models\Classroom;
@@ -31,13 +32,32 @@ final class ClassroomFilePayload
             'main_teacher_person_id' => $classroom->main_teacher_person_id,
             'delegate_person_id' => $classroom->delegate_person_id,
             'vice_delegate_person_id' => $classroom->vice_delegate_person_id,
-            'grade_level' => $classroom->gradeLevel === null ? null : [
-                'id' => $classroom->gradeLevel->id,
-                'name' => $classroom->gradeLevel->name,
-            ],
+            'grade_level' => self::grade($classroom),
             'main_teacher' => PersonMini::make($classroom->mainTeacher),
             'delegate' => PersonMini::make($classroom->delegate),
             'vice_delegate' => PersonMini::make($classroom->viceDelegate),
+        ];
+    }
+
+    /**
+     * @return array{id: string, name: string, stage: string, stage_label: string|null}|null
+     */
+    private static function grade(Classroom $classroom): ?array
+    {
+        $grade = $classroom->gradeLevel;
+        if ($grade === null) {
+            return null;
+        }
+
+        $stage = $grade->stage instanceof GradeStage
+            ? $grade->stage
+            : GradeStage::tryFrom((string) $grade->stage);
+
+        return [
+            'id' => $grade->id,
+            'name' => $grade->name,
+            'stage' => $stage?->value ?? 'middle',
+            'stage_label' => $stage?->label(),
         ];
     }
 

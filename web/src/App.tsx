@@ -80,6 +80,8 @@ type AccessLogRow = {
 
 type PersonMini = { id: string; first_name: string; last_name: string }
 
+type GradeRow = { id: string; name: string; stage?: string }
+
 type ClassroomRow = {
   id: string
   name: string
@@ -89,7 +91,7 @@ type ClassroomRow = {
   main_teacher_person_id?: string | null
   delegate_person_id?: string | null
   vice_delegate_person_id?: string | null
-  grade_level?: { id?: string; name: string } | null
+  grade_level?: { id?: string; name: string; stage?: string; stage_label?: string | null } | null
   main_teacher?: PersonMini | null
   delegate?: PersonMini | null
   vice_delegate?: PersonMini | null
@@ -803,6 +805,58 @@ function officeLabel(office?: string | null): string {
   if (office === 'delegate') return 'Délégué'
   if (office === 'vice_delegate') return 'Vice-délégué'
   return ''
+}
+
+function stageLabel(stage?: string | null): string {
+  if (stage === 'preschool') return 'Maternelle'
+  if (stage === 'primary') return 'Primaire'
+  if (stage === 'middle') return 'Collège'
+  if (stage === 'high') return 'Lycée'
+  return 'Autres'
+}
+
+function classroomStage(classroom: ClassroomRow): string {
+  return classroom.grade_level?.stage ?? ''
+}
+
+function showsDelegate(stage?: string | null): boolean {
+  return stage !== 'preschool'
+}
+
+function showsCouncil(stage?: string | null): boolean {
+  return stage !== 'preschool' && stage !== 'primary'
+}
+
+const STAGE_ORDER = ['preschool', 'primary', 'middle', 'high', '']
+
+function classroomsByStage(rows: ClassroomRow[]): Array<{ stage: string; label: string; rows: ClassroomRow[] }> {
+  const buckets = new Map<string, ClassroomRow[]>()
+  for (const row of rows) {
+    const stage = classroomStage(row)
+    const list = buckets.get(stage) ?? []
+    list.push(row)
+    buckets.set(stage, list)
+  }
+  return STAGE_ORDER.filter((stage) => buckets.has(stage)).map((stage) => ({
+    stage,
+    label: stageLabel(stage),
+    rows: buckets.get(stage) ?? [],
+  }))
+}
+
+function gradesByStage(rows: GradeRow[]): Array<{ stage: string; label: string; rows: GradeRow[] }> {
+  const buckets = new Map<string, GradeRow[]>()
+  for (const row of rows) {
+    const stage = row.stage ?? ''
+    const list = buckets.get(stage) ?? []
+    list.push(row)
+    buckets.set(stage, list)
+  }
+  return STAGE_ORDER.filter((stage) => buckets.has(stage)).map((stage) => ({
+    stage,
+    label: stageLabel(stage),
+    rows: buckets.get(stage) ?? [],
+  }))
 }
 
 function ClassSection({ title, children }: { title: string; children: ReactNode }) {
@@ -1763,6 +1817,10 @@ function ClassFilePanel({
 
   const addedTeacherIds = new Set(file.teachers.map((row) => row.person_id))
   const availableTeachers = staff.filter((person) => !addedTeacherIds.has(person.id))
+  const stage = classroom.grade_level?.stage
+  const cycleLabel = classroom.grade_level?.stage_label ?? (stage ? stageLabel(stage) : '')
+  const canDelegate = showsDelegate(stage)
+  const canCouncil = showsCouncil(stage)
 
   return (
     <div>
@@ -1771,7 +1829,9 @@ function ClassFilePanel({
           <div>
             <h2 className="text-sm font-semibold">{classroom.name}</h2>
             <p className="text-xs text-neutral-500">
-              {classroom.grade_level?.name ?? 'Niveau'} · {personLabel(classroom.main_teacher)}
+              {classroom.grade_level?.name ?? 'Niveau'}
+              {cycleLabel ? ` · ${cycleLabel}` : ''}
+              {classroom.main_teacher ? ` · ${personLabel(classroom.main_teacher)}` : ''}
             </p>
           </div>
           <p className="text-xs text-neutral-600">
@@ -1780,11 +1840,13 @@ function ClassFilePanel({
           </p>
         </div>
         {readOnly ? (
-          <p className="mt-2 text-xs text-neutral-600">
-            Délégué {personLabel(classroom.delegate)} · Vice {personLabel(classroom.vice_delegate)}
-          </p>
+          canDelegate ? (
+            <p className="mt-2 text-xs text-neutral-600">
+              Délégué {personLabel(classroom.delegate)} · Vice {personLabel(classroom.vice_delegate)}
+            </p>
+          ) : null
         ) : (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`mt-2 grid gap-2 sm:grid-cols-2 ${canDelegate ? 'lg:grid-cols-4' : ''}`}>
             <Field label="Titulaire">
               <select
                 className={inputClass}
@@ -1802,40 +1864,44 @@ function ClassFilePanel({
                 ))}
               </select>
             </Field>
-            <Field label="Délégué">
-              <select
-                className={inputClass}
-                value={classroom.delegate_person_id ?? ''}
-                disabled={busy}
-                onChange={(event) => {
-                  void patchClassroom({ delegate_person_id: event.target.value || null })
-                }}
-              >
-                <option value="">Aucun</option>
-                {file.students.map((row) => (
-                  <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.vice_delegate_person_id}>
-                    {row.person ? personLabel(row.person) : row.person_id}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Vice-délégué">
-              <select
-                className={inputClass}
-                value={classroom.vice_delegate_person_id ?? ''}
-                disabled={busy}
-                onChange={(event) => {
-                  void patchClassroom({ vice_delegate_person_id: event.target.value || null })
-                }}
-              >
-                <option value="">Aucun</option>
-                {file.students.map((row) => (
-                  <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.delegate_person_id}>
-                    {row.person ? personLabel(row.person) : row.person_id}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {canDelegate ? (
+              <>
+                <Field label="Délégué">
+                  <select
+                    className={inputClass}
+                    value={classroom.delegate_person_id ?? ''}
+                    disabled={busy}
+                    onChange={(event) => {
+                      void patchClassroom({ delegate_person_id: event.target.value || null })
+                    }}
+                  >
+                    <option value="">Aucun</option>
+                    {file.students.map((row) => (
+                      <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.vice_delegate_person_id}>
+                        {row.person ? personLabel(row.person) : row.person_id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Vice-délégué">
+                  <select
+                    className={inputClass}
+                    value={classroom.vice_delegate_person_id ?? ''}
+                    disabled={busy}
+                    onChange={(event) => {
+                      void patchClassroom({ vice_delegate_person_id: event.target.value || null })
+                    }}
+                  >
+                    <option value="">Aucun</option>
+                    {file.students.map((row) => (
+                      <option key={row.person_id} value={row.person_id} disabled={row.person_id === classroom.delegate_person_id}>
+                        {row.person ? personLabel(row.person) : row.person_id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : null}
             <Field label="Capacité">
               <form
                 className="flex gap-1"
@@ -1870,7 +1936,7 @@ function ClassFilePanel({
               <tr>
                 <th className="py-1 font-medium">N°</th>
                 <th className="py-1 font-medium">Élève</th>
-                <th className="py-1 font-medium">Office</th>
+                {canDelegate ? <th className="py-1 font-medium">Office</th> : null}
                 {readOnly || !onAssignClassroom ? null : <th className="py-1 font-medium">Classe</th>}
               </tr>
             </thead>
@@ -1879,7 +1945,7 @@ function ClassFilePanel({
                 <tr key={row.enrollment_id} className="border-t border-black/5">
                   <td className="py-1.5 tabular-nums text-neutral-500">{row.student_number ?? '—'}</td>
                   <td className="py-1.5 font-medium">{row.person ? personLabel(row.person) : '—'}</td>
-                  <td className="py-1.5 text-xs text-neutral-600">{officeLabel(row.office) || '—'}</td>
+                  {canDelegate ? <td className="py-1.5 text-xs text-neutral-600">{officeLabel(row.office) || '—'}</td> : null}
                   {readOnly || !onAssignClassroom ? null : (
                     <td className="py-1.5">
                       <select
@@ -2047,6 +2113,7 @@ function ClassFilePanel({
         )}
       </ClassSection>
 
+      {canCouncil ? (
       <ClassSection title="Conseil de classe">
         {file.councils.length === 0 ? <p className="text-xs text-neutral-500">Aucun conseil enregistré.</p> : null}
         <ul className="space-y-2 text-sm">
@@ -2112,6 +2179,7 @@ function ClassFilePanel({
           </form>
         )}
       </ClassSection>
+      ) : null}
 
       <ClassSection title="Activités">
         {file.activities.length === 0 ? <p className="text-xs text-neutral-500">Aucune activité.</p> : null}
@@ -2365,7 +2433,7 @@ function DirectionScreen({
   const [yearLabel, setYearLabel] = useState('2026-2027')
   const [years, setYears] = useState<YearRow[]>([])
   const [classrooms, setClassrooms] = useState<ClassroomRow[]>([])
-  const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([])
+  const [grades, setGrades] = useState<GradeRow[]>([])
   const [feeSchedules, setFeeSchedules] = useState<FeeScheduleRow[]>([])
   const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -2415,6 +2483,8 @@ function DirectionScreen({
   const pagedEnrollments = pageOf(filteredEnrollments, page)
   const selectedStudent = activeEnrollments.find((row) => row.id === selectedEnrollment)
   const selectedFamily = families.find((family) => family.id === selectedFamilyId) ?? null
+  const classGroups = classroomsByStage(classrooms)
+  const gradeGroups = gradesByStage(grades)
 
   async function loadCore() {
     const yearsPayload = await api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth)
@@ -2424,7 +2494,7 @@ function DirectionScreen({
     setYearLabel(current?.label ?? '2026-2027')
     const [classList, gradeList, today, staffList] = await Promise.all([
       api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
-      api<{ data: Array<{ id: string; name: string }> }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
+      api<{ data: GradeRow[] }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
       api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth),
       api<{ data: PersonMini[] }>(`/api/v1/schools/${schoolId}/staff`, auth),
     ])
@@ -2993,11 +3063,21 @@ function DirectionScreen({
             <h2 className="text-sm font-semibold">Classes · {yearLabel}</h2>
             <form onSubmit={createClassroom} className="mt-3 space-y-2">
               <select className={inputClass} value={newClassGrade} onChange={(e) => setNewClassGrade(e.target.value)}>
-                {grades.map((grade) => (
-                  <option key={grade.id} value={grade.id}>
-                    {grade.name}
-                  </option>
-                ))}
+                {gradeGroups.length <= 1
+                  ? grades.map((grade) => (
+                      <option key={grade.id} value={grade.id}>
+                        {grade.name}
+                      </option>
+                    ))
+                  : gradeGroups.map((group) => (
+                      <optgroup key={group.stage || 'other'} label={group.label}>
+                        {group.rows.map((grade) => (
+                          <option key={grade.id} value={grade.id}>
+                            {grade.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
               </select>
               <input className={inputClass} value={newClassName} onChange={(e) => setNewClassName(e.target.value)} required />
               <input
@@ -3021,21 +3101,32 @@ function DirectionScreen({
               </button>
             </form>
             <ul className="mt-3 divide-y divide-black/5 text-sm">
-              {classrooms.map((classroom) => {
-                const count = activeEnrollments.filter((row) => row.classroom_id === classroom.id).length
-                return (
-                  <li key={classroom.id}>
-                    <button
-                      type="button"
-                      className={`flex w-full items-center justify-between py-1.5 text-left ${selectedClassId === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
-                      onClick={() => setSelectedClassId(classroom.id)}
-                    >
-                      <span>{classroom.name}</span>
-                      <span className="text-xs text-neutral-500">{count}</span>
-                    </button>
-                  </li>
-                )
-              })}
+              {classGroups.map((group, index) => (
+                <li key={group.stage || 'other'}>
+                  {classGroups.length > 1 ? (
+                    <p className={`text-[11px] font-semibold uppercase tracking-wide text-neutral-500 ${index === 0 ? '' : 'pt-2'}`}>
+                      {group.label}
+                    </p>
+                  ) : null}
+                  <ul>
+                    {group.rows.map((classroom) => {
+                      const count = activeEnrollments.filter((row) => row.classroom_id === classroom.id).length
+                      return (
+                        <li key={classroom.id}>
+                          <button
+                            type="button"
+                            className={`flex w-full items-center justify-between py-1.5 text-left ${selectedClassId === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
+                            onClick={() => setSelectedClassId(classroom.id)}
+                          >
+                            <span>{classroom.name}</span>
+                            <span className="text-xs text-neutral-500">{count}</span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </li>
+              ))}
             </ul>
           </Panel>
           <Panel className="min-w-0">
@@ -3058,7 +3149,7 @@ function DirectionScreen({
               />
             ) : (
               <p className="px-3 py-8 text-center text-sm text-neutral-500">
-                Ouvrez une classe pour son dossier : titulaire, effectif, emploi du temps, conseil et activités.
+                Ouvrez une classe pour son dossier : titulaire, effectif, emploi du temps et activités.
               </p>
             )}
           </Panel>

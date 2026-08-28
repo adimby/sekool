@@ -64,6 +64,7 @@ final class EnsureSchoolCore
         $this->ensureFeeSchedule($year);
         $this->assignEnrollments($year, $class6, $class5);
         $this->ensureClassLife($year, $class6, $teacherId);
+        $this->ensurePreschoolDemo($school, $year, $teacherId);
         $this->ensureExpense($year);
     }
 
@@ -218,6 +219,30 @@ final class EnsureSchoolCore
                 'held_on' => '2026-09-12',
                 'location' => 'Salle 6ème A',
                 'notes' => 'Présentation de l’année et du professeur titulaire.',
+            ],
+        );
+    }
+
+    private function ensurePreschoolDemo(School $school, SchoolYear $year, ?string $teacherPersonId): void
+    {
+        if ($school->code !== 'antsahabe') {
+            return;
+        }
+
+        $gs = $this->ensureGrade($year->school_id, 'GS', GradeStage::Preschool, 0);
+        $classroom = $this->ensureClassroom($year, $gs, 'GS A', $teacherPersonId);
+
+        ClassActivity::query()->firstOrCreate(
+            [
+                'school_id' => $year->school_id,
+                'classroom_id' => $classroom->id,
+                'title' => 'Accueil des parents',
+            ],
+            [
+                'type' => ClassActivityType::ParentMeeting,
+                'held_on' => '2026-09-08',
+                'location' => 'Salle GS',
+                'notes' => 'Présentation du groupe et du rythme de la journée.',
             ],
         );
     }
