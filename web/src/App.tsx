@@ -389,7 +389,7 @@ export default function App() {
         <div className="flex h-11 items-center gap-2 px-3">
           <Logo />
           {schoolName && (workspace === 'direction' || workspace === 'teacher') ? (
-            <span className="hidden max-w-40 truncate text-xs text-white/55 sm:inline">{schoolName}</span>
+            <span className="max-w-40 truncate text-xs text-white/55">{schoolName}</span>
           ) : null}
           {spaces.length > 1 ? (
             <nav className="ml-1 flex min-w-0 items-center gap-0.5" aria-label="Espaces">
@@ -3194,8 +3194,8 @@ function DirectionScreen({
           <Panel className="p-3">
             <h2 className="text-sm font-semibold">Classes · {yearLabel}</h2>
             {network ? (
-              <p className="mt-1 text-[11px] text-neutral-500">
-                {network.name}
+              <p className="mt-1 text-xs text-neutral-600">
+                Campus · {network.name}
                 {network.campuses.filter((campus) => campus.id !== schoolId).length > 0
                   ? ` · ${network.campuses
                       .filter((campus) => campus.id !== schoolId)
@@ -3243,36 +3243,6 @@ function DirectionScreen({
                 Créer
               </button>
             </form>
-            <div className="mt-3 border-t border-black/5 pt-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Niveaux</p>
-              <p className="mt-0.5 text-[11px] text-neutral-500">Cases à cocher, pas un type d’école. T1–T5 est une variante.</p>
-              <ul className="mt-2 space-y-1">
-                {GRADE_PACKS.map((pack) => (
-                  <li key={pack.id}>
-                    <label className="flex cursor-pointer items-start gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={selectedPacks.includes(pack.id)}
-                        onChange={() => togglePack(pack.id)}
-                      />
-                      <span>
-                        <span className="font-medium">{pack.label}</span>
-                        <span className="text-neutral-500"> · {pack.hint}</span>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                className={`${btnGhost} mt-2`}
-                disabled={busy || selectedPacks.length === 0}
-                onClick={() => void applyGradePacks()}
-              >
-                Ajouter les niveaux
-              </button>
-            </div>
             <ul className="mt-3 divide-y divide-black/5 text-sm">
               {classGroups.map((group, index) => (
                 <li key={group.stage || 'other'}>
@@ -3305,6 +3275,36 @@ function DirectionScreen({
                 </li>
               ))}
             </ul>
+            <div className="mt-3 border-t border-black/5 pt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Niveaux</p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">Cases à cocher, pas un type d’école. T1–T5 est une variante.</p>
+              <ul className="mt-2 space-y-1">
+                {GRADE_PACKS.map((pack) => (
+                  <li key={pack.id}>
+                    <label className="flex cursor-pointer items-start gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={selectedPacks.includes(pack.id)}
+                        onChange={() => togglePack(pack.id)}
+                      />
+                      <span>
+                        <span className="font-medium">{pack.label}</span>
+                        <span className="text-neutral-500"> · {pack.hint}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className={`${btnGhost} mt-2`}
+                disabled={busy || selectedPacks.length === 0}
+                onClick={() => void applyGradePacks()}
+              >
+                Ajouter les niveaux
+              </button>
+            </div>
           </Panel>
           <Panel className="min-w-0">
             {classFile ? (
