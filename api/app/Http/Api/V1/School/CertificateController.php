@@ -6,18 +6,27 @@ use App\Domain\Certificate\Actions\IssueEnrollmentCertificate;
 use App\Domain\Certificate\Actions\RevokeCertificate;
 use App\Domain\Certificate\Models\Certificate;
 use App\Domain\Certificate\Support\CertificatePayload;
+use App\Domain\School\Support\SchoolGate;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class CertificateController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = Certificate::query()
+        $query = Certificate::query()
             ->with(['enrollment.person', 'enrollment.classroom', 'subject'])
-            ->orderByDesc('issued_at')
-            ->get();
+            ->orderByDesc('issued_at');
+
+        if (! SchoolGate::isDirection($request)) {
+            $classroomIds = SchoolGate::visibleClassrooms($request)->pluck('id');
+            $query->whereHas('enrollment', function ($builder) use ($classroomIds): void {
+                $builder->whereIn('classroom_id', $classroomIds);
+            });
+        }
+
+        $rows = $query->get();
 
         return response()->json([
             'data' => $rows->map(fn (Certificate $row): array => CertificatePayload::staff($row))->values(),

@@ -85,6 +85,56 @@ it('issues an enrollment certificate whose public verify masks the name', functi
         ->assertJsonMissingPath('issuer');
 });
 
+it('lets the class teacher list certificates for their classroom only', function () {
+    $school = $this->provisionSchool();
+    $family = $this->provisionEnrolledFamily($school);
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])->json('data');
+
+    $other = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème B',
+        ])->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/assign-classroom", [
+            'classroom_id' => $classroom['id'],
+        ]);
+
+    $issued = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/certificates")
+        ->assertCreated()
+        ->json('data');
+
+    $teacher = $this->provisionTeacher($school, $classroom['id']);
+    $otherTeacher = $this->provisionTeacher($school, $other['id']);
+
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/certificates")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $issued['id'])
+        ->assertJsonPath('data.0.enrollment_id', $family['enrollment']->id);
+
+    $this->actingAs($otherTeacher['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/certificates")
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/certificates")
+        ->assertForbidden();
+});
+
 it('keeps an attested external document tagged as external', function () {
     $school = $this->provisionSchool();
     $family = $this->provisionEnrolledFamily($school);

@@ -1,8 +1,8 @@
 <?php
 
+use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\SchoolKit\Models\KitOrder;
 use App\Domain\SchoolKit\Support\KitCopy;
-use App\Domain\Platform\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Route;
 
 it('lets a parent order a kit paid at the supplier, never through FANABE', function () {
@@ -28,7 +28,9 @@ it('lets a parent order a kit paid at the supplier, never through FANABE', funct
         ->json('data');
 
     $ecoId = collect($catalog['packs'])->firstWhere('tier', 'eco')['id'];
-    expect($catalog['packs'][0]['pay_instruction'])->toContain('FANABE n’encaisse pas');
+    expect($catalog['packs'][0]['pay_instruction'])->toContain('FANABE n’encaisse pas')
+        ->and($catalog['needs'][0]['label'])->toBe('Cahier 200 pages')
+        ->and($catalog['needs'][0]['quantity'])->toBe(3);
 
     $order = $this->actingAs($family['parentAccount'], 'sanctum')
         ->postJson('/api/v1/parent/kit-orders', [

@@ -504,6 +504,70 @@ function formatAr(amount: number): string {
   return `${new Intl.NumberFormat('fr-FR').format(amount)} Ar`
 }
 
+type KitNeed = { id?: string; label: string; quantity: number }
+type KitPackRow = {
+  id: string
+  tier?: string
+  tier_label: string
+  total_amount: number
+  pay_instruction: string
+  supplier?: { name: string } | null
+}
+type KitDefinitionRow = {
+  id: string
+  name: string
+  grade_level?: string | null
+  grade_level_id?: string | null
+  needs?: KitNeed[]
+  packs: KitPackRow[]
+}
+
+function parseNeedLines(text: string): KitNeed[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(\d+)\s*[x×*]?\s+(.+)$/i)
+      if (match) {
+        return { quantity: Number(match[1]), label: match[2].trim() }
+      }
+      return { quantity: 1, label: line }
+    })
+}
+
+function certificateStatusLabel(status: string): string {
+  if (status === 'valid') return 'Valide'
+  if (status === 'revoked') return 'Révoqué'
+  if (status === 'expired') return 'Expiré'
+  if (status === 'issued') return 'Émis'
+  return status
+}
+
+function KitNeedsList({ needs }: { needs?: KitNeed[] }) {
+  if (!needs || needs.length === 0) {
+    return <p className="mt-1 text-xs text-neutral-500">Aucun matériel listé.</p>
+  }
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+      {needs.map((need, index) => (
+        <li key={need.id ?? `${need.label}-${index}`}>
+          {need.quantity} × {need.label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+type BulletinRow = {
+  overall_average: number | null
+  subjects?: Array<{
+    subject: string | null
+    average: number | null
+    entries: Array<{ value: number; assessed_on: string | null }>
+  }>
+}
+
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -1838,6 +1902,19 @@ function ClassFilePanel({
   const [gradeDate, setGradeDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [verifyUrl, setVerifyUrl] = useState<string | null>(null)
   const [gradeTick, setGradeTick] = useState(0)
+  const [newSubject, setNewSubject] = useState('')
+  const [certificates, setCertificates] = useState<
+    Array<{
+      id: string
+      enrollment_id: string
+      type_label: string
+      public_reference: string
+      status: string
+      issued_at: string | null
+      student_name: string
+    }>
+  >([])
+  const [certTick, setCertTick] = useState(0)
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
@@ -1887,6 +1964,7 @@ function ClassFilePanel({
   useEffect(() => {
     if (!canGrades) {
       setGrades([])
+      setSubjects([])
       return
     }
     Promise.all([
@@ -1904,6 +1982,25 @@ function ClassFilePanel({
       })
       .catch((error: Error) => onMessage(error.message))
   }, [canGrades, classroomId, schoolId, auth.token, file.students.length, gradeTick])
+
+  useEffect(() => {
+    const enrollmentIds = new Set(file.students.map((row) => row.enrollment_id))
+    api<{
+      data: Array<{
+        id: string
+        enrollment_id: string
+        type_label: string
+        public_reference: string
+        status: string
+        issued_at: string | null
+        student_name: string
+      }>
+    }>(`/api/v1/schools/${schoolId}/certificates`, auth)
+      .then((payload) => {
+        setCertificates(payload.data.filter((row) => enrollmentIds.has(row.enrollment_id)))
+      })
+      .catch(() => setCertificates([]))
+  }, [classroomId, schoolId, auth.token, file.students.length, certTick])
 
   return (
     <div>
@@ -2076,6 +2173,158 @@ function ClassFilePanel({
               ))}
             </tbody>
           </table>
+        )}
+      </ClassSection>
+
+      {canGrades ? (
+        <ClassSection title="Notes">
+          {grades.length === 0 ? <p className="text-xs text-neutral-500">Aucune note pour cette classe.</p> : null}
+          <ul className="space-y-1 text-sm">
+            {grades.map((row) => {
+              const student = file.students.find((item) => item.enrollment_id === row.enrollment_id)
+              return (
+                <li key={row.id} className="flex justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+                  <span>
+                    {student?.person ? personLabel(student.person) : 'Élève'}
+                    <span className="ml-2 text-xs text-neutral-500">{row.subject}</span>
+                  </span>
+                  <span className="tabular-nums">
+                    {row.value}
+                    <span className="ml-2 text-xs text-neutral-500">{row.assessed_on ? formatDate(row.assessed_on) : ''}</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+          {writeGrades ? (
+            <>
+              <form
+                className="mt-2 flex gap-1"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const name = newSubject.trim()
+                  if (!name) return
+                  void run(async () => {
+                    const created = await api<{ data: { id: string; name: string } }>(`/api/v1/schools/${schoolId}/subjects`, {
+                      ...auth,
+                      method: 'POST',
+                      body: JSON.stringify({ name }),
+                    })
+                    setNewSubject('')
+                    setGradeSubject(created.data.id)
+                    setGradeTick((n) => n + 1)
+                  }, 'Matière ajoutée.')
+                }}
+              >
+                <input
+                  className={inputClass}
+                  value={newSubject}
+                  onChange={(e) => setNewSubject(e.target.value)}
+                  placeholder="Nouvelle matière"
+                />
+                <button type="submit" className={btnGhost} disabled={busy || newSubject.trim() === ''}>
+                  Ajouter
+                </button>
+              </form>
+              <form
+                className="mt-2 grid gap-2 sm:grid-cols-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void run(async () => {
+                    await api(`/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`, {
+                      ...auth,
+                      method: 'POST',
+                      body: JSON.stringify({
+                        enrollment_id: gradeStudent,
+                        subject_id: gradeSubject,
+                        value: Number(gradeValue),
+                        assessed_on: gradeDate,
+                      }),
+                    })
+                    setGradeTick((n) => n + 1)
+                  }, 'Note enregistrée.')
+                }}
+              >
+                <select className={inputClass} value={gradeStudent} onChange={(e) => setGradeStudent(e.target.value)} required>
+                  {file.students.map((row) => (
+                    <option key={row.enrollment_id} value={row.enrollment_id}>
+                      {row.person ? personLabel(row.person) : row.enrollment_id}
+                    </option>
+                  ))}
+                </select>
+                <select className={inputClass} value={gradeSubject} onChange={(e) => setGradeSubject(e.target.value)} required>
+                  {subjects.length === 0 ? <option value="">Aucune matière</option> : null}
+                  {subjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </select>
+                <input className={inputClass} type="number" min={0} step="0.5" value={gradeValue} onChange={(e) => setGradeValue(e.target.value)} required />
+                <input className={inputClass} type="date" value={gradeDate} onChange={(e) => setGradeDate(e.target.value)} required />
+                <button type="submit" className={`${btnGhost} sm:col-span-4`} disabled={busy || !gradeStudent || !gradeSubject}>
+                  Enregistrer la note
+                </button>
+              </form>
+            </>
+          ) : null}
+        </ClassSection>
+      ) : null}
+
+      <ClassSection title="Documents">
+        <p className="text-xs text-neutral-500">
+          Certificat de scolarité avec lien de vérification. FANABE n’est pas une signature qualifiée.
+        </p>
+        {verifyUrl ? (
+          <p className="mt-2 break-all text-xs">
+            Lien :{' '}
+            <a className="text-fanabe-leaf underline" href={verifyUrl}>
+              {verifyUrl}
+            </a>
+          </p>
+        ) : null}
+        {certificates.length === 0 ? (
+          <p className="mt-2 text-xs text-neutral-500">Aucun document émis pour cette classe.</p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {certificates.map((row) => (
+              <li key={row.id} className="flex justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+                <span>
+                  {row.student_name}
+                  <span className="ml-2 text-xs text-neutral-500">
+                    {row.type_label} · {row.public_reference}
+                  </span>
+                </span>
+                <span className="text-xs text-neutral-500">{certificateStatusLabel(row.status)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {readOnly ? null : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {file.students.map((row) => (
+              <li key={row.enrollment_id} className="flex items-center justify-between gap-2 border-t border-black/5 py-1 first:border-t-0">
+                <span>{row.person ? personLabel(row.person) : 'Élève'}</span>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const payload = await api<{ data: { verify_url?: string } }>(
+                        `/api/v1/schools/${schoolId}/enrollments/${row.enrollment_id}/certificates`,
+                        { ...auth, method: 'POST', body: JSON.stringify({}) },
+                      )
+                      setVerifyUrl(payload.data.verify_url ?? null)
+                      setCertTick((n) => n + 1)
+                    }, 'Certificat émis.')
+                  }
+                >
+                  Émettre
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </ClassSection>
 
@@ -2390,106 +2639,6 @@ function ClassFilePanel({
           </form>
         )}
       </ClassSection>
-
-      {canGrades ? (
-        <ClassSection title="Notes">
-          {grades.length === 0 ? <p className="text-xs text-neutral-500">Aucune note.</p> : null}
-          <ul className="space-y-1 text-sm">
-            {grades.slice(0, 8).map((row) => {
-              const student = file.students.find((item) => item.enrollment_id === row.enrollment_id)
-              return (
-                <li key={row.id} className="flex justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
-                  <span>
-                    {student?.person?.first_name} {student?.person?.last_name}
-                    <span className="ml-2 text-xs text-neutral-500">{row.subject}</span>
-                  </span>
-                  <span className="tabular-nums">
-                    {row.value}
-                    <span className="ml-2 text-xs text-neutral-500">{row.assessed_on ? formatDate(row.assessed_on) : ''}</span>
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-          {writeGrades ? (
-            <form
-              className="mt-2 grid gap-2 sm:grid-cols-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void run(async () => {
-                  await api(`/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`, {
-                    ...auth,
-                    method: 'POST',
-                    body: JSON.stringify({
-                      enrollment_id: gradeStudent,
-                      subject_id: gradeSubject,
-                      value: Number(gradeValue),
-                      assessed_on: gradeDate,
-                    }),
-                  })
-                  setGradeTick((n) => n + 1)
-                }, 'Note enregistrée.')
-              }}
-            >
-              <select className={inputClass} value={gradeStudent} onChange={(e) => setGradeStudent(e.target.value)} required>
-                {file.students.map((row) => (
-                  <option key={row.enrollment_id} value={row.enrollment_id}>
-                    {row.person?.first_name} {row.person?.last_name}
-                  </option>
-                ))}
-              </select>
-              <select className={inputClass} value={gradeSubject} onChange={(e) => setGradeSubject(e.target.value)} required>
-                {subjects.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
-                  </option>
-                ))}
-              </select>
-              <input className={inputClass} type="number" min={0} step="0.5" value={gradeValue} onChange={(e) => setGradeValue(e.target.value)} required />
-              <input className={inputClass} type="date" value={gradeDate} onChange={(e) => setGradeDate(e.target.value)} required />
-              <button type="submit" className={`${btnGhost} sm:col-span-4`} disabled={busy || !gradeStudent || !gradeSubject}>
-                Enregistrer la note
-              </button>
-            </form>
-          ) : null}
-        </ClassSection>
-      ) : null}
-
-      {readOnly ? null : (
-        <ClassSection title="Certificats">
-          <p className="text-xs text-neutral-500">Certificat de scolarité avec lien de vérification. FANABE n’est pas une signature qualifiée.</p>
-          {verifyUrl ? (
-            <p className="mt-2 break-all text-xs">
-              Lien : <a className="text-fanabe-leaf underline" href={verifyUrl}>{verifyUrl}</a>
-            </p>
-          ) : null}
-          <ul className="mt-2 space-y-1 text-sm">
-            {file.students.map((row) => (
-              <li key={row.enrollment_id} className="flex items-center justify-between gap-2 border-t border-black/5 py-1 first:border-t-0">
-                <span>
-                  {row.person?.first_name} {row.person?.last_name}
-                </span>
-                <button
-                  type="button"
-                  className={btnGhost}
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const payload = await api<{ data: { verify_url?: string } }>(
-                        `/api/v1/schools/${schoolId}/enrollments/${row.enrollment_id}/certificates`,
-                        { ...auth, method: 'POST', body: JSON.stringify({}) },
-                      )
-                      setVerifyUrl(payload.data.verify_url ?? null)
-                    }, 'Certificat émis.')
-                  }
-                >
-                  Émettre
-                </button>
-              </li>
-            ))}
-          </ul>
-        </ClassSection>
-      )}
     </div>
   )
 }
@@ -2671,21 +2820,21 @@ function KitsPanel({
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
 }) {
-  type Pack = { id: string; tier: string; tier_label: string; total_amount: number; pay_instruction: string; supplier: { name: string } | null }
-  type Definition = { id: string; name: string; grade_level: string | null; packs: Pack[] }
   type Order = { id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }
 
-  const [catalog, setCatalog] = useState<Definition[]>([])
+  const [catalog, setCatalog] = useState<KitDefinitionRow[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [name, setName] = useState('Kit 6ème')
   const [gradeId, setGradeId] = useState('')
   const [supplier, setSupplier] = useState('Librairie Analakely')
   const [eco, setEco] = useState('45000')
   const [standard, setStandard] = useState('72000')
+  const [premium, setPremium] = useState('98000')
+  const [needsText, setNeedsText] = useState('4 Cahier 200 pages\n6 Stylos')
 
   async function refresh() {
     const [defs, list] = await Promise.all([
-      api<{ data: Definition[] }>(`/api/v1/schools/${schoolId}/kit-definitions`, auth),
+      api<{ data: KitDefinitionRow[] }>(`/api/v1/schools/${schoolId}/kit-definitions`, auth),
       api<{ data: Order[] }>(`/api/v1/schools/${schoolId}/kit-orders`, auth),
     ])
     setCatalog(defs.data)
@@ -2711,9 +2860,11 @@ function KitsPanel({
           name,
           supplier_name: supplier,
           commission_rate_bps: 250,
+          needs: parseNeedLines(needsText),
           packs: [
             { tier: 'eco', total_amount: Number(eco) },
             { tier: 'standard', total_amount: Number(standard) },
+            ...(Number(premium) > 0 ? [{ tier: 'premium', total_amount: Number(premium) }] : []),
           ],
         }),
       })
@@ -2760,6 +2911,13 @@ function KitsPanel({
           <input className={inputClass} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Fournisseur" required />
           <input className={inputClass} type="number" min={1} value={eco} onChange={(e) => setEco(e.target.value)} placeholder="Éco (Ar)" />
           <input className={inputClass} type="number" min={1} value={standard} onChange={(e) => setStandard(e.target.value)} placeholder="Standard (Ar)" />
+          <input className={inputClass} type="number" min={0} value={premium} onChange={(e) => setPremium(e.target.value)} placeholder="Premium (Ar)" />
+          <textarea
+            className={`${inputClass} h-20 py-1.5 sm:col-span-2`}
+            value={needsText}
+            onChange={(e) => setNeedsText(e.target.value)}
+            placeholder={'Une ligne par article, ex.\n4 Cahier 200 pages\n6 Stylos'}
+          />
           <button type="submit" className={`${btnPrimary} sm:col-span-2`} disabled={busy || !yearId}>
             Publier le kit
           </button>
@@ -2771,6 +2929,8 @@ function KitsPanel({
                 {row.name}
                 {row.grade_level ? <span className="ml-2 text-xs font-normal text-neutral-500">{row.grade_level}</span> : null}
               </p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Matériel</p>
+              <KitNeedsList needs={row.needs} />
               <ul className="mt-1 text-xs text-neutral-600">
                 {row.packs.map((pack) => (
                   <li key={pack.id}>
@@ -4569,15 +4729,10 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
   const [kits, setKits] = useState<{
     children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
-    catalog: Array<{
-      id: string
-      name: string
-      grade_level_id: string | null
-      packs: Array<{ id: string; tier_label: string; total_amount: number; pay_instruction: string }>
-    }>
+    catalog: KitDefinitionRow[]
     orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
   }>({ children: [], catalog: [], orders: [] })
-  const [bulletins, setBulletins] = useState<Record<string, { overall_average: number | null }>>({})
+  const [bulletins, setBulletins] = useState<Record<string, BulletinRow>>({})
   const [certificates, setCertificates] = useState<Record<string, Array<{ id: string; type_label: string; public_reference: string; status: string }>>>({})
   const [consents, setConsents] = useState<ConsentRow[]>([])
   const [linkRequests, setLinkRequests] = useState<LinkRequestRow[]>([])
@@ -4622,19 +4777,14 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', auth),
       api<{
         children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
-        catalog: Array<{
-          id: string
-          name: string
-          grade_level_id: string | null
-          packs: Array<{ id: string; tier_label: string; total_amount: number; pay_instruction: string }>
-        }>
+        catalog: KitDefinitionRow[]
         orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
       }>('/api/v1/parent/kits', auth),
       Promise.all(
         payload.data
           .filter((child) => child.access === 'guardian')
           .map(async (child) => {
-            const row = await api<{ data: { overall_average: number | null } }>(`/api/v1/parent/children/${child.id}/bulletin`, auth)
+            const row = await api<{ data: BulletinRow }>(`/api/v1/parent/children/${child.id}/bulletin`, auth)
             return [child.id, row.data] as const
           }),
       ),
@@ -4875,20 +5025,36 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                             ))}
                           </ul>
                         )}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Notes</h3>
                         {bulletins[child.id]?.overall_average != null ? (
-                          <p className="mt-2 text-xs text-neutral-600">
+                          <p className="mt-1 text-xs text-neutral-600">
                             Moyenne : <strong>{bulletins[child.id].overall_average}</strong>
                           </p>
-                        ) : null}
-                        {(certificates[child.id] ?? []).length > 0 ? (
-                          <ul className="mt-2 space-y-0.5 text-xs text-neutral-600">
-                            {certificates[child.id].map((row) => (
-                              <li key={row.id}>
-                                {row.type_label} · {row.public_reference} · {row.status}
+                        ) : (
+                          <p className="mt-1 text-xs text-neutral-600">Aucune note pour le moment.</p>
+                        )}
+                        {(bulletins[child.id]?.subjects ?? []).length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+                            {bulletins[child.id].subjects?.map((subject) => (
+                              <li key={subject.subject ?? 'matiere'} className="flex justify-between gap-2">
+                                <span>{subject.subject ?? 'Matière'}</span>
+                                <span className="tabular-nums">{subject.average ?? '—'}</span>
                               </li>
                             ))}
                           </ul>
                         ) : null}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Documents</h3>
+                        {(certificates[child.id] ?? []).length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Aucun document émis.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+                            {certificates[child.id].map((row) => (
+                              <li key={row.id}>
+                                {row.type_label} · {row.public_reference} · {certificateStatusLabel(row.status)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     ) : null}
                   </Panel>
@@ -4910,7 +5076,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             {kits.catalog.map((definition) => (
               <div key={definition.id} className="mt-3 border-t border-black/5 pt-2">
                 <p className="text-sm font-medium">{definition.name}</p>
-                <ul className="mt-1 space-y-2 text-sm">
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Matériel</p>
+                <KitNeedsList needs={definition.needs} />
+                <ul className="mt-2 space-y-2 text-sm">
                   {definition.packs.map((pack) => (
                     <li key={pack.id} className="flex items-center justify-between gap-2">
                       <span>
