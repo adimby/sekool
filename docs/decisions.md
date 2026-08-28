@@ -141,3 +141,12 @@ Toutes les `D-01` à `D-17` de [`architecture.md`](./architecture.md#17-journal-
 | `D-20` | Aucun SMS dans le MVP (ni auth, ni canal obligatoire) |
 | `D-21` | Paiement School Kit chez le fournisseur |
 | `D-22` | Lien parent = consentement consommable ; identifiant public ≠ consentement |
+| `D-23` | Un seul FANABE ; cycle = `grade_levels.stage` ; pas d’interface par type d’école — [`cycles.md`](./cycles.md) |
+
+---
+
+## `D-23` — Un produit, quatre cycles
+
+Maternelle, primaire, collège et lycée **ne sont pas trois FANABE**. Le cycle est l’attribut `stage` du niveau. Une école mixte est le cas normal. Familles, finance et caisse restent uniques. Seule la fiche classe (et plus tard quelques validations) se module.
+
+Plan d’exécution, hors périmètre et critère de terminé : [`cycles.md`](./cycles.md). Première tranche code : **C-1** (exposer le cycle, masquer délégué / conseil en maternelle).

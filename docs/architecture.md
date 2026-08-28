@@ -506,3 +506,4 @@ Les sept tests critiques exigés par le brief §5 sont tracés vers des fichiers
 | `D-20` | Aucun SMS dans le MVP | **Acté** |
 | `D-21` | Paiement School Kit chez le fournisseur | **Acté** |
 | `D-22` | Lien parent = consentement ; identifiant public ≠ consentement | **Acté** |
+| `D-23` | Un produit, quatre cycles (`grade_levels.stage`) ; pas d’interface par type d’école | **Acté** — [`cycles.md`](./cycles.md) |

@@ -220,6 +220,7 @@ Brief §8. Le seeder est **déterministe** (graine fixe) : un jeu aléatoire ren
                   École Itaosy    (privée, 17 élèves, plan Starter)
 
 10 classes        réparties sur les 3 écoles, du primaire au collège
+                  (cycles `D-23` : un produit, `grade_levels.stage` ; voir [`cycles.md`](./cycles.md))
 100 élèves        avec inscriptions actives sur 2026-2027
 50 familles       dont 12 avec plusieurs enfants, 4 multi-écoles
                   parents, tuteurs, responsables financiers distincts

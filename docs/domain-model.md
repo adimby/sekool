@@ -227,8 +227,10 @@ La contrainte d'exclusion empêche deux années scolaires de se chevaucher dans 
 
 ### `grade_levels`, `classrooms`
 
-`grade_levels` : `school_id`, `name` (`6ᵉ`), `stage` (`preschool` / `primary` / `middle` / `high`), `sequence` (`Q-19`).
+`grade_levels` : `school_id`, `name` (`6ᵉ`), `stage` (`preschool` / `primary` / `middle` / `high`), `sequence` (`Q-19`, `D-23`).
 `classrooms` : `school_id`, `school_year_id`, `grade_level_id`, `name` (`6ᵉ A`), `capacity`, `main_teacher_person_id`.
+
+Le `stage` est le **cycle** de l’école, pas un type d’établissement. Une même école peut porter plusieurs cycles. La fiche classe en hérite ; familles, finance et caisse ne se dupliquent pas. Voir [`cycles.md`](./cycles.md).
 
 ```sql
 FOREIGN KEY (school_id, grade_level_id) REFERENCES grade_levels (school_id, id)

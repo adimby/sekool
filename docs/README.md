@@ -21,6 +21,7 @@ Le document fonctionnel de référence est [`FANABE_Cahier_des_charges_SchoolOS_
 | 5 | [`domain-model.md`](./domain-model.md) | Entités, schéma de données, contraintes, index, invariants | 5 |
 | 6 | [`security-model.md`](./security-model.md) | Menaces, isolation, authentification, autorisation, gouvernance des indices, conformité | 4 |
 | 7 | [`mvp-scope.md`](./mvp-scope.md) | Périmètre du MVP, plan de phases, définition de terminé, jeu de démonstration | 6 |
+| 8 | [`cycles.md`](./cycles.md) | Un produit pour maternelle / primaire / collège / lycée — plan de mise en place (`D-23`) | après 4 |
 
 Pour une lecture rapide : [`decisions.md`](./decisions.md), puis `architecture.md` §3 (le modèle à deux plans).
 
