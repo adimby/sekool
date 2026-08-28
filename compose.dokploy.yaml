@@ -1,0 +1,68 @@
+# FANABE sur Dokploy — front (React) + API (Laravel) dans le même conteneur.
+#
+# Compose (pas Stack). Fichier : compose.dokploy.yaml
+# Onglet Domains : service `app`, container port **3000** (défaut Dokploy), HTTPS.
+# Après chaque Redeploy, revérifier que le port du domaine est bien 3000.
+
+services:
+  db:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    volumes:
+      - fanabe_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fanabe -d fanabe"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "3000"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_URL: ${APP_URL:-http://localhost}
+      APP_KEY: ${APP_KEY:-}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: fanabe
+      DB_USERNAME: fanabe
+      DB_PASSWORD: fanabe
+      DB_URL: postgres://fanabe:fanabe@db:5432/fanabe
+      DATABASE_URL: ${DATABASE_URL:-postgres://fanabe:fanabe@db:5432/fanabe}
+      DB_SSLMODE: disable
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: sync
+      HASH_DRIVER: bcrypt
+      LOG_CHANNEL: stderr
+      PORT: "3000"
+    volumes:
+      - fanabe_keys:/var/fanabe-keys
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+
+volumes:
+  fanabe_pg:
+  fanabe_keys:
+
+networks:
+  dokploy-network:
+    external: true

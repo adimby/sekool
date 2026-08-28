@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Source Sans 3", system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --color-fanabe-ink: #12261e;
+  --color-fanabe-leaf: #1f6b4a;
+  --color-fanabe-leaf-dark: #154c35;
+  --color-fanabe-mist: #e4efe8;
+  --color-fanabe-sand: #eef1ee;
+  --color-fanabe-paper: #ffffff;
+  --color-fanabe-clay: #b5522a;
+  --color-fanabe-gold: #b8860b;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-fanabe-sand);
+  color: var(--color-fanabe-ink);
+}
+
+::selection {
+  background: #1f6b4a;
+  color: #fff;
+}

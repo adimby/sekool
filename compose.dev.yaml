@@ -1,0 +1,22 @@
+# Ports hôte pour le développement (Laravel / Vite sur la machine, pas dans Docker).
+# Redis : 16379 (pas 6379) pour ne pas collisionner avec un Redis déjà installé.
+# Postgres / MinIO / Mailpit : liés à 127.0.0.1 uniquement (pas exposés sur Internet).
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:${FANABE_PG_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:${FANABE_REDIS_PORT:-16379}:6379"
+
+  minio:
+    ports:
+      - "127.0.0.1:${FANABE_MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${FANABE_MINIO_CONSOLE_PORT:-9001}:9001"
+
+  mailpit:
+    ports:
+      - "127.0.0.1:${FANABE_MAIL_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${FANABE_MAIL_UI_PORT:-8025}:8025"
