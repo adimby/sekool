@@ -26,6 +26,7 @@ class FanabeDocument extends Model
         'byte_size',
         'mime_type',
         'version',
+        'supersedes_document_id',
         'provenance',
     ];
 

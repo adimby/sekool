@@ -114,7 +114,7 @@ Sur la fiche **preschool** uniquement, section **Récupération** à partir des 
 
 - Trois codebases, trois navigations, trois comptes direction
 - `school_type` comme produit commercial
-- Notes, bulletins, School Kit, certificats (phases 5–7 inchangées)
+- Notes, bulletins, School Kit, certificats : livrés en phases 5–7
 - EDT établissement (remplacements, conflits multi-classes)
 - Plan comptable, cantine ERP
 

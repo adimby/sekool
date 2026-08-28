@@ -252,6 +252,15 @@ type Cockpit = {
     confidence_high_amount: number
   } | null
   actions: CockpitAction[]
+  attention?: CockpitAttention[]
+}
+
+type CockpitAttention = {
+  id: string
+  enrollment_id: string
+  reason_summary: string
+  status: string
+  student: { id: string; first_name: string; last_name: string } | null
 }
 
 type ParentInboxMessage = {
@@ -320,9 +329,9 @@ type ReliabilityOverview = {
   }>
 }
 
-type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'indices'
+type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
 type TeacherTab = 'classe' | 'appel'
-type ParentTab = 'enfants' | 'messages' | 'compte'
+type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
 
 const PAGE_SIZE = 40
 
@@ -332,6 +341,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
   { id: 'classe', label: 'Classes' },
   { id: 'finance', label: 'Finance' },
   { id: 'caisse', label: 'Caisse' },
+  { id: 'kits', label: 'Kits' },
   { id: 'indices', label: 'Indices' },
 ]
 
@@ -342,6 +352,7 @@ const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
 
 const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
   { id: 'enfants', label: 'Enfants' },
+  { id: 'kits', label: 'Kits' },
   { id: 'messages', label: 'Messages' },
   { id: 'compte', label: 'Compte' },
 ]
@@ -836,6 +847,10 @@ function showsDelegate(stage?: string | null): boolean {
 
 function showsCouncil(stage?: string | null): boolean {
   return stage !== 'preschool' && stage !== 'primary'
+}
+
+function showsGrades(stage?: string | null): boolean {
+  return stage !== 'preschool'
 }
 
 function unitLabel(stage?: string | null): string {
@@ -1773,6 +1788,7 @@ function ClassFilePanel({
   classrooms,
   busy,
   readOnly = false,
+  canWriteGrades,
   onBusy,
   onMessage,
   onReload,
@@ -1786,6 +1802,7 @@ function ClassFilePanel({
   classrooms: ClassroomRow[]
   busy: boolean
   readOnly?: boolean
+  canWriteGrades?: boolean
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
   onReload: () => Promise<void>
@@ -1813,6 +1830,14 @@ function ClassFilePanel({
   const [activityDate, setActivityDate] = useState('')
   const [activityLocation, setActivityLocation] = useState('')
   const [activityNotes, setActivityNotes] = useState('')
+  const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([])
+  const [grades, setGrades] = useState<Array<{ id: string; enrollment_id: string; subject: string | null; value: number; assessed_on: string | null }>>([])
+  const [gradeStudent, setGradeStudent] = useState('')
+  const [gradeSubject, setGradeSubject] = useState('')
+  const [gradeValue, setGradeValue] = useState('12')
+  const [gradeDate, setGradeDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [verifyUrl, setVerifyUrl] = useState<string | null>(null)
+  const [gradeTick, setGradeTick] = useState(0)
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
@@ -1854,8 +1879,31 @@ function ClassFilePanel({
   const unit = classroom.grade_level?.unit_label ?? unitLabel(stage)
   const canDelegate = showsDelegate(stage)
   const canCouncil = showsCouncil(stage)
+  const canGrades = showsGrades(stage)
+  const writeGrades = canWriteGrades ?? !readOnly
   const canSeries = stage === 'high'
   const pickup = file.pickup ?? []
+
+  useEffect(() => {
+    if (!canGrades) {
+      setGrades([])
+      return
+    }
+    Promise.all([
+      api<{ data: Array<{ id: string; name: string }> }>(`/api/v1/schools/${schoolId}/subjects`, auth),
+      api<{ data: Array<{ id: string; enrollment_id: string; subject: string | null; value: number; assessed_on: string | null }> }>(
+        `/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`,
+        auth,
+      ),
+    ])
+      .then(([subjectList, gradeList]) => {
+        setSubjects(subjectList.data)
+        setGrades(gradeList.data)
+        setGradeSubject((prev) => prev || subjectList.data[0]?.id || '')
+        setGradeStudent((prev) => prev || file.students[0]?.enrollment_id || '')
+      })
+      .catch((error: Error) => onMessage(error.message))
+  }, [canGrades, classroomId, schoolId, auth.token, file.students.length, gradeTick])
 
   return (
     <div>
@@ -2342,6 +2390,106 @@ function ClassFilePanel({
           </form>
         )}
       </ClassSection>
+
+      {canGrades ? (
+        <ClassSection title="Notes">
+          {grades.length === 0 ? <p className="text-xs text-neutral-500">Aucune note.</p> : null}
+          <ul className="space-y-1 text-sm">
+            {grades.slice(0, 8).map((row) => {
+              const student = file.students.find((item) => item.enrollment_id === row.enrollment_id)
+              return (
+                <li key={row.id} className="flex justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+                  <span>
+                    {student?.person?.first_name} {student?.person?.last_name}
+                    <span className="ml-2 text-xs text-neutral-500">{row.subject}</span>
+                  </span>
+                  <span className="tabular-nums">
+                    {row.value}
+                    <span className="ml-2 text-xs text-neutral-500">{row.assessed_on ? formatDate(row.assessed_on) : ''}</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+          {writeGrades ? (
+            <form
+              className="mt-2 grid gap-2 sm:grid-cols-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void run(async () => {
+                  await api(`/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`, {
+                    ...auth,
+                    method: 'POST',
+                    body: JSON.stringify({
+                      enrollment_id: gradeStudent,
+                      subject_id: gradeSubject,
+                      value: Number(gradeValue),
+                      assessed_on: gradeDate,
+                    }),
+                  })
+                  setGradeTick((n) => n + 1)
+                }, 'Note enregistrée.')
+              }}
+            >
+              <select className={inputClass} value={gradeStudent} onChange={(e) => setGradeStudent(e.target.value)} required>
+                {file.students.map((row) => (
+                  <option key={row.enrollment_id} value={row.enrollment_id}>
+                    {row.person?.first_name} {row.person?.last_name}
+                  </option>
+                ))}
+              </select>
+              <select className={inputClass} value={gradeSubject} onChange={(e) => setGradeSubject(e.target.value)} required>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+              <input className={inputClass} type="number" min={0} step="0.5" value={gradeValue} onChange={(e) => setGradeValue(e.target.value)} required />
+              <input className={inputClass} type="date" value={gradeDate} onChange={(e) => setGradeDate(e.target.value)} required />
+              <button type="submit" className={`${btnGhost} sm:col-span-4`} disabled={busy || !gradeStudent || !gradeSubject}>
+                Enregistrer la note
+              </button>
+            </form>
+          ) : null}
+        </ClassSection>
+      ) : null}
+
+      {readOnly ? null : (
+        <ClassSection title="Certificats">
+          <p className="text-xs text-neutral-500">Certificat de scolarité avec lien de vérification. FANABE n’est pas une signature qualifiée.</p>
+          {verifyUrl ? (
+            <p className="mt-2 break-all text-xs">
+              Lien : <a className="text-fanabe-leaf underline" href={verifyUrl}>{verifyUrl}</a>
+            </p>
+          ) : null}
+          <ul className="mt-2 space-y-1 text-sm">
+            {file.students.map((row) => (
+              <li key={row.enrollment_id} className="flex items-center justify-between gap-2 border-t border-black/5 py-1 first:border-t-0">
+                <span>
+                  {row.person?.first_name} {row.person?.last_name}
+                </span>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const payload = await api<{ data: { verify_url?: string } }>(
+                        `/api/v1/schools/${schoolId}/enrollments/${row.enrollment_id}/certificates`,
+                        { ...auth, method: 'POST', body: JSON.stringify({}) },
+                      )
+                      setVerifyUrl(payload.data.verify_url ?? null)
+                    }, 'Certificat émis.')
+                  }
+                >
+                  Émettre
+                </button>
+              </li>
+            ))}
+          </ul>
+        </ClassSection>
+      )}
     </div>
   )
 }
@@ -2506,6 +2654,164 @@ function ExpensesPanel({
   )
 }
 
+function KitsPanel({
+  schoolId,
+  auth,
+  yearId,
+  grades,
+  busy,
+  onBusy,
+  onMessage,
+}: {
+  schoolId: string
+  auth: { token: string }
+  yearId: string
+  grades: GradeRow[]
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+}) {
+  type Pack = { id: string; tier: string; tier_label: string; total_amount: number; pay_instruction: string; supplier: { name: string } | null }
+  type Definition = { id: string; name: string; grade_level: string | null; packs: Pack[] }
+  type Order = { id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }
+
+  const [catalog, setCatalog] = useState<Definition[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [name, setName] = useState('Kit 6ème')
+  const [gradeId, setGradeId] = useState('')
+  const [supplier, setSupplier] = useState('Librairie Analakely')
+  const [eco, setEco] = useState('45000')
+  const [standard, setStandard] = useState('72000')
+
+  async function refresh() {
+    const [defs, list] = await Promise.all([
+      api<{ data: Definition[] }>(`/api/v1/schools/${schoolId}/kit-definitions`, auth),
+      api<{ data: Order[] }>(`/api/v1/schools/${schoolId}/kit-orders`, auth),
+    ])
+    setCatalog(defs.data)
+    setOrders(list.data)
+    setGradeId((prev) => prev || grades[0]?.id || '')
+  }
+
+  useEffect(() => {
+    refresh().catch((error: Error) => onMessage(error.message))
+  }, [schoolId, auth.token])
+
+  async function createKit(event: FormEvent) {
+    event.preventDefault()
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/kit-definitions`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          school_year_id: yearId,
+          grade_level_id: gradeId || null,
+          name,
+          supplier_name: supplier,
+          commission_rate_bps: 250,
+          packs: [
+            { tier: 'eco', total_amount: Number(eco) },
+            { tier: 'standard', total_amount: Number(standard) },
+          ],
+        }),
+      })
+      onMessage('Catalogue kit enregistré. Le parent paie chez le fournisseur.')
+      await refresh()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Catalogue impossible à enregistrer.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function confirmOrder(id: string) {
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/kit-orders/${id}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'confirmed' }),
+      })
+      await refresh()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Commande impossible à confirmer.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Panel className="p-3">
+        <h2 className="text-sm font-semibold">Catalogue</h2>
+        <p className="mt-1 text-xs text-neutral-500">Payer chez le fournisseur. FANABE n’encaisse pas.</p>
+        <form onSubmit={createKit} className="mt-3 grid gap-2 sm:grid-cols-2">
+          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du kit" required />
+          <select className={inputClass} value={gradeId} onChange={(e) => setGradeId(e.target.value)}>
+            {grades.map((grade) => (
+              <option key={grade.id} value={grade.id}>
+                {grade.name}
+              </option>
+            ))}
+          </select>
+          <input className={inputClass} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Fournisseur" required />
+          <input className={inputClass} type="number" min={1} value={eco} onChange={(e) => setEco(e.target.value)} placeholder="Éco (Ar)" />
+          <input className={inputClass} type="number" min={1} value={standard} onChange={(e) => setStandard(e.target.value)} placeholder="Standard (Ar)" />
+          <button type="submit" className={`${btnPrimary} sm:col-span-2`} disabled={busy || !yearId}>
+            Publier le kit
+          </button>
+        </form>
+        <ul className="mt-3 space-y-2 text-sm">
+          {catalog.map((row) => (
+            <li key={row.id} className="border-t border-black/5 pt-2">
+              <p className="font-medium">
+                {row.name}
+                {row.grade_level ? <span className="ml-2 text-xs font-normal text-neutral-500">{row.grade_level}</span> : null}
+              </p>
+              <ul className="mt-1 text-xs text-neutral-600">
+                {row.packs.map((pack) => (
+                  <li key={pack.id}>
+                    {pack.tier_label} · {formatAr(pack.total_amount)} · {pack.pay_instruction}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+      <Panel>
+        <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Commandes</h2>
+        <table className="w-full text-sm">
+          <tbody>
+            {orders.map((row) => (
+              <tr key={row.id} className="border-t border-black/5">
+                <td className="px-3 py-2">
+                  <p className="font-medium">{row.student_name}</p>
+                  <p className="text-xs text-neutral-500">{row.pay_instruction}</p>
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatAr(row.total_amount)}</td>
+                <td className="px-3 py-2 text-right">
+                  {row.status === 'submitted' ? (
+                    <button type="button" className={btnGhost} disabled={busy} onClick={() => void confirmOrder(row.id)}>
+                      Confirmer
+                    </button>
+                  ) : (
+                    <span className="text-xs text-neutral-500">{row.status}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {orders.length === 0 ? <p className="px-3 py-4 text-sm text-neutral-500">Aucune commande.</p> : null}
+      </Panel>
+    </div>
+  )
+}
+
 function DirectionScreen({
   session,
   tab,
@@ -2660,6 +2966,9 @@ function DirectionScreen({
     }
     if (tab === 'indices') {
       loadReliability().catch((error: Error) => setMessage(error.message))
+    }
+    if (tab === 'kits') {
+      loadEnrollments().catch((error: Error) => setMessage(error.message))
     }
     setQuery('')
     setPage(1)
@@ -2919,6 +3228,24 @@ function DirectionScreen({
     }
   }
 
+  async function acknowledgeAlert(alertId: string) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/alerts/${alertId}/acknowledge`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setMessage('Signalement accusé. Un suivi humain reste requis.')
+      await loadCore()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Accusé impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function downloadCsv() {
     const response = await fetch(`/api/v1/schools/${schoolId}/payments/export`, {
       headers: { Authorization: `Bearer ${session.token}`, Accept: 'text/csv' },
@@ -3007,6 +3334,38 @@ function DirectionScreen({
                   <tr>
                     <td className="px-3 py-4 text-sm text-neutral-600" colSpan={2}>
                       Rien à relancer pour le moment.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </Panel>
+          <Panel>
+            <div className="flex items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
+              <h2 className="text-sm font-semibold">Attention</h2>
+              <p className="text-xs text-neutral-500">Signalements, pas un jugement</p>
+            </div>
+            <table className="w-full text-sm">
+              <tbody>
+                {(cockpit?.attention ?? []).map((row) => (
+                  <tr key={row.id} className="border-t border-black/5 first:border-t-0">
+                    <td className="px-3 py-2">
+                      <p className="font-medium">
+                        {row.student ? `${row.student.first_name} ${row.student.last_name}` : 'Élève'}
+                      </p>
+                      <p className="text-xs text-neutral-600">{row.reason_summary}</p>
+                    </td>
+                    <td className="w-28 px-3 py-2 text-right">
+                      <button type="button" disabled={busy} className={btnGhost} onClick={() => acknowledgeAlert(row.id)}>
+                        Accuser
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {(cockpit?.attention?.length ?? 0) === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-sm text-neutral-600" colSpan={2}>
+                      Aucun signalement ouvert.
                     </td>
                   </tr>
                 ) : null}
@@ -3482,6 +3841,10 @@ function DirectionScreen({
         </div>
       ) : null}
 
+      {tab === 'kits' ? (
+        <KitsPanel schoolId={schoolId} auth={auth} yearId={yearId} grades={grades} busy={busy} onBusy={setBusy} onMessage={setMessage} />
+      ) : null}
+
       {tab === 'indices' ? (
         <div className="space-y-3">
           <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-black/8 bg-black/[0.04] lg:grid-cols-4">
@@ -3760,6 +4123,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
               classrooms={classrooms}
               busy={busy}
               readOnly
+              canWriteGrades
               onBusy={setBusy}
               onMessage={setMessage}
               onReload={async () => {
@@ -4203,6 +4567,18 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [finances, setFinances] = useState<Record<string, ChildFinance>>({})
   const [attendance, setAttendance] = useState<Record<string, AttendanceRow[]>>({})
   const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
+  const [kits, setKits] = useState<{
+    children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
+    catalog: Array<{
+      id: string
+      name: string
+      grade_level_id: string | null
+      packs: Array<{ id: string; tier_label: string; total_amount: number; pay_instruction: string }>
+    }>
+    orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
+  }>({ children: [], catalog: [], orders: [] })
+  const [bulletins, setBulletins] = useState<Record<string, { overall_average: number | null }>>({})
+  const [certificates, setCertificates] = useState<Record<string, Array<{ id: string; type_label: string; public_reference: string; status: string }>>>({})
   const [consents, setConsents] = useState<ConsentRow[]>([])
   const [linkRequests, setLinkRequests] = useState<LinkRequestRow[]>([])
   const [transfers, setTransfers] = useState<TransferRow[]>([])
@@ -4228,7 +4604,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       childId: prev.childId || firstGuardian?.id || payload.data[0]?.id || '',
       schoolId: prev.schoolId || schoolId,
     }))
-    const [entries, presence, notes] = await Promise.all([
+    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries] = await Promise.all([
       Promise.all(
         payload.data.map(async (child) => {
           const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, auth)
@@ -4244,10 +4620,42 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
           }),
       ),
       api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', auth),
+      api<{
+        children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
+        catalog: Array<{
+          id: string
+          name: string
+          grade_level_id: string | null
+          packs: Array<{ id: string; tier_label: string; total_amount: number; pay_instruction: string }>
+        }>
+        orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
+      }>('/api/v1/parent/kits', auth),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: { overall_average: number | null } }>(`/api/v1/parent/children/${child.id}/bulletin`, auth)
+            return [child.id, row.data] as const
+          }),
+      ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: Array<{ id: string; type_label: string; public_reference: string; status: string }> }>(
+              `/api/v1/parent/children/${child.id}/certificates`,
+              auth,
+            )
+            return [child.id, row.data] as const
+          }),
+      ),
     ])
     setFinances(Object.fromEntries(entries))
     setAttendance(Object.fromEntries(presence))
     setInbox(notes.data)
+    setKits(kitPayload)
+    setBulletins(Object.fromEntries(bulletinEntries))
+    setCertificates(Object.fromEntries(certEntries))
   }
 
   async function loadAccount() {
@@ -4467,6 +4875,20 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                             ))}
                           </ul>
                         )}
+                        {bulletins[child.id]?.overall_average != null ? (
+                          <p className="mt-2 text-xs text-neutral-600">
+                            Moyenne : <strong>{bulletins[child.id].overall_average}</strong>
+                          </p>
+                        ) : null}
+                        {(certificates[child.id] ?? []).length > 0 ? (
+                          <ul className="mt-2 space-y-0.5 text-xs text-neutral-600">
+                            {certificates[child.id].map((row) => (
+                              <li key={row.id}>
+                                {row.type_label} · {row.public_reference} · {row.status}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
                     ) : null}
                   </Panel>
@@ -4476,6 +4898,70 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
           </ul>
           {children.length === 0 && !message ? (
             <p className="mt-6 text-center text-sm text-neutral-600">Aucun enfant rattaché. Demandez un code à l’école.</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === 'kits' ? (
+        <div className="space-y-3">
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">School Kit</h2>
+            <p className="mt-1 text-xs text-neutral-500">Payer chez le fournisseur. FANABE n’encaisse pas.</p>
+            {kits.catalog.map((definition) => (
+              <div key={definition.id} className="mt-3 border-t border-black/5 pt-2">
+                <p className="text-sm font-medium">{definition.name}</p>
+                <ul className="mt-1 space-y-2 text-sm">
+                  {definition.packs.map((pack) => (
+                    <li key={pack.id} className="flex items-center justify-between gap-2">
+                      <span>
+                        {pack.tier_label} · {formatAr(pack.total_amount)}
+                        <span className="block text-[11px] text-neutral-500">{pack.pay_instruction}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className={btnGhost}
+                        disabled={busy || kits.children.length === 0}
+                        onClick={() => {
+                          const child = kits.children[0]
+                          if (!child) return
+                          setBusy(true)
+                          setMessage(null)
+                          api('/api/v1/parent/kit-orders', {
+                            ...auth,
+                            method: 'POST',
+                            body: JSON.stringify({ enrollment_id: child.enrollment_id, kit_pack_id: pack.id }),
+                          })
+                            .then(() => loadFamily())
+                            .then(() => setMessage(`Commande pour ${child.first_name}. ${pack.pay_instruction}`))
+                            .catch((error: Error) => setMessage(error.message))
+                            .finally(() => setBusy(false))
+                        }}
+                      >
+                        Commander
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {kits.catalog.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Aucun kit proposé pour le moment.</p> : null}
+          </Panel>
+          {kits.orders.length > 0 ? (
+            <Panel>
+              <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Commandes</h2>
+              <ul className="divide-y divide-black/5 text-sm">
+                {kits.orders.map((row) => (
+                  <li key={row.id} className="px-3 py-2">
+                    <p className="font-medium">
+                      {row.student_name} · {formatAr(row.total_amount)}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      {row.status} · {row.pay_instruction}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           ) : null}
         </div>
       ) : null}

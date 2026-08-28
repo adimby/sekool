@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Demo\EnsureCollection;
 use App\Domain\Platform\Demo\EnsureDemoAccounts;
+use App\Domain\Platform\Demo\EnsurePhases567;
 use App\Domain\Platform\Demo\EnsureSchoolCore;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
@@ -48,6 +49,7 @@ class DatabaseSeeder extends Seeder
         app(EnsureDemoAccounts::class)->execute();
         app(EnsureSchoolCore::class)->execute();
         app(EnsureCollection::class)->execute();
+        app(EnsurePhases567::class)->execute();
 
         TenantContext::clear();
     }

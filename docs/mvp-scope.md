@@ -57,7 +57,7 @@ Un test de recette formulable en une phrase : *une direction ouvre FANABE le mat
 
 ### 2.1 Trois inclusions à justifier
 
-**La présence (`Academic`), absente du brief §7.** Sans elle, le cockpit du §11 est vide sur la moitié de ses lignes, le workflow « absence répétée » exigé par le brief est irréalisable, et la ligne « 3 élèves nécessitant une attention » n'a aucune source. La présence est un préalable, pas une extension. Les **notes** en revanche sont écartées : elles sont modélisées mais non implémentées, car l'Early Warning est en phase 7.
+**La présence (`Academic`), absente du brief §7.** Sans elle, le cockpit du §11 est vide sur la moitié de ses lignes, le workflow « absence répétée » exigé par le brief est irréalisable, et la ligne « 3 élèves nécessitant une attention » n'a aucune source. La présence est un préalable, pas une extension. Les **notes** sont livrées en phase 7 (bulletins et Early Warning) et n'autorisent jamais rien (`S-30`).
 
 **Le canal papier.** §12 le mentionne, le brief l'omet. C'est le seul canal qui atteint toutes les familles et le seul strictement gratuit ; sans lui, la démonstration n°3 ne fonctionne que pour les familles équipées, soit une minorité dans le contexte cible.
 
@@ -68,14 +68,14 @@ Un test de recette formulable en une phrase : *une direction ouvre FANABE le mat
 | Priorité §20 | Fonction | Dans le MVP |
 |---|---|---|
 | P0 | Identity + Family Account | Oui |
-| P0 | School Core minimal | Oui (présence incluse, notes exclues) |
+| P0 | School Core minimal | Oui (présence ; notes en phase 7) |
 | P0 | Collection Intelligence | Oui |
 | P0 | Communication multi-canal de base | Oui (application, papier ; SMS en option) |
 | P0 | Reliability familial et relationnel | Family Reliability, School Reliability et Relationship Health |
 | P0 | School Day Cockpit | Oui |
-| P1 | School Kit | Non — phase 6 |
-| P1 | Certificat vérifiable + QR | Non — phase 5 |
-| P1 | Student Early Warning | Non — phase 7 |
+| P1 | School Kit | Oui — phase 6 |
+| P1 | Certificat vérifiable + QR | Oui — phase 5 |
+| P1 | Student Early Warning | Oui — phase 7 |
 | P2 | Marketplace, réseaux | Non |
 
 Le calcul de Relationship Health suppose des signaux de communication accumulés. Sur trop peu de faits, **aucun chiffre n'est affiché** (`band = insufficient`, seuil de 5 événements instrumentés). Le papier et le statut `unknown` sont exclus (`G-07`) : l'absence d'indice n'est jamais un mauvais indice.
@@ -86,7 +86,7 @@ Le calcul de Relationship Health suppose des signaux de communication accumulés
 
 Explicitement exclu, sans que cela remette en cause la roadmap :
 
-**Reporté à une phase ultérieure :** notes et bulletins, Student Early Warning, certificats et QR, School Kit, WhatsApp, réseaux d'établissements, réinscription automatisée, cantine, emploi du temps, remplacements.
+**Reporté à une phase ultérieure :** WhatsApp, réinscription automatisée, cantine, emploi du temps établissement, remplacements.
 
 **Exclu par le cahier des charges lui-même (§25) :** comptabilité complète, marketplace ouverte, réseau social scolaire, identité biométrique, signature qualifiée comme prérequis, partage automatique entre écoles.
 
@@ -107,9 +107,9 @@ Ordre du brief §6 respecté, sans parallélisation ni saut d'étape. Chaque pha
 | **2 — School Core** | Écoles, classes, élèves, inscriptions, présence, frais, paiements | Oui | `Q-06`, `Q-11`, `Q-14` |
 | **3 — Collection Intelligence** | Moteur de risque, dashboard, alertes, workflows | Oui | `Q-08`, `Q-13` |
 | **4 — Reliability** | TrustEvent, Family / School Reliability, Relationship Health | Oui | — |
-| **5 — Documents** | Documents, certificats, vérification QR | Non | `Q-09`, `Q-10`, `Q-17` |
-| **6 — School Kit** | Catalogue, packs, fournisseurs, commandes | Non | `Q-03` |
-| **7 — Intelligence avancée** | Early Warning, cockpit enrichi, recommandations | Non | — |
+| **5 — Documents** | Documents, certificats, vérification QR | Oui | `Q-09`, `Q-10`, `Q-17` |
+| **6 — School Kit** | Catalogue, packs, fournisseurs, commandes | Oui | `Q-03` |
+| **7 — Intelligence avancée** | Early Warning, cockpit enrichi, recommandations | Oui | — |
 
 Les questions bloquantes sont tranchées — voir [`decisions.md`](./decisions.md). La phase 0 démarre.
 
@@ -159,13 +159,13 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 ---
 
-## 6. Phases post-MVP
+## 6. Phases 5 à 7 (livrées)
 
-**Phase 5 — Documents.** Émission de certificats, rendu PDF immuable et haché, jetons et endpoint public de vérification, révocation, `DocumentSigner`, attestation de documents externes. Prérequis : `Q-09`, `Q-10`, et `Q-17` (le domaine du QR est imprimé sur des documents durables — le changer après émission invaliderait des certificats en circulation).
+**Phase 5 — Documents.** Émission de certificats de scolarité, artefact HTML rendu une fois et haché (`G-05`), jeton 160 bits stocké haché, vérification publique `{APP_URL}/verify/{token}`, divulgation minimale `Q-09`, révocation, `DocumentSigner` Ed25519, attestation de documents externes (la provenance `external` reste figée).
 
-**Phase 6 — School Kit.** Besoins par classe, packs Eco/Standard/Premium, fournisseurs et commissions, panier multi-enfants et multi-écoles, commandes et statuts. Prérequis : `Q-03`.
+**Phase 6 — School Kit.** Besoins par niveau, packs Éco/Standard/Premium, fournisseurs tenant, commandes parent. Paiement **chez le fournisseur** (`D-21`). Commission paramètre, jamais encaissée.
 
-**Phase 7 — Intelligence avancée.** Notes et bulletins, Student Early Warning avec formulation neutre et validation humaine, cockpit enrichi, recommandations d'action.
+**Phase 7 — Intelligence avancée.** Notes et bulletins (hors maternelle), Student Early Warning à formulation neutre et accusé humain, liste **Attention** du cockpit distincte des actions de recouvrement.
 
 ---
 
@@ -260,8 +260,11 @@ Sous-ensemble de §23 mesurable dès le MVP :
 | Recouvrement | Taux de collecte à échéance, créances > 30 jours, DSO | Phase 3 |
 | Communication | Taux de remise, taux de lecture (canaux instrumentés **uniquement** — `G-07`) | Phase 3 |
 | Action | Alertes traitées, délai de prise en charge | Phase 3 |
+| Documents | Certificats vérifiés | Phase 5 |
+| School Kit | Commandes transmises au fournisseur | Phase 6 |
+| Early Warning | Signalements ouverts / accusés | Phase 7 |
 
-Reportés : certificats vérifiés (phase 5), School Kit (phase 6), Early Warning (phase 7), rétention (au-delà du MVP).
+Reportés : rétention (au-delà du MVP).
 
 ---
 

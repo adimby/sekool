@@ -10,7 +10,7 @@ FANABE n'est pas un ERP scolaire de plus. C'est une infrastructure de confiance 
 
 ## État du projet
 
-**Conception validée le 21 août 2026. Phases 0 à 4 livrées** : identité, classes, présence, factures, paiements enregistrés, moteur de risque, cockpit du jour, relances, messages famille, fiabilité familiale, fiabilité de l’établissement, santé de relation, versionnement et tableau d’explicabilité. Pas de SMS. Pas d’encaissement en ligne. School Kit, certificats QR et notes restent hors périmètre.
+**Conception validée le 21 août 2026. Phases 0 à 7 livrées** : identité, classes, présence, factures, paiements enregistrés, moteur de risque, cockpit du jour, relances, messages famille, fiabilité, certificats vérifiables, School Kit (paiement chez le fournisseur), notes, bulletins et Early Warning. Pas de SMS. Pas d’encaissement en ligne.
 
 ## Tester sur votre machine (recommandé)
 

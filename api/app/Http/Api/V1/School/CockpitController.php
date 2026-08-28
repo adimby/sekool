@@ -2,8 +2,11 @@
 
 namespace App\Http\Api\V1\School;
 
+use App\Domain\Academic\Actions\DetectStudentAlerts;
 use App\Domain\Academic\Enums\AttendanceStatus;
+use App\Domain\Academic\Enums\StudentAlertStatus;
 use App\Domain\Academic\Models\AttendanceRecord;
+use App\Domain\Academic\Models\StudentAlert;
 use App\Domain\Collection\Models\CollectionForecast;
 use App\Domain\Collection\Models\CollectionTask;
 use App\Domain\Collection\Models\RiskAssessment;
@@ -16,8 +19,9 @@ use Illuminate\Http\JsonResponse;
 
 final class CockpitController extends Controller
 {
-    public function __invoke(): JsonResponse
+    public function __invoke(DetectStudentAlerts $detect): JsonResponse
     {
+        $detect->execute();
         $today = QuietHours::today();
         $present = AttendanceRecord::query()->whereDate('date', $today)->where('status', AttendanceStatus::Present)->count();
         $absent = AttendanceRecord::query()->whereDate('date', $today)->where('status', AttendanceStatus::Absent)->count();
@@ -45,6 +49,12 @@ final class CockpitController extends Controller
             ->orderByDesc('week_starting_on')
             ->first();
 
+        $attention = StudentAlert::query()
+            ->with('enrollment.person')
+            ->where('status', StudentAlertStatus::Open)
+            ->orderByDesc('detected_at')
+            ->get();
+
         return response()->json([
             'as_of' => $today,
             'attendance' => [
@@ -56,6 +66,7 @@ final class CockpitController extends Controller
             'risk_counts' => $riskCounts,
             'forecast' => CollectionPayload::forecast($forecast),
             'actions' => $tasks->map(fn (CollectionTask $task): array => CollectionPayload::task($task))->all(),
+            'attention' => $attention->map(fn (StudentAlert $alert): array => $alert->toPayload())->all(),
         ]);
     }
 }

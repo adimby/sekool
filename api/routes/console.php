@@ -3,6 +3,7 @@
 use App\Domain\Collection\Actions\RecomputeCollection;
 use App\Domain\Platform\Demo\EnsureCollection;
 use App\Domain\Platform\Demo\EnsureDemoAccounts;
+use App\Domain\Platform\Demo\EnsurePhases567;
 use App\Domain\Platform\Demo\EnsureSchoolCore;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,9 @@ Artisan::command('demo:bootstrap', function (): int {
 
     $this->info('Ensuring collection intelligence (risque, file, cockpit)…');
     app(EnsureCollection::class)->execute();
+
+    $this->info('Ensuring documents, kits et notes (phases 5–7)…');
+    app(EnsurePhases567::class)->execute();
 
     return 0;
 })->purpose('Extensions Postgres, migrations, et comptes de démo');

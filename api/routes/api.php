@@ -3,6 +3,9 @@
 use App\Http\Api\V1\Auth\ClaimInvitationController;
 use App\Http\Api\V1\Auth\LoginController;
 use App\Http\Api\V1\Auth\MeController;
+use App\Http\Api\V1\ParentPortal\ParentAcademicController;
+use App\Http\Api\V1\ParentPortal\ParentKitController;
+use App\Http\Api\V1\PublicVerify\PublicCertificateVerifyController;
 use App\Http\Api\V1\ParentPortal\AccessLogController;
 use App\Http\Api\V1\ParentPortal\ChildAttendanceController;
 use App\Http\Api\V1\ParentPortal\ChildFinanceController;
@@ -15,12 +18,15 @@ use App\Http\Api\V1\ParentPortal\TransferController as ParentTransferController;
 use App\Http\Api\V1\School\AcademicHistoryController;
 use App\Http\Api\V1\School\AssignClassroomController;
 use App\Http\Api\V1\School\AttendanceController;
+use App\Http\Api\V1\School\CertificateController;
 use App\Http\Api\V1\School\ClassroomController;
 use App\Http\Api\V1\School\ClassroomLifeController;
 use App\Http\Api\V1\School\CockpitController;
 use App\Http\Api\V1\School\CollectionController;
 use App\Http\Api\V1\School\EnrollmentController;
+use App\Http\Api\V1\School\DocumentAttestController;
 use App\Http\Api\V1\School\FamilyController;
+use App\Http\Api\V1\School\GradeController;
 use App\Http\Api\V1\School\FamilyReliabilityController;
 use App\Http\Api\V1\School\FeeScheduleController;
 use App\Http\Api\V1\School\GradeLevelController;
@@ -32,6 +38,8 @@ use App\Http\Api\V1\School\PersonLinkRequestController;
 use App\Http\Api\V1\School\ReliabilityController;
 use App\Http\Api\V1\School\RiskAssessmentController;
 use App\Http\Api\V1\School\SchoolExpenseController;
+use App\Http\Api\V1\School\SchoolKitController;
+use App\Http\Api\V1\School\StudentAlertController;
 use App\Http\Api\V1\School\SchoolNetworkController;
 use App\Http\Api\V1\School\SchoolYearController;
 use App\Http\Api\V1\School\ShareTokenRedeemController;
@@ -44,6 +52,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', LoginController::class);
 Route::post('/auth/invitations/claim', ClaimInvitationController::class)->middleware('throttle:10,1');
+Route::get('/verify/certificates/{token}', PublicCertificateVerifyController::class)
+    ->middleware('throttle:certificate-verify');
 
 Route::middleware('auth:sanctum')->get('/me', MeController::class);
 
@@ -59,6 +69,10 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'show']);
         Route::get('/schools/{school}/classrooms/{classroom}/roster', [ClassroomController::class, 'roster']);
         Route::get('/schools/{school}/attendance', [AttendanceController::class, 'index']);
+        Route::get('/schools/{school}/subjects', [GradeController::class, 'subjects']);
+        Route::get('/schools/{school}/classrooms/{classroom}/grades', [GradeController::class, 'index']);
+        Route::post('/schools/{school}/classrooms/{classroom}/grades', [GradeController::class, 'store']);
+        Route::get('/schools/{school}/enrollments/{enrollment}/bulletin', [GradeController::class, 'bulletin']);
     });
 
     Route::middleware('school.role:teacher')->group(function (): void {
@@ -120,6 +134,17 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/reliability/overview', [ReliabilityController::class, 'overview']);
         Route::get('/schools/{school}/reliability/school', [ReliabilityController::class, 'school']);
         Route::get('/schools/{school}/reliability/school/compare', [ReliabilityController::class, 'schoolCompare']);
+        Route::get('/schools/{school}/certificates', [CertificateController::class, 'index']);
+        Route::post('/schools/{school}/enrollments/{enrollment}/certificates', [CertificateController::class, 'store']);
+        Route::post('/schools/{school}/certificates/{certificate}/revoke', [CertificateController::class, 'revoke']);
+        Route::post('/schools/{school}/documents/{document}/attest', DocumentAttestController::class);
+        Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
+        Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
+        Route::get('/schools/{school}/kit-orders', [SchoolKitController::class, 'orders']);
+        Route::patch('/schools/{school}/kit-orders/{order}', [SchoolKitController::class, 'updateOrder']);
+        Route::post('/schools/{school}/subjects', [GradeController::class, 'storeSubject']);
+        Route::get('/schools/{school}/alerts', [StudentAlertController::class, 'index']);
+        Route::post('/schools/{school}/alerts/{alert}/acknowledge', [StudentAlertController::class, 'acknowledge']);
         Route::post('/schools/{school}/fee-schedules', [FeeScheduleController::class, 'store']);
         Route::post('/schools/{school}/fee-schedules/copy-year', [FeeScheduleController::class, 'copyYear']);
         Route::patch('/schools/{school}/fee-schedules/{schedule}', [FeeScheduleController::class, 'update']);
@@ -148,6 +173,10 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::patch('/children/{person}', [ChildrenController::class, 'update']);
     Route::get('/children/{person}/finance', ChildFinanceController::class);
     Route::get('/children/{person}/attendance', ChildAttendanceController::class);
+    Route::get('/children/{person}/bulletin', [ParentAcademicController::class, 'bulletin']);
+    Route::get('/children/{person}/certificates', [ParentAcademicController::class, 'certificates']);
+    Route::get('/kits', [ParentKitController::class, 'index']);
+    Route::post('/kit-orders', [ParentKitController::class, 'store']);
     Route::get('/messages', ParentMessageController::class);
     Route::post('/share-tokens', [ShareTokenController::class, 'store']);
 
