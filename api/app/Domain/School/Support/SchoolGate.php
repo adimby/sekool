@@ -112,6 +112,37 @@ final class SchoolGate
         return self::hasAny($request, ...self::FINANCE);
     }
 
+    /**
+     * Titulaire of a class of this grade, or direction / service achat.
+     */
+    public static function canEditKit(Request $request, string $gradeLevelId): bool
+    {
+        if (self::isDirection($request) || self::isFinance($request)) {
+            return true;
+        }
+
+        return self::visibleClassrooms($request)
+            ->where('grade_level_id', $gradeLevelId)
+            ->exists();
+    }
+
+    /**
+     * @return list<string>|null null = every grade (direction / finance)
+     */
+    public static function visibleKitGradeIds(Request $request): ?array
+    {
+        if (self::isDirection($request) || self::isFinance($request)) {
+            return null;
+        }
+
+        return self::visibleClassrooms($request)
+            ->pluck('grade_level_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public static function canViewClassroom(Request $request, Classroom $classroom): bool
     {
         if (self::isDirection($request)) {

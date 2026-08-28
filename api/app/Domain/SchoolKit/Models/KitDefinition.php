@@ -5,6 +5,7 @@ namespace App\Domain\SchoolKit\Models;
 use App\Domain\Academic\Models\GradeLevel;
 use App\Domain\Platform\Tenancy\BelongsToTenant;
 use App\Domain\School\Models\SchoolYear;
+use App\Domain\SchoolKit\Enums\KitPriceSource;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +21,16 @@ class KitDefinition extends Model
         'grade_level_id',
         'name',
         'status',
+        'price_source',
+        'copied_from_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'price_source' => KitPriceSource::class,
+        ];
+    }
 
     public function year(): BelongsTo
     {
@@ -30,6 +40,11 @@ class KitDefinition extends Model
     public function gradeLevel(): BelongsTo
     {
         return $this->belongsTo(GradeLevel::class);
+    }
+
+    public function copiedFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'copied_from_id');
     }
 
     public function needs(): HasMany

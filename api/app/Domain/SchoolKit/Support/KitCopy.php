@@ -12,4 +12,9 @@ final class KitCopy
             ? 'Payer chez le fournisseur. FANABE n’encaisse pas.'
             : 'Payer chez '.$name.'. FANABE n’encaisse pas.';
     }
+
+    public static function parentChoice(): string
+    {
+        return 'Commander une gamme chez le partenaire, ou fournir les articles vous-même. FANABE n’encaisse pas.';
+    }
 }

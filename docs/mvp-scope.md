@@ -163,7 +163,7 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Phase 5 — Documents.** Émission de certificats de scolarité, artefact HTML rendu une fois et haché (`G-05`), jeton 160 bits stocké haché, vérification publique `{APP_URL}/verify/{token}`, divulgation minimale `Q-09`, révocation, `DocumentSigner` Ed25519, attestation de documents externes (la provenance `external` reste figée).
 
-**Phase 6 — School Kit.** Besoins par niveau, packs Éco/Standard/Premium, fournisseurs tenant, commandes parent. Paiement **chez le fournisseur** (`D-21`). Commission paramètre, jamais encaissée.
+**Phase 6 — School Kit.** Liste de fournitures par niveau et année, trois gammes (Éco / Standard / Luxe) avec marque et prix par article, publiée par la direction ou le titulaire, recopiable d’une année sur l’autre. Le parent commande une gamme chez le partenaire **ou** fournit lui-même. Paiement **chez le fournisseur** (`D-21`). Commission paramètre, jamais encaissée.
 
 **Phase 7 — Intelligence avancée.** Notes et bulletins (hors maternelle), Student Early Warning à formulation neutre et accusé humain, liste **Attention** du cockpit distincte des actions de recouvrement.
 

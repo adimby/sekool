@@ -330,7 +330,7 @@ type ReliabilityOverview = {
 }
 
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
-type TeacherTab = 'classe' | 'appel'
+type TeacherTab = 'classe' | 'appel' | 'kits'
 type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
 
 const PAGE_SIZE = 40
@@ -348,6 +348,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
   { id: 'classe', label: 'Classe' },
+  { id: 'kits', label: 'Kits' },
 ]
 
 const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
@@ -504,7 +505,15 @@ function formatAr(amount: number): string {
   return `${new Intl.NumberFormat('fr-FR').format(amount)} Ar`
 }
 
-type KitNeed = { id?: string; label: string; quantity: number }
+type KitOffer = {
+  tier: string
+  tier_label?: string
+  brand: string | null
+  unit_amount: number
+  quantity?: number
+  line_amount?: number
+}
+type KitNeed = { id?: string; label: string; quantity: number; notes?: string | null; offers?: KitOffer[] }
 type KitPackRow = {
   id: string
   tier?: string
@@ -518,22 +527,89 @@ type KitDefinitionRow = {
   name: string
   grade_level?: string | null
   grade_level_id?: string | null
+  price_source?: string
+  price_source_label?: string
+  choice_copy?: string
   needs?: KitNeed[]
   packs: KitPackRow[]
 }
+type KitOrderRow = {
+  id: string
+  enrollment_id?: string
+  kit_definition_id?: string | null
+  status: string
+  status_label?: string
+  fulfillment?: string
+  fulfillment_label?: string
+  total_amount: number
+  student_name: string
+  pay_instruction: string
+}
 
-function parseNeedLines(text: string): KitNeed[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const match = line.match(/^(\d+)\s*[x×*]?\s+(.+)$/i)
-      if (match) {
-        return { quantity: Number(match[1]), label: match[2].trim() }
-      }
-      return { quantity: 1, label: line }
-    })
+const KIT_TIERS = [
+  { id: 'eco', label: 'Éco' },
+  { id: 'standard', label: 'Standard' },
+  { id: 'premium', label: 'Luxe' },
+] as const
+
+function kitOffer(need: KitNeed, tier: string): KitOffer | undefined {
+  return need.offers?.find((row) => row.tier === tier || (tier === 'premium' && row.tier === 'luxe'))
+}
+
+function KitSupplyTable({ definition }: { definition: KitDefinitionRow }) {
+  const needs = definition.needs ?? []
+  if (needs.length === 0) {
+    return <p className="mt-1 text-xs text-neutral-500">Aucune fourniture listée pour ce niveau.</p>
+  }
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full min-w-[36rem] text-sm">
+        <thead className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+          <tr>
+            <th className="py-1 pr-2 font-medium">Article</th>
+            <th className="py-1 pr-2 font-medium">Qté</th>
+            {KIT_TIERS.map((tier) => (
+              <th key={tier.id} className="py-1 pr-2 font-medium">
+                {tier.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {needs.map((need, index) => (
+            <tr key={need.id ?? `${need.label}-${index}`} className="border-t border-black/5">
+              <td className="py-1.5 pr-2 font-medium">{need.label}</td>
+              <td className="py-1.5 pr-2 tabular-nums">{need.quantity}</td>
+              {KIT_TIERS.map((tier) => {
+                const offer = kitOffer(need, tier.id)
+                return (
+                  <td key={tier.id} className="py-1.5 pr-2 text-xs text-neutral-600">
+                    {offer?.brand ? <span className="block">{offer.brand}</span> : null}
+                    {offer ? <span className="tabular-nums">{formatAr(offer.unit_amount)}</span> : '—'}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-black/10 text-xs">
+            <td className="py-1.5 pr-2 font-medium" colSpan={2}>
+              Total
+            </td>
+            {KIT_TIERS.map((tier) => {
+              const pack = definition.packs.find((row) => row.tier === tier.id || (tier.id === 'premium' && row.tier === 'luxe'))
+              return (
+                <td key={tier.id} className="py-1.5 pr-2 font-medium tabular-nums">
+                  {pack ? formatAr(pack.total_amount) : '—'}
+                </td>
+              )
+            })}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
 }
 
 function certificateStatusLabel(status: string): string {
@@ -542,21 +618,6 @@ function certificateStatusLabel(status: string): string {
   if (status === 'expired') return 'Expiré'
   if (status === 'issued') return 'Émis'
   return status
-}
-
-function KitNeedsList({ needs }: { needs?: KitNeed[] }) {
-  if (!needs || needs.length === 0) {
-    return <p className="mt-1 text-xs text-neutral-500">Aucun matériel listé.</p>
-  }
-  return (
-    <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
-      {needs.map((need, index) => (
-        <li key={need.id ?? `${need.label}-${index}`}>
-          {need.quantity} × {need.label}
-        </li>
-      ))}
-    </ul>
-  )
 }
 
 type BulletinRow = {
@@ -2803,51 +2864,112 @@ function ExpensesPanel({
   )
 }
 
+function emptyKitLine() {
+  return {
+    label: '',
+    quantity: '1',
+    ecoBrand: '',
+    ecoPrice: '',
+    standardBrand: '',
+    standardPrice: '',
+    luxeBrand: '',
+    luxePrice: '',
+  }
+}
+
+function linesFromDefinition(row: KitDefinitionRow | undefined) {
+  if (!row?.needs?.length) {
+    return [emptyKitLine()]
+  }
+  return row.needs.map((need) => {
+    const eco = kitOffer(need, 'eco')
+    const standard = kitOffer(need, 'standard')
+    const luxe = kitOffer(need, 'premium')
+    return {
+      label: need.label,
+      quantity: String(need.quantity),
+      ecoBrand: eco?.brand ?? '',
+      ecoPrice: eco ? String(eco.unit_amount) : '',
+      standardBrand: standard?.brand ?? '',
+      standardPrice: standard ? String(standard.unit_amount) : '',
+      luxeBrand: luxe?.brand ?? '',
+      luxePrice: luxe ? String(luxe.unit_amount) : '',
+    }
+  })
+}
+
 function KitsPanel({
   schoolId,
   auth,
   yearId,
+  years = [],
   grades,
   busy,
   onBusy,
   onMessage,
+  canManageOrders = true,
+  lockedGradeId,
 }: {
   schoolId: string
   auth: { token: string }
   yearId: string
+  years?: YearRow[]
   grades: GradeRow[]
   busy: boolean
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
+  canManageOrders?: boolean
+  lockedGradeId?: string
 }) {
-  type Order = { id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }
-
   const [catalog, setCatalog] = useState<KitDefinitionRow[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
-  const [name, setName] = useState('Kit 6ème')
-  const [gradeId, setGradeId] = useState('')
+  const [orders, setOrders] = useState<KitOrderRow[]>([])
+  const [gradeId, setGradeId] = useState(lockedGradeId ?? '')
+  const [priceSource, setPriceSource] = useState('supplier')
   const [supplier, setSupplier] = useState('Librairie Analakely')
-  const [eco, setEco] = useState('45000')
-  const [standard, setStandard] = useState('72000')
-  const [premium, setPremium] = useState('98000')
-  const [needsText, setNeedsText] = useState('4 Cahier 200 pages\n6 Stylos')
+  const [lines, setLines] = useState([emptyKitLine()])
+  const previousYears = years.filter((row) => row.id !== yearId)
+
+  const selected = catalog.find((row) => row.grade_level_id === gradeId)
 
   async function refresh() {
-    const [defs, list] = await Promise.all([
-      api<{ data: KitDefinitionRow[] }>(`/api/v1/schools/${schoolId}/kit-definitions`, auth),
-      api<{ data: Order[] }>(`/api/v1/schools/${schoolId}/kit-orders`, auth),
-    ])
+    const defs = await api<{ data: KitDefinitionRow[] }>(`/api/v1/schools/${schoolId}/kit-definitions`, auth)
     setCatalog(defs.data)
-    setOrders(list.data)
-    setGradeId((prev) => prev || grades[0]?.id || '')
+    if (canManageOrders) {
+      try {
+        const list = await api<{ data: KitOrderRow[] }>(`/api/v1/schools/${schoolId}/kit-orders`, auth)
+        setOrders(list.data)
+      } catch {
+        setOrders([])
+      }
+    }
+    setGradeId((prev) => lockedGradeId || prev || grades[0]?.id || '')
   }
 
   useEffect(() => {
     refresh().catch((error: Error) => onMessage(error.message))
-  }, [schoolId, auth.token])
+  }, [schoolId, auth.token, lockedGradeId])
 
-  async function createKit(event: FormEvent) {
+  useEffect(() => {
+    const row = catalog.find((item) => item.grade_level_id === gradeId)
+    if (!row) {
+      setLines([emptyKitLine()])
+      setPriceSource('supplier')
+      return
+    }
+    setLines(linesFromDefinition(row))
+    setPriceSource(row.price_source ?? 'supplier')
+    const name = row.packs[0]?.supplier?.name
+    if (name) setSupplier(name)
+  }, [gradeId, catalog])
+
+  function updateLine(index: number, patch: Partial<ReturnType<typeof emptyKitLine>>) {
+    setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+  }
+
+  async function saveList(event: FormEvent) {
     event.preventDefault()
+    const filled = lines.filter((line) => line.label.trim() !== '')
+    if (filled.length === 0 || !gradeId) return
     onBusy(true)
     onMessage(null)
     try {
@@ -2856,22 +2978,45 @@ function KitsPanel({
         method: 'POST',
         body: JSON.stringify({
           school_year_id: yearId,
-          grade_level_id: gradeId || null,
-          name,
-          supplier_name: supplier,
+          grade_level_id: gradeId,
+          price_source: priceSource,
+          supplier_name: priceSource === 'purchasing' ? 'Service achat' : supplier,
           commission_rate_bps: 250,
-          needs: parseNeedLines(needsText),
-          packs: [
-            { tier: 'eco', total_amount: Number(eco) },
-            { tier: 'standard', total_amount: Number(standard) },
-            ...(Number(premium) > 0 ? [{ tier: 'premium', total_amount: Number(premium) }] : []),
-          ],
+          needs: filled.map((line) => ({
+            label: line.label.trim(),
+            quantity: Number(line.quantity) || 1,
+            offers: [
+              { tier: 'eco', brand: line.ecoBrand.trim() || null, unit_amount: Number(line.ecoPrice) || 0 },
+              { tier: 'standard', brand: line.standardBrand.trim() || null, unit_amount: Number(line.standardPrice) || 0 },
+              { tier: 'luxe', brand: line.luxeBrand.trim() || null, unit_amount: Number(line.luxePrice) || 0 },
+            ].filter((offer) => offer.unit_amount > 0),
+          })),
         }),
       })
-      onMessage('Catalogue kit enregistré. Le parent paie chez le fournisseur.')
+      onMessage('Liste de fournitures publiée. Les parents commandent chez le partenaire ou fournissent eux-mêmes.')
       await refresh()
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : 'Catalogue impossible à enregistrer.')
+      onMessage(error instanceof Error ? error.message : 'Liste impossible à enregistrer.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function copyPrevious() {
+    const from = previousYears[0]
+    if (!from || !yearId) return
+    onBusy(true)
+    onMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/kit-definitions/copy-year`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({ from_year_id: from.id, to_year_id: yearId }),
+      })
+      onMessage(`Liste reprise de ${from.label}. Ajustez marques et prix si besoin.`)
+      await refresh()
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Reprise impossible.')
     } finally {
       onBusy(false)
     }
@@ -2897,77 +3042,123 @@ function KitsPanel({
   return (
     <div className="space-y-3">
       <Panel className="p-3">
-        <h2 className="text-sm font-semibold">Catalogue</h2>
-        <p className="mt-1 text-xs text-neutral-500">Payer chez le fournisseur. FANABE n’encaisse pas.</p>
-        <form onSubmit={createKit} className="mt-3 grid gap-2 sm:grid-cols-2">
-          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du kit" required />
-          <select className={inputClass} value={gradeId} onChange={(e) => setGradeId(e.target.value)}>
-            {grades.map((grade) => (
-              <option key={grade.id} value={grade.id}>
-                {grade.name}
-              </option>
-            ))}
-          </select>
-          <input className={inputClass} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Fournisseur" required />
-          <input className={inputClass} type="number" min={1} value={eco} onChange={(e) => setEco(e.target.value)} placeholder="Éco (Ar)" />
-          <input className={inputClass} type="number" min={1} value={standard} onChange={(e) => setStandard(e.target.value)} placeholder="Standard (Ar)" />
-          <input className={inputClass} type="number" min={0} value={premium} onChange={(e) => setPremium(e.target.value)} placeholder="Premium (Ar)" />
-          <textarea
-            className={`${inputClass} h-20 py-1.5 sm:col-span-2`}
-            value={needsText}
-            onChange={(e) => setNeedsText(e.target.value)}
-            placeholder={'Une ligne par article, ex.\n4 Cahier 200 pages\n6 Stylos'}
-          />
-          <button type="submit" className={`${btnPrimary} sm:col-span-2`} disabled={busy || !yearId}>
-            Publier le kit
-          </button>
-        </form>
-        <ul className="mt-3 space-y-2 text-sm">
-          {catalog.map((row) => (
-            <li key={row.id} className="border-t border-black/5 pt-2">
-              <p className="font-medium">
-                {row.name}
-                {row.grade_level ? <span className="ml-2 text-xs font-normal text-neutral-500">{row.grade_level}</span> : null}
-              </p>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Matériel</p>
-              <KitNeedsList needs={row.needs} />
-              <ul className="mt-1 text-xs text-neutral-600">
-                {row.packs.map((pack) => (
-                  <li key={pack.id}>
-                    {pack.tier_label} · {formatAr(pack.total_amount)} · {pack.pay_instruction}
-                  </li>
+        <h2 className="text-sm font-semibold">Fournitures de l’année</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          Liste par niveau, publiée à l’inscription. Trois gammes (éco, standard, luxe) : marque et prix unitaires.
+          Le parent commande chez le partenaire ou fournit lui-même. FANABE n’encaisse pas.
+        </p>
+        <form onSubmit={saveList} className="mt-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select
+              className={inputClass}
+              value={gradeId}
+              disabled={Boolean(lockedGradeId)}
+              onChange={(e) => setGradeId(e.target.value)}
+            >
+              {grades.map((grade) => (
+                <option key={grade.id} value={grade.id}>
+                  {grade.name}
+                </option>
+              ))}
+            </select>
+            <select className={inputClass} value={priceSource} onChange={(e) => setPriceSource(e.target.value)}>
+              <option value="supplier">Prix / marques : fournisseur</option>
+              <option value="purchasing">Prix / marques : service achat</option>
+            </select>
+            {priceSource === 'supplier' ? (
+              <input className={inputClass} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Fournisseur partenaire" required />
+            ) : (
+              <p className="self-center text-xs text-neutral-500">Service achat de l’école.</p>
+            )}
+            {canManageOrders && previousYears.length > 0 ? (
+              <button type="button" className={btnGhost} disabled={busy} onClick={() => void copyPrevious()}>
+                Reprendre {previousYears[0].label}
+              </button>
+            ) : null}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-sm">
+              <thead className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                <tr>
+                  <th className="py-1 pr-1 font-medium">Article</th>
+                  <th className="py-1 pr-1 font-medium">Qté</th>
+                  <th className="py-1 pr-1 font-medium">Éco</th>
+                  <th className="py-1 pr-1 font-medium">Standard</th>
+                  <th className="py-1 pr-1 font-medium">Luxe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, index) => (
+                  <tr key={index} className="border-t border-black/5">
+                    <td className="py-1 pr-1">
+                      <input className={inputClass} value={line.label} onChange={(e) => updateLine(index, { label: e.target.value })} placeholder="Cahier 200 pages" />
+                    </td>
+                    <td className="py-1 pr-1">
+                      <input className={`${inputClass} w-14`} type="number" min={1} value={line.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} />
+                    </td>
+                    {(['eco', 'standard', 'luxe'] as const).map((tier) => {
+                      const brandKey = tier === 'eco' ? 'ecoBrand' : tier === 'standard' ? 'standardBrand' : 'luxeBrand'
+                      const priceKey = tier === 'eco' ? 'ecoPrice' : tier === 'standard' ? 'standardPrice' : 'luxePrice'
+                      return (
+                        <td key={tier} className="py-1 pr-1">
+                          <input className={inputClass} value={line[brandKey]} onChange={(e) => updateLine(index, { [brandKey]: e.target.value })} placeholder="Marque" />
+                          <input className={`${inputClass} mt-1`} type="number" min={0} value={line[priceKey]} onChange={(e) => updateLine(index, { [priceKey]: e.target.value })} placeholder="Prix u. Ar" />
+                        </td>
+                      )
+                    })}
+                  </tr>
                 ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={btnGhost} onClick={() => setLines((current) => [...current, emptyKitLine()])}>
+              Ajouter un article
+            </button>
+            <button type="submit" className={btnPrimary} disabled={busy || !yearId || !gradeId}>
+              Publier la liste
+            </button>
+          </div>
+        </form>
+        {selected ? (
+          <div className="mt-3 border-t border-black/5 pt-2">
+            <p className="text-xs text-neutral-500">
+              {selected.price_source_label}
+              {selected.packs[0]?.supplier?.name ? ` · ${selected.packs[0].supplier.name}` : ''}
+            </p>
+            <KitSupplyTable definition={selected} />
+          </div>
+        ) : null}
       </Panel>
-      <Panel>
-        <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Commandes</h2>
-        <table className="w-full text-sm">
-          <tbody>
-            {orders.map((row) => (
-              <tr key={row.id} className="border-t border-black/5">
-                <td className="px-3 py-2">
-                  <p className="font-medium">{row.student_name}</p>
-                  <p className="text-xs text-neutral-500">{row.pay_instruction}</p>
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatAr(row.total_amount)}</td>
-                <td className="px-3 py-2 text-right">
-                  {row.status === 'submitted' ? (
-                    <button type="button" className={btnGhost} disabled={busy} onClick={() => void confirmOrder(row.id)}>
-                      Confirmer
-                    </button>
-                  ) : (
-                    <span className="text-xs text-neutral-500">{row.status}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {orders.length === 0 ? <p className="px-3 py-4 text-sm text-neutral-500">Aucune commande.</p> : null}
-      </Panel>
+      {canManageOrders ? (
+        <Panel>
+          <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Choix des familles</h2>
+          <table className="w-full text-sm">
+            <tbody>
+              {orders.map((row) => (
+                <tr key={row.id} className="border-t border-black/5">
+                  <td className="px-3 py-2">
+                    <p className="font-medium">{row.student_name}</p>
+                    <p className="text-xs text-neutral-500">{row.pay_instruction}</p>
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs text-neutral-600">{row.fulfillment_label ?? row.status_label ?? row.status}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.total_amount > 0 ? formatAr(row.total_amount) : '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    {row.status === 'submitted' ? (
+                      <button type="button" className={btnGhost} disabled={busy} onClick={() => void confirmOrder(row.id)}>
+                        Confirmer
+                      </button>
+                    ) : (
+                      <span className="text-xs text-neutral-500">{row.status_label ?? row.status}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {orders.length === 0 ? <p className="px-3 py-4 text-sm text-neutral-500">Aucun choix pour le moment.</p> : null}
+        </Panel>
+      ) : null}
     </div>
   )
 }
@@ -4002,7 +4193,16 @@ function DirectionScreen({
       ) : null}
 
       {tab === 'kits' ? (
-        <KitsPanel schoolId={schoolId} auth={auth} yearId={yearId} grades={grades} busy={busy} onBusy={setBusy} onMessage={setMessage} />
+        <KitsPanel
+          schoolId={schoolId}
+          auth={auth}
+          yearId={yearId}
+          years={years}
+          grades={grades}
+          busy={busy}
+          onBusy={setBusy}
+          onMessage={setMessage}
+        />
       ) : null}
 
       {tab === 'indices' ? (
@@ -4173,6 +4373,8 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [marks, setMarks] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [years, setYears] = useState<YearRow[]>([])
+  const [yearId, setYearId] = useState('')
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const currentClass = classrooms.find((row) => row.id === selectedClassroom)
   const visibleStudents = students.filter((row) =>
@@ -4180,9 +4382,15 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   )
 
   async function refresh() {
-    const classList = await api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth)
+    const [classList, yearsPayload] = await Promise.all([
+      api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
+      api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth),
+    ])
     setClassrooms(classList.data)
     setSelectedClassroom((prev) => prev || classList.data[0]?.id || '')
+    const current = yearsPayload.data.find((year) => year.is_current) ?? yearsPayload.data[0]
+    setYears(yearsPayload.data)
+    setYearId(current?.id ?? classList.data[0]?.school_year_id ?? '')
   }
 
   async function loadRoster(classroomId: string) {
@@ -4337,6 +4545,27 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
           </form>
         </Panel>
       ) : null}
+
+      {tab === 'kits' && classrooms.length > 0 ? (
+        <KitsPanel
+          schoolId={schoolId}
+          auth={auth}
+          yearId={yearId}
+          years={years}
+          grades={classrooms
+            .map((row) => ({
+              id: row.grade_level?.id ?? row.grade_level_id,
+              name: row.grade_level?.name ?? row.name,
+            }))
+            .filter((row, index, list) => row.id && list.findIndex((item) => item.id === row.id) === index)}
+          busy={busy}
+          onBusy={setBusy}
+          onMessage={setMessage}
+          canManageOrders={false}
+          lockedGradeId={currentClass?.grade_level?.id ?? currentClass?.grade_level_id}
+        />
+      ) : null}
+
       {currentClass && tab === 'appel' ? <p className="mt-2 text-[11px] text-neutral-500">Appel de {currentClass.name} — professeur de la classe uniquement.</p> : null}
     </main>
   )
@@ -4728,9 +4957,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [attendance, setAttendance] = useState<Record<string, AttendanceRow[]>>({})
   const [inbox, setInbox] = useState<ParentInboxMessage[]>([])
   const [kits, setKits] = useState<{
-    children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
+    children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string; grade_level_id?: string | null }>
     catalog: KitDefinitionRow[]
-    orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
+    orders: KitOrderRow[]
   }>({ children: [], catalog: [], orders: [] })
   const [bulletins, setBulletins] = useState<Record<string, BulletinRow>>({})
   const [certificates, setCertificates] = useState<Record<string, Array<{ id: string; type_label: string; public_reference: string; status: string }>>>({})
@@ -4776,9 +5005,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       ),
       api<{ data: ParentInboxMessage[] }>('/api/v1/parent/messages', auth),
       api<{
-        children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string }>
+        children: Array<{ person_id: string; enrollment_id: string; first_name: string; last_name: string; grade_level_id?: string | null }>
         catalog: KitDefinitionRow[]
-        orders: Array<{ id: string; status: string; total_amount: number; student_name: string; pay_instruction: string }>
+        orders: KitOrderRow[]
       }>('/api/v1/parent/kits', auth),
       Promise.all(
         payload.data
@@ -5071,60 +5300,108 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       {tab === 'kits' ? (
         <div className="space-y-3">
           <Panel className="p-3">
-            <h2 className="text-sm font-semibold">School Kit</h2>
-            <p className="mt-1 text-xs text-neutral-500">Payer chez le fournisseur. FANABE n’encaisse pas.</p>
-            {kits.catalog.map((definition) => (
-              <div key={definition.id} className="mt-3 border-t border-black/5 pt-2">
-                <p className="text-sm font-medium">{definition.name}</p>
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Matériel</p>
-                <KitNeedsList needs={definition.needs} />
-                <ul className="mt-2 space-y-2 text-sm">
-                  {definition.packs.map((pack) => (
-                    <li key={pack.id} className="flex items-center justify-between gap-2">
-                      <span>
-                        {pack.tier_label} · {formatAr(pack.total_amount)}
-                        <span className="block text-[11px] text-neutral-500">{pack.pay_instruction}</span>
-                      </span>
+            <h2 className="text-sm font-semibold">Fournitures</h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              Liste du niveau pour l’année. Commander une gamme chez le partenaire, ou fournir les articles vous-même.
+              FANABE n’encaisse pas.
+            </p>
+            {kits.catalog.map((definition) => {
+              const child =
+                kits.children.find((row) => row.grade_level_id && row.grade_level_id === definition.grade_level_id) ??
+                kits.children[0]
+              const already = kits.orders.some(
+                (row) =>
+                  row.status !== 'cancelled' &&
+                  row.enrollment_id === child?.enrollment_id &&
+                  (row.kit_definition_id == null || row.kit_definition_id === definition.id),
+              )
+              return (
+                <div key={definition.id} className="mt-3 border-t border-black/5 pt-2">
+                  <p className="text-sm font-medium">
+                    {definition.name}
+                    {definition.grade_level ? <span className="ml-2 text-xs font-normal text-neutral-500">{definition.grade_level}</span> : null}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-neutral-500">
+                    {definition.price_source_label}
+                    {definition.packs[0]?.supplier?.name ? ` · ${definition.packs[0].supplier.name}` : ''}
+                  </p>
+                  <KitSupplyTable definition={definition} />
+                  {already ? (
+                    <p className="mt-2 text-xs text-neutral-500">Un choix est déjà enregistré pour cet élève.</p>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {definition.packs.map((pack) => (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          className={btnGhost}
+                          disabled={busy || !child}
+                          onClick={() => {
+                            if (!child) return
+                            setBusy(true)
+                            setMessage(null)
+                            api('/api/v1/parent/kit-orders', {
+                              ...auth,
+                              method: 'POST',
+                              body: JSON.stringify({
+                                enrollment_id: child.enrollment_id,
+                                fulfillment: 'partner',
+                                kit_pack_id: pack.id,
+                              }),
+                            })
+                              .then(() => loadFamily())
+                              .then(() => setMessage(`Commande ${pack.tier_label} pour ${child.first_name}. ${pack.pay_instruction}`))
+                              .catch((error: Error) => setMessage(error.message))
+                              .finally(() => setBusy(false))
+                          }}
+                        >
+                          Commander {pack.tier_label} · {formatAr(pack.total_amount)}
+                        </button>
+                      ))}
                       <button
                         type="button"
                         className={btnGhost}
-                        disabled={busy || kits.children.length === 0}
+                        disabled={busy || !child}
                         onClick={() => {
-                          const child = kits.children[0]
                           if (!child) return
                           setBusy(true)
                           setMessage(null)
                           api('/api/v1/parent/kit-orders', {
                             ...auth,
                             method: 'POST',
-                            body: JSON.stringify({ enrollment_id: child.enrollment_id, kit_pack_id: pack.id }),
+                            body: JSON.stringify({
+                              enrollment_id: child.enrollment_id,
+                              fulfillment: 'self',
+                              kit_definition_id: definition.id,
+                            }),
                           })
                             .then(() => loadFamily())
-                            .then(() => setMessage(`Commande pour ${child.first_name}. ${pack.pay_instruction}`))
+                            .then(() => setMessage(`Vous fournissez la liste pour ${child.first_name}.`))
                             .catch((error: Error) => setMessage(error.message))
                             .finally(() => setBusy(false))
                         }}
                       >
-                        Commander
+                        Je fournis moi-même
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            {kits.catalog.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Aucun kit proposé pour le moment.</p> : null}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {kits.catalog.length === 0 ? <p className="mt-3 text-sm text-neutral-600">Aucune liste de fournitures pour le moment.</p> : null}
           </Panel>
           {kits.orders.length > 0 ? (
             <Panel>
-              <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Commandes</h2>
+              <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Vos choix</h2>
               <ul className="divide-y divide-black/5 text-sm">
                 {kits.orders.map((row) => (
                   <li key={row.id} className="px-3 py-2">
                     <p className="font-medium">
-                      {row.student_name} · {formatAr(row.total_amount)}
+                      {row.student_name}
+                      {row.total_amount > 0 ? ` · ${formatAr(row.total_amount)}` : ''}
                     </p>
                     <p className="text-xs text-neutral-500">
-                      {row.status} · {row.pay_instruction}
+                      {row.status_label ?? row.status} · {row.pay_instruction}
                     </p>
                   </li>
                 ))}

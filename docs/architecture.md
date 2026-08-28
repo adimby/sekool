@@ -130,7 +130,7 @@ Réconciliation de §15.2 et du brief §2 (voir `A-07`). Trois modules sont **aj
 | `Academic` | Présence, notes, périodes d'évaluation, bulletins | Ne décide pas des alertes |
 | `Finance` | Barèmes de frais, affectation, factures, échéances, paiements, remises, reçus | Ne juge pas le risque |
 | `Collection` | Ancienneté de créance, ponctualité, niveau de risque à 4 paliers, prévision, file de relance | N'envoie pas les messages |
-| `SchoolKit` | Besoins par classe, packs Eco/Standard/Premium, fournisseurs, panier, commandes, commission | N'encaisse pas (`D-15`, `D-21`) |
+| `SchoolKit` | Liste de fournitures par niveau, gammes Éco/Standard/Luxe (marque + prix), commande partenaire ou auto-fourniture | N'encaisse pas (`D-15`, `D-21`) |
 
 ### 4.3 Moteurs
 

@@ -47,4 +47,9 @@ class KitPack extends Model
     {
         return $this->hasMany(KitPackItem::class);
     }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(KitOrder::class);
+    }
 }

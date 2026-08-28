@@ -17,7 +17,6 @@ use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
 use App\Domain\SchoolKit\Actions\SaveKitCatalog;
-use App\Domain\SchoolKit\Models\KitDefinition;
 
 final class EnsurePhases567
 {
@@ -114,23 +113,44 @@ final class EnsurePhases567
             }
         }
 
-        if ($sixieme !== null && ! KitDefinition::query()->where('name', 'Kit 6ème')->exists()) {
+        if ($sixieme !== null) {
             app(SaveKitCatalog::class)->execute((string) $school->id, [
                 'school_year_id' => $year->id,
                 'grade_level_id' => $sixieme->id,
-                'name' => 'Kit 6ème',
+                'name' => 'Fournitures 6ème',
+                'price_source' => 'supplier',
                 'needs' => [
-                    ['label' => 'Cahier 200 pages', 'quantity' => 4],
-                    ['label' => 'Stylos', 'quantity' => 6],
+                    [
+                        'label' => 'Cahier 200 pages',
+                        'quantity' => 4,
+                        'offers' => [
+                            ['tier' => 'eco', 'brand' => 'Oxford', 'unit_amount' => 4_000],
+                            ['tier' => 'standard', 'brand' => 'Clairefontaine', 'unit_amount' => 6_500],
+                            ['tier' => 'luxe', 'brand' => 'Rhodia', 'unit_amount' => 9_000],
+                        ],
+                    ],
+                    [
+                        'label' => 'Stylos',
+                        'quantity' => 6,
+                        'offers' => [
+                            ['tier' => 'eco', 'brand' => 'BIC', 'unit_amount' => 1_500],
+                            ['tier' => 'standard', 'brand' => 'Schneider', 'unit_amount' => 2_500],
+                            ['tier' => 'luxe', 'brand' => 'Pilot', 'unit_amount' => 3_500],
+                        ],
+                    ],
+                    [
+                        'label' => 'Classeur',
+                        'quantity' => 2,
+                        'offers' => [
+                            ['tier' => 'eco', 'brand' => 'Générique', 'unit_amount' => 10_000],
+                            ['tier' => 'standard', 'brand' => 'Exacompta', 'unit_amount' => 15_500],
+                            ['tier' => 'luxe', 'brand' => 'Leitz', 'unit_amount' => 20_500],
+                        ],
+                    ],
                 ],
                 'supplier_name' => 'Librairie Analakely',
                 'supplier_contact' => 'Analakely',
                 'commission_rate_bps' => 250,
-                'packs' => [
-                    ['tier' => 'eco', 'total_amount' => 45_000],
-                    ['tier' => 'standard', 'total_amount' => 72_000],
-                    ['tier' => 'premium', 'total_amount' => 98_000],
-                ],
             ]);
         }
 

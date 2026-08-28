@@ -530,12 +530,12 @@ Table utile à trois titres : elle alimente le KPI « nombre de certificats vér
 
 ## 14. School Kit
 
-`kit_definitions` : `school_id`, `school_year_id`, `grade_level_id`, `name`, `status`.
-`kit_needs` : `kit_definition_id`, `label` (« 3 cahiers 200 pages »), `quantity`, `notes`.
+`kit_definitions` : `school_id`, `school_year_id`, `grade_level_id`, `name`, `status`, `price_source` (`supplier` / `purchasing`), `copied_from_id`.
+`kit_needs` : `kit_definition_id`, `label` (« Cahier 200 pages »), `quantity`, `notes`.
 `suppliers` : `id`, `name`, `contact`, `commission_rate_bps` (points de base — évite l'arrondi d'un pourcentage flottant), `status`.
-`kit_packs` : `kit_definition_id`, `supplier_id`, `tier` (`eco` / `standard` / `premium` — §13.1), `total_amount`, `available_from`, `available_until`.
-`kit_pack_items` : `kit_pack_id`, `need_id`, `product_reference`, `unit_amount`, `quantity`.
-`kit_orders` : `school_id`, `payer_account_id`, `enrollment_id`, `kit_pack_id`, `status` (`draft` / `submitted` / `confirmed` / `fulfilled` / `cancelled`), `total_amount`, `commission_amount`, `supplier_id`, `placed_at`.
+`kit_packs` : `kit_definition_id`, `supplier_id`, `tier` (`eco` / `standard` / `premium` affiché Luxe — §13.1), `total_amount` (somme des lignes), `available_from`, `available_until`.
+`kit_pack_items` : `kit_pack_id`, `need_id`, `brand`, `product_reference`, `unit_amount`, `quantity`.
+`kit_orders` : `school_id`, `payer_account_id`, `enrollment_id`, `kit_definition_id`, `kit_pack_id` (null si le parent fournit), `fulfillment` (`partner` / `self`), `status` (`draft` / `submitted` / `confirmed` / `fulfilled` / `self_supplied` / `cancelled`), `total_amount`, `commission_amount`, `supplier_id`, `placed_at`.
 
 Chaîne `School → FANABE → Supplier → Parent` (brief §3). Aucun encaissement par FANABE au MVP (`Q-03`), aucun catalogue transverse, aucune mise en concurrence (`A-06`).
 

@@ -16,6 +16,7 @@ class KitPackItem extends Model
         'kit_pack_id',
         'need_id',
         'product_reference',
+        'brand',
         'unit_amount',
         'quantity',
     ];
@@ -31,5 +32,10 @@ class KitPackItem extends Model
     public function pack(): BelongsTo
     {
         return $this->belongsTo(KitPack::class, 'kit_pack_id');
+    }
+
+    public function need(): BelongsTo
+    {
+        return $this->belongsTo(KitNeed::class, 'need_id');
     }
 }

@@ -34,7 +34,7 @@ final class ParentKitController extends Controller
 
             $definitions = KitDefinition::query()
                 ->withoutGlobalScopes()
-                ->with(['needs', 'packs.supplier', 'gradeLevel'])
+                ->with(['needs', 'packs.supplier', 'packs.items', 'gradeLevel'])
                 ->whereIn('school_id', $enrollments->pluck('school_id'))
                 ->whereIn('school_year_id', $yearIds)
                 ->where(function ($query) use ($gradeIds): void {
@@ -44,7 +44,7 @@ final class ParentKitController extends Controller
 
             $orders = KitOrder::query()
                 ->withoutGlobalScopes()
-                ->with(['pack.supplier', 'enrollment.person', 'supplier'])
+                ->with(['pack.supplier', 'enrollment.person', 'supplier', 'definition'])
                 ->whereIn('enrollment_id', $enrollments->pluck('id'))
                 ->orderByDesc('placed_at')
                 ->get();
@@ -69,7 +69,9 @@ final class ParentKitController extends Controller
     {
         $data = $request->validate([
             'enrollment_id' => ['required', 'uuid'],
-            'kit_pack_id' => ['required', 'uuid'],
+            'fulfillment' => ['nullable', 'string', 'in:partner,self'],
+            'kit_pack_id' => ['nullable', 'uuid'],
+            'kit_definition_id' => ['nullable', 'uuid'],
         ]);
 
         $parentId = (string) $request->user()->person_id;
@@ -82,7 +84,13 @@ final class ParentKitController extends Controller
             return response()->json(['message' => 'Not found.'], 404);
         }
 
-        $order = $place->execute($data['enrollment_id'], $data['kit_pack_id'], $parentId);
+        $order = $place->execute([
+            'enrollment_id' => $data['enrollment_id'],
+            'actor_person_id' => $parentId,
+            'fulfillment' => $data['fulfillment'] ?? 'partner',
+            'kit_pack_id' => $data['kit_pack_id'] ?? null,
+            'kit_definition_id' => $data['kit_definition_id'] ?? null,
+        ]);
 
         return response()->json(['data' => KitPayload::order($order)], 201);
     }

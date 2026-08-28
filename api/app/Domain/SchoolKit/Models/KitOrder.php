@@ -4,6 +4,7 @@ namespace App\Domain\SchoolKit\Models;
 
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Platform\Tenancy\BelongsToTenant;
+use App\Domain\SchoolKit\Enums\KitFulfillment;
 use App\Domain\SchoolKit\Enums\KitOrderStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -17,8 +18,10 @@ class KitOrder extends Model
         'school_id',
         'payer_account_id',
         'enrollment_id',
+        'kit_definition_id',
         'kit_pack_id',
         'supplier_id',
+        'fulfillment',
         'status',
         'total_amount',
         'commission_amount',
@@ -30,6 +33,7 @@ class KitOrder extends Model
     {
         return [
             'status' => KitOrderStatus::class,
+            'fulfillment' => KitFulfillment::class,
             'total_amount' => 'integer',
             'commission_amount' => 'integer',
             'placed_at' => 'datetime',
@@ -39,6 +43,11 @@ class KitOrder extends Model
     public function enrollment(): BelongsTo
     {
         return $this->belongsTo(Enrollment::class);
+    }
+
+    public function definition(): BelongsTo
+    {
+        return $this->belongsTo(KitDefinition::class, 'kit_definition_id');
     }
 
     public function pack(): BelongsTo
