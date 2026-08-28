@@ -12,6 +12,9 @@ use App\Domain\Academic\Models\ClassroomTeacher;
 use App\Domain\Academic\Models\TimetableSlot;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Identity\Enums\RelationshipType;
+use App\Domain\Identity\Models\Relationship;
+use Illuminate\Support\Collection;
 
 final class ClassroomFilePayload
 {
@@ -29,6 +32,7 @@ final class ClassroomFilePayload
             'grade_level_id' => $classroom->grade_level_id,
             'name' => $classroom->name,
             'capacity' => $classroom->capacity,
+            'series' => $classroom->series,
             'main_teacher_person_id' => $classroom->main_teacher_person_id,
             'delegate_person_id' => $classroom->delegate_person_id,
             'vice_delegate_person_id' => $classroom->vice_delegate_person_id,
@@ -40,7 +44,7 @@ final class ClassroomFilePayload
     }
 
     /**
-     * @return array{id: string, name: string, stage: string, stage_label: string|null}|null
+     * @return array{id: string, name: string, stage: string, stage_label: string|null, unit_label: string}|null
      */
     private static function grade(Classroom $classroom): ?array
     {
@@ -58,6 +62,7 @@ final class ClassroomFilePayload
             'name' => $grade->name,
             'stage' => $stage?->value ?? 'middle',
             'stage_label' => $stage?->label(),
+            'unit_label' => $stage?->unitLabel() ?? 'Classe',
         ];
     }
 
@@ -102,10 +107,13 @@ final class ClassroomFilePayload
             ])
             ->values();
 
+        $stage = ClassroomCycle::of($classroom);
+
         return [
             'classroom' => self::classroom($classroom),
             'headcount' => $students->count(),
             'students' => $students,
+            'pickup' => $stage === GradeStage::Preschool ? self::pickup($students) : [],
             'teachers' => $classroom->teachers
                 ->sortBy(fn (ClassroomTeacher $row) => mb_strtolower($row->person?->last_name ?? ''))
                 ->values()
@@ -168,5 +176,64 @@ final class ClassroomFilePayload
                     ];
                 }),
         ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $students
+     * @return list<array{student: mixed, adults: list<array{person: mixed, via: string}>}>
+     */
+    private static function pickup(Collection $students): array
+    {
+        $personIds = $students->pluck('person_id')->filter()->values();
+        if ($personIds->isEmpty()) {
+            return [];
+        }
+
+        $priority = [
+            RelationshipType::PickupAuthorizedFor->value => 0,
+            RelationshipType::GuardianOf->value => 1,
+            RelationshipType::ParentOf->value => 2,
+        ];
+
+        $relations = Relationship::query()
+            ->with('subject')
+            ->whereIn('object_person_id', $personIds)
+            ->whereIn('type', [
+                RelationshipType::PickupAuthorizedFor,
+                RelationshipType::ParentOf,
+                RelationshipType::GuardianOf,
+            ])
+            ->where('status', 'active')
+            ->whereNull('revoked_at')
+            ->get();
+
+        return $students
+            ->map(function (array $row) use ($relations, $priority): array {
+                $adults = $relations
+                    ->filter(fn (Relationship $relation): bool => (string) $relation->object_person_id === (string) $row['person_id'])
+                    ->sortBy(function (Relationship $relation) use ($priority): int {
+                        $type = $relation->type instanceof RelationshipType
+                            ? $relation->type->value
+                            : (string) $relation->type;
+
+                        return $priority[$type] ?? 9;
+                    })
+                    ->unique(fn (Relationship $relation): string => (string) $relation->subject_person_id)
+                    ->values()
+                    ->map(fn (Relationship $relation): array => [
+                        'person' => PersonMini::make($relation->subject),
+                        'via' => $relation->type instanceof RelationshipType
+                            ? $relation->type->value
+                            : (string) $relation->type,
+                    ])
+                    ->all();
+
+                return [
+                    'student' => $row['person'],
+                    'adults' => $adults,
+                ];
+            })
+            ->values()
+            ->all();
     }
 }

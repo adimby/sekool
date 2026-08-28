@@ -129,8 +129,16 @@ it('seeds classrooms and fee schedules for demo schools', function () {
     $this->artisan('demo:bootstrap')->assertSuccessful();
 
     TenantContext::runWithRlsBypass(function (): void {
+        $antsahabe = School::query()->where('code', 'antsahabe')->first();
+        $ambohipo = School::query()->where('code', 'ambohipo')->first();
+        $itaosy = School::query()->where('code', 'itaosy')->first();
+
         expect(Classroom::query()->count())->toBeGreaterThan(0)
-            ->and(FeeSchedule::query()->count())->toBe(3);
+            ->and(FeeSchedule::query()->count())->toBe(3)
+            ->and($antsahabe?->network_id)->not->toBeNull()
+            ->and($antsahabe?->network_id)->toBe($ambohipo?->network_id)
+            ->and($itaosy?->network_id)->toBeNull()
+            ->and(Classroom::query()->where('name', 'Tle S')->where('series', 'S')->exists())->toBeTrue();
     });
 });
 

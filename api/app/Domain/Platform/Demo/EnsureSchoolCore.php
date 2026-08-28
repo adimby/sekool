@@ -24,6 +24,7 @@ use App\Domain\Finance\Models\SchoolExpense;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
+use App\Domain\School\Models\SchoolNetwork;
 use App\Domain\School\Models\SchoolYear;
 
 final class EnsureSchoolCore
@@ -56,6 +57,7 @@ final class EnsureSchoolCore
         }
 
         $this->ensureTerms($year);
+        $this->ensureNetwork($school);
         $sixieme = $this->ensureGrade($school->id, '6ème', GradeStage::Middle, 6);
         $cinquieme = $this->ensureGrade($school->id, '5ème', GradeStage::Middle, 5);
         $teacherId = $this->mainTeacherPersonId($school);
@@ -65,6 +67,7 @@ final class EnsureSchoolCore
         $this->assignEnrollments($year, $class6, $class5);
         $this->ensureClassLife($year, $class6, $teacherId);
         $this->ensurePreschoolDemo($school, $year, $teacherId);
+        $this->ensureHighDemo($school, $year, $teacherId);
         $this->ensureExpense($year);
     }
 
@@ -103,6 +106,21 @@ final class EnsureSchoolCore
         }
     }
 
+    private function ensureNetwork(School $school): void
+    {
+        if (! in_array($school->code, ['antsahabe', 'ambohipo'], true)) {
+            return;
+        }
+
+        $network = SchoolNetwork::query()->firstOrCreate(
+            ['name' => 'Réseau Analakanga'],
+        );
+
+        if ((string) $school->network_id !== (string) $network->id) {
+            $school->forceFill(['network_id' => $network->id])->save();
+        }
+    }
+
     private function ensureGrade(string $schoolId, string $name, GradeStage $stage, int $sequence): GradeLevel
     {
         return GradeLevel::query()->firstOrCreate(
@@ -111,7 +129,7 @@ final class EnsureSchoolCore
         );
     }
 
-    private function ensureClassroom(SchoolYear $year, GradeLevel $grade, string $name, ?string $teacherPersonId): Classroom
+    private function ensureClassroom(SchoolYear $year, GradeLevel $grade, string $name, ?string $teacherPersonId, ?string $series = null): Classroom
     {
         $classroom = Classroom::query()->firstOrCreate(
             [
@@ -123,11 +141,16 @@ final class EnsureSchoolCore
                 'grade_level_id' => $grade->id,
                 'capacity' => 40,
                 'main_teacher_person_id' => $teacherPersonId,
+                'series' => $series,
             ],
         );
 
         if ($teacherPersonId !== null && $classroom->main_teacher_person_id !== $teacherPersonId) {
             $classroom->forceFill(['main_teacher_person_id' => $teacherPersonId])->save();
+        }
+
+        if ($series !== null && $classroom->series !== $series) {
+            $classroom->forceFill(['series' => $series])->save();
         }
 
         if ($teacherPersonId !== null) {
@@ -245,6 +268,16 @@ final class EnsureSchoolCore
                 'notes' => 'Présentation du groupe et du rythme de la journée.',
             ],
         );
+    }
+
+    private function ensureHighDemo(School $school, SchoolYear $year, ?string $teacherPersonId): void
+    {
+        if ($school->code !== 'antsahabe') {
+            return;
+        }
+
+        $terminale = $this->ensureGrade($year->school_id, 'Terminale', GradeStage::High, 33);
+        $this->ensureClassroom($year, $terminale, 'Tle S', $teacherPersonId, 'S');
     }
 
     private function ensureExpense(SchoolYear $year): void

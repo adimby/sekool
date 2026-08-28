@@ -209,9 +209,13 @@ L'objet `consents` porte l'état courant, `consent_events` porte l'histoire. C'e
 
 ### `schools`
 
-`id`, `network_id` (FK → `school_networks`, nullable — modélisé maintenant, exploité en P2 par `Q-20`), `name`, `short_name`, `code UNIQUE`, `address`, `city`, `region`, `phone_e164`, `email`, `logo_path`, `timezone` (défaut `Indian/Antananarivo`), `currency` (`MGA`), `locale`, `status` (`active` / `suspended` / `archived`), `plan` (`starter` / `plus` / `network` — §19.1), `settings jsonb`.
+`id`, `network_id` (FK → `school_networks`, nullable — `Q-20`), `name`, `short_name`, `code UNIQUE`, `address`, `city`, `region`, `phone_e164`, `email`, `logo_path`, `timezone` (défaut `Indian/Antananarivo`), `currency` (`MGA`), `locale`, `status` (`active` / `suspended` / `archived`), `plan` (`starter` / `plus` / `network` — §19.1), `settings jsonb`.
 
 Le statut `suspended` est ce qui rend §19.1 tenable : une école qui cesse de payer voit son plan tenant gelé, sans que l'identité et les documents de la famille (plan plateforme) soient affectés.
+
+### `school_networks`
+
+Table **plateforme** (pas de `school_id`, pas de RLS) : `id`, `name UNIQUE`. Un campus n’est pas un tenant. `Q-20` : métadonnées (noms des campus) maintenant ; dossiers consolidés plus tard.
 
 ### `school_years`, `academic_terms`
 
@@ -228,7 +232,7 @@ La contrainte d'exclusion empêche deux années scolaires de se chevaucher dans 
 ### `grade_levels`, `classrooms`
 
 `grade_levels` : `school_id`, `name` (`6ᵉ`), `stage` (`preschool` / `primary` / `middle` / `high`), `sequence` (`Q-19`, `D-23`).
-`classrooms` : `school_id`, `school_year_id`, `grade_level_id`, `name` (`6ᵉ A`), `capacity`, `main_teacher_person_id`.
+`classrooms` : `school_id`, `school_year_id`, `grade_level_id`, `name` (`6ᵉ A`), `capacity`, `series` (nullable, lycée), `main_teacher_person_id`.
 
 Le `stage` est le **cycle** de l’école, pas un type d’établissement. Une même école peut porter plusieurs cycles. La fiche classe en hérite ; familles, finance et caisse ne se dupliquent pas. Voir [`cycles.md`](./cycles.md).
 

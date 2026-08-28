@@ -2,12 +2,15 @@
 
 namespace App\Http\Api\V1\School;
 
+use App\Domain\Academic\Actions\ApplyGradePacks;
 use App\Domain\Academic\Actions\CreateGradeLevel;
 use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\GradeLevel;
+use App\Domain\Academic\Support\GradePacks;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 final class GradeLevelController extends Controller
 {
@@ -39,5 +42,26 @@ final class GradeLevelController extends Controller
         );
 
         return response()->json(['data' => $grade], 201);
+    }
+
+    public function applyPacks(Request $request, ApplyGradePacks $apply): JsonResponse
+    {
+        $data = $request->validate([
+            'packs' => ['required', 'array', 'min:1'],
+            'packs.*' => ['required', 'string', Rule::in(GradePacks::keys())],
+        ]);
+
+        $result = $apply->execute(
+            (string) $request->route('school'),
+            array_values(array_unique($data['packs'])),
+        );
+
+        return response()->json([
+            'data' => [
+                'created' => $result['created'],
+                'skipped' => $result['skipped'],
+                'grades' => GradeLevel::query()->orderBy('sequence')->orderBy('name')->get(),
+            ],
+        ]);
     }
 }

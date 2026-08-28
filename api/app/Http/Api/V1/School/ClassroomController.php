@@ -69,6 +69,7 @@ final class ClassroomController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:64'],
             'capacity' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'series' => ['sometimes', 'nullable', 'string', 'max:32'],
             'main_teacher_person_id' => ['sometimes', 'nullable', 'uuid'],
             'delegate_person_id' => ['sometimes', 'nullable', 'uuid'],
             'vice_delegate_person_id' => ['sometimes', 'nullable', 'uuid'],

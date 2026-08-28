@@ -22,6 +22,7 @@ class Classroom extends Model
         'grade_level_id',
         'name',
         'capacity',
+        'series',
         'main_teacher_person_id',
         'delegate_person_id',
         'vice_delegate_person_id',

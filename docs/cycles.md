@@ -53,7 +53,7 @@ Un seul composant (`ClassFilePanel`). Des sections se montrent ou se cachent sel
 | Activités | oui (parents) | oui | oui | oui |
 | Barème / solde | jamais | jamais | jamais | jamais |
 
-Libellé « groupe » vs « classe » : possible plus tard en maternelle. Pas un chantier bloquant. La navigation Direction ne change pas.
+Libellé : « Groupe » en maternelle (liste + fiche), « Classe » ailleurs. L’onglet reste **Classes**.
 
 ## 5. Tranches de mise en place
 
@@ -72,43 +72,43 @@ Ordre d’exécution. Chaque tranche est livrable seule, testée, démontrable. 
 
 **Démo.** Une classe maternelle (GS) sur une des écoles starter, sans casser Antsahabe collège.
 
-### C-1b — Garde-fous API (après C-1)
+### C-1b — Garde-fous API
 
-Si la direction pose un délégué en maternelle : **422** avec message clair. Primaire : délégué autorisé, conseil refusé. Collège / lycée : inchangé.
+Si la direction pose un délégué en maternelle : **422**. Primaire : délégué autorisé, conseil **422**. Collège / lycée : inchangé. Un GET d’une fiche avec d’anciennes données reste **200**.
 
 ### C-2 — Référentiel de niveaux à l’ouverture
 
 **But.** Tenir `Q-19` : modèle fourni, école libre de le modifier.
 
-Packs proposés à la création des niveaux (cases à cocher, pas un tunnel « choisissez votre type d’école ») :
+Packs dans l’onglet Classes (cases à cocher, pas un tunnel « choisissez votre type d’école ») :
 
 - Maternelle : PS, MS, GS
 - Primaire : CP, CE1, CE2, CM1, CM2 *(variante T1–T5 en option, pas les deux imposés)*
 - Collège : 6ème, 5ème, 4ème, 3ème
 - Lycée : Seconde, Première, Terminale
 
-Chaque pack crée des `grade_levels` avec le bon `stage`. L’école peut renommer, retirer, ajouter. Pas de nomenclature nationale figée.
-
-Pas de quatrième application : juste un assistant dans Paramètres / Classes.
+`POST /schools/{school}/grade-levels/packs` — idempotent (les noms déjà présents sont ignorés). L’école peut encore créer / renommer un niveau un par un.
 
 ### C-3 — Libellés
 
-Uniquement si C-1 a été vu par une vraie maternelle :
-
 - « Groupe » pour `preschool` (liste + fiche), « Classe » ailleurs
-- Pas de duplication de routes ni de composants
+- Pas de duplication de routes ni de composants. L’onglet reste **Classes**.
 
-### C-4 — Lycée (plus tard)
+### C-4 — Lycée (léger)
 
-Séries, options, enseignements de spécialité. **Après** les notes / bulletins, pas avant. Le dossier actuel (titulaire, enseignants, EDT, conseil) suffit au lycée pour l’instant.
+Champ `classrooms.series` (nullable, texte court : A, C, D, L, S, Technique, ou saisie libre). Visible sur la fiche **seulement** si `stage === high`. Pas de notes, pas de spécialités.
 
-### C-5 — Maternelle (plus tard)
+**Démo.** Niveau Terminale + classe `Tle S` (série S) sur Antsahabe, effectif vide.
 
-Récupération d’enfant, sieste, lien quotidien parents. **Après** C-1, et seulement si un pilote maternelle le demande. Pas de cantine ERP (`CDC` hors périmètre).
+### C-5 — Récupération maternelle
 
-### C-6 — Réseau de campus (déjà tranché)
+Sur la fiche **preschool** uniquement, section **Récupération** à partir des relations existantes (`pickup_authorized_for`, sinon `parent_of` / `guardian_of`). Pas de cantine ERP. Pas de nouveau rôle pédagogique pour les personnes autorisées (`S-10`).
 
-Maternelle d’un côté, lycée de l’autre, deux `School`, `Q-20`. Vue consolidée non implémentée. Hors de ce plan.
+### C-6 — Réseau de campus (modèle + métadonnées)
+
+`Q-20` : table plateforme `school_networks` (**pas** de `school_id`, **pas** de RLS). `schools.network_id` → FK. `GET /schools/{school}/network` : `{ id, name, campuses: [{ id, name, code, city }] }` ou `null`. Noms seulement — **pas** d’effectifs ni d’inscriptions.
+
+**Démo.** « Réseau Analakanga » relie Antsahabe et Ambohipo. Itaosy reste indépendant. La direction Antsahabe voit la ligne campus ; un GET classe Ambohipo reste **404**.
 
 ## 6. Hors périmètre de ce plan
 
@@ -118,12 +118,15 @@ Maternelle d’un côté, lycée de l’autre, deux `School`, `Q-20`. Vue consol
 - EDT établissement (remplacements, conflits multi-classes)
 - Plan comptable, cantine ERP
 
-## 7. Critère de terminé (C-1 + C-2)
+## 7. Critère de terminé (C-1 → C-6)
 
 1. Antsahabe (collège) : fiche 6ème A inchangée (titulaire, délégué, EDT, conseil, activités, pas de barème).
-2. Une classe GS : titulaire, effectif, activités ; **pas** de délégué ni de conseil à l’écran.
+2. Une classe GS : titulaire, effectif, activités, récupération ; **pas** de délégué ni de conseil à l’écran ; libellé **Groupe**.
 3. Une école mixte : liste des classes groupée par cycle ; une seule Caisse ; un seul onglet Finance.
-4. Créer les niveaux d’un collège se fait par le pack C-2, puis on peut renommer une classe.
+4. Créer les niveaux d’un collège se fait par le pack C-2, puis on peut renommer.
+5. Délégué en maternelle et conseil au primaire : **422**.
+6. Fiche `Tle S` : champ série, pas de notes.
+7. Ligne campus « Réseau Analakanga » sur Antsahabe ; Itaosy sans réseau ; isolation des classes conservée.
 
 ## 8. Invariant
 

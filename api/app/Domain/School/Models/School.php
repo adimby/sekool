@@ -6,6 +6,7 @@ use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class School extends Model
@@ -19,6 +20,7 @@ class School extends Model
     }
 
     protected $fillable = [
+        'network_id',
         'name',
         'short_name',
         'code',
@@ -39,6 +41,11 @@ class School extends Model
         return [
             'settings' => 'array',
         ];
+    }
+
+    public function network(): BelongsTo
+    {
+        return $this->belongsTo(SchoolNetwork::class, 'network_id');
     }
 
     public function years(): HasMany

@@ -4,6 +4,7 @@ namespace App\Domain\Academic\Actions;
 
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\ClassroomTeacher;
+use App\Domain\Academic\Support\ClassroomCycle;
 use App\Domain\Academic\Support\ClassroomPeople;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
@@ -15,6 +16,7 @@ final class UpdateClassroom
      * @param  array{
      *     name?: string,
      *     capacity?: int|null,
+     *     series?: string|null,
      *     main_teacher_person_id?: string|null,
      *     delegate_person_id?: string|null,
      *     vice_delegate_person_id?: string|null
@@ -28,6 +30,13 @@ final class UpdateClassroom
                 throw new DomainException('Classe introuvable.', 404);
             }
 
+            $stage = ClassroomCycle::of($classroom);
+            $settingDelegate = array_key_exists('delegate_person_id', $data) && filled($data['delegate_person_id']);
+            $settingVice = array_key_exists('vice_delegate_person_id', $data) && filled($data['vice_delegate_person_id']);
+            if (! $stage->allowsDelegate() && ($settingDelegate || $settingVice)) {
+                throw new DomainException('La maternelle n\'a pas de délégué de classe.');
+            }
+
             if (isset($data['name']) && trim($data['name']) !== '') {
                 $classroom->name = trim($data['name']);
             }
@@ -35,6 +44,13 @@ final class UpdateClassroom
             if (array_key_exists('capacity', $data)) {
                 $capacity = $data['capacity'];
                 $classroom->capacity = $capacity === null || $capacity === '' ? null : (int) $capacity;
+            }
+
+            if (array_key_exists('series', $data)) {
+                $series = $data['series'];
+                $classroom->series = $series === null || trim((string) $series) === ''
+                    ? null
+                    : mb_substr(trim((string) $series), 0, 32);
             }
 
             if (array_key_exists('main_teacher_person_id', $data)) {

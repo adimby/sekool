@@ -32,6 +32,7 @@ use App\Http\Api\V1\School\PersonLinkRequestController;
 use App\Http\Api\V1\School\ReliabilityController;
 use App\Http\Api\V1\School\RiskAssessmentController;
 use App\Http\Api\V1\School\SchoolExpenseController;
+use App\Http\Api\V1\School\SchoolNetworkController;
 use App\Http\Api\V1\School\SchoolYearController;
 use App\Http\Api\V1\School\ShareTokenRedeemController;
 use App\Http\Api\V1\School\TransferController;
@@ -50,6 +51,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
     Route::middleware('school.role:staff')->group(function (): void {
         Route::get('/schools/{school}/years', [SchoolYearController::class, 'index']);
         Route::get('/schools/{school}/years/{year}', [SchoolYearController::class, 'show']);
+        Route::get('/schools/{school}/network', [SchoolNetworkController::class, 'show']);
     });
 
     Route::middleware('school.role:classroom')->group(function (): void {
@@ -67,6 +69,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/years', [SchoolYearController::class, 'store']);
         Route::get('/schools/{school}/grade-levels', [GradeLevelController::class, 'index']);
         Route::post('/schools/{school}/grade-levels', [GradeLevelController::class, 'store']);
+        Route::post('/schools/{school}/grade-levels/packs', [GradeLevelController::class, 'applyPacks']);
         Route::post('/schools/{school}/classrooms', [ClassroomController::class, 'store']);
         Route::patch('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'update']);
         Route::post('/schools/{school}/classrooms/{classroom}/teachers', [ClassroomLifeController::class, 'addTeacher']);

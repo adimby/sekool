@@ -70,5 +70,6 @@ it('does not put school_id on platform tables', function () {
     expect(Schema::hasColumn('persons', 'school_id'))->toBeFalse()
         ->and(Schema::hasColumn('user_accounts', 'school_id'))->toBeFalse()
         ->and(Schema::hasColumn('families', 'school_id'))->toBeFalse()
-        ->and(Schema::hasColumn('relationships', 'school_id'))->toBeFalse();
+        ->and(Schema::hasColumn('relationships', 'school_id'))->toBeFalse()
+        ->and(Schema::hasColumn('school_networks', 'school_id'))->toBeFalse();
 });

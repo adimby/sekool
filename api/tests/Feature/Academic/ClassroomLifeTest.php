@@ -149,7 +149,158 @@ it('returns a preschool class file without a delegate', function () {
         ->assertJsonPath('data.classroom.grade_level.stage', 'preschool')
         ->assertJsonPath('data.classroom.grade_level.stage_label', 'Maternelle')
         ->assertJsonPath('data.classroom.delegate', null)
-        ->assertJsonPath('data.headcount', 0);
+        ->assertJsonPath('data.classroom.grade_level.unit_label', 'Groupe')
+        ->assertJsonPath('data.headcount', 0)
+        ->assertJsonPath('data.pickup', []);
+});
+
+it('rejects a preschool delegate and a primary class council', function () {
+    $school = $this->provisionSchool();
+    $family = $this->provisionEnrolledFamily($school);
+    $schoolId = $school['school']->id;
+
+    $gs = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/grade-levels", [
+            'name' => 'GS',
+            'stage' => 'preschool',
+            'sequence' => 0,
+        ])
+        ->json('data');
+
+    $preschool = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $gs['id'],
+            'name' => 'GS A',
+        ])
+        ->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/assign-classroom", [
+            'classroom_id' => $preschool['id'],
+        ]);
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->patchJson("/api/v1/schools/{$schoolId}/classrooms/{$preschool['id']}", [
+            'delegate_person_id' => $family['student']->id,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'La maternelle n\'a pas de délégué de classe.');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->patchJson("/api/v1/schools/{$schoolId}/classrooms/{$preschool['id']}", [
+            'delegate_person_id' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$preschool['id']}/councils", [
+            'held_on' => '2026-12-10',
+            'title' => 'Conseil GS',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Le conseil de classe n\'existe pas en maternelle.');
+
+    $cp = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/grade-levels", [
+            'name' => 'CP',
+            'stage' => 'primary',
+            'sequence' => 11,
+        ])
+        ->json('data');
+
+    $primary = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $cp['id'],
+            'name' => 'CP A',
+        ])
+        ->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/assign-classroom", [
+            'classroom_id' => $primary['id'],
+        ]);
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->patchJson("/api/v1/schools/{$schoolId}/classrooms/{$primary['id']}", [
+            'delegate_person_id' => $family['student']->id,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.delegate.id', $family['student']->id);
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$primary['id']}/councils", [
+            'held_on' => '2026-12-10',
+            'title' => 'Conseil CP',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Le conseil de classe n\'existe pas au primaire.');
+});
+
+it('lists pickup adults on a preschool class file', function () {
+    $school = $this->provisionSchool();
+    $family = $this->provisionEnrolledFamily($school);
+    $schoolId = $school['school']->id;
+
+    $gs = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/grade-levels", [
+            'name' => 'GS',
+            'stage' => 'preschool',
+            'sequence' => 0,
+        ])
+        ->json('data');
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $gs['id'],
+            'name' => 'GS A',
+        ])
+        ->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/assign-classroom", [
+            'classroom_id' => $classroom['id'],
+        ]);
+
+    $file = $this->actingAs($school['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
+        ->assertOk()
+        ->json('data');
+
+    expect($file['pickup'])->toHaveCount(1)
+        ->and($file['pickup'][0]['adults'][0]['via'])->toBe('parent_of')
+        ->and($file['pickup'][0]['adults'][0]['person']['id'])->toBe($family['parent']->id);
+});
+
+it('stores a lycée series on the class file', function () {
+    $school = $this->provisionSchool();
+    $schoolId = $school['school']->id;
+
+    $grade = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/grade-levels", [
+            'name' => 'Terminale',
+            'stage' => 'high',
+            'sequence' => 33,
+        ])
+        ->json('data');
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $grade['id'],
+            'name' => 'Tle S',
+        ])
+        ->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->patchJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}", [
+            'series' => 'S',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.series', 'S')
+        ->assertJsonPath('data.grade_level.stage', 'high');
 });
 
 it('refuses a delegate who is not in the class', function () {

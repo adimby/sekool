@@ -18,4 +18,19 @@ enum GradeStage: string
             self::High => 'Lycée',
         };
     }
+
+    public function allowsDelegate(): bool
+    {
+        return $this !== self::Preschool;
+    }
+
+    public function allowsCouncil(): bool
+    {
+        return $this === self::Middle || $this === self::High;
+    }
+
+    public function unitLabel(): string
+    {
+        return $this === self::Preschool ? 'Groupe' : 'Classe';
+    }
 }

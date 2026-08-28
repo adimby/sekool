@@ -82,16 +82,23 @@ type PersonMini = { id: string; first_name: string; last_name: string }
 
 type GradeRow = { id: string; name: string; stage?: string }
 
+type SchoolNetwork = {
+  id: string
+  name: string
+  campuses: Array<{ id: string; name: string; code: string; city: string | null }>
+}
+
 type ClassroomRow = {
   id: string
   name: string
   grade_level_id: string
   school_year_id?: string
   capacity?: number | null
+  series?: string | null
   main_teacher_person_id?: string | null
   delegate_person_id?: string | null
   vice_delegate_person_id?: string | null
-  grade_level?: { id?: string; name: string; stage?: string; stage_label?: string | null } | null
+  grade_level?: { id?: string; name: string; stage?: string; stage_label?: string | null; unit_label?: string | null } | null
   main_teacher?: PersonMini | null
   delegate?: PersonMini | null
   vice_delegate?: PersonMini | null
@@ -111,6 +118,10 @@ type ClassFile = {
   classroom: ClassroomRow
   headcount: number
   students: ClassStudentRow[]
+  pickup?: Array<{
+    student: { id: string; public_id?: string; first_name: string; last_name: string } | null
+    adults: Array<{ person: PersonMini | null; via: string }>
+  }>
   teachers: Array<{ id: string; person_id: string; subject: string | null; is_main: boolean; person: PersonMini | null }>
   timetable: Array<{
     id: string
@@ -826,6 +837,25 @@ function showsDelegate(stage?: string | null): boolean {
 function showsCouncil(stage?: string | null): boolean {
   return stage !== 'preschool' && stage !== 'primary'
 }
+
+function unitLabel(stage?: string | null): string {
+  return stage === 'preschool' ? 'Groupe' : 'Classe'
+}
+
+function pickupViaLabel(via?: string | null): string {
+  if (via === 'parent_of') return 'Parent'
+  if (via === 'guardian_of') return 'Tuteur'
+  if (via === 'pickup_authorized_for') return 'Autorisé'
+  return via ?? ''
+}
+
+const GRADE_PACKS: Array<{ id: string; label: string; hint: string }> = [
+  { id: 'preschool', label: 'Maternelle', hint: 'PS, MS, GS' },
+  { id: 'primary', label: 'Primaire', hint: 'CP – CM2' },
+  { id: 'primary_malagasy', label: 'Primaire T1–T5', hint: 'Variante, pas avec CP–CM2' },
+  { id: 'middle', label: 'Collège', hint: '6ème – 3ème' },
+  { id: 'high', label: 'Lycée', hint: 'Seconde – Terminale' },
+]
 
 const STAGE_ORDER = ['preschool', 'primary', 'middle', 'high', '']
 
@@ -1764,6 +1794,7 @@ function ClassFilePanel({
   const classroom = file.classroom
   const classroomId = classroom.id
   const [capacity, setCapacity] = useState(classroom.capacity ? String(classroom.capacity) : '')
+  const [series, setSeries] = useState(classroom.series ?? '')
   const [teacherPerson, setTeacherPerson] = useState('')
   const [teacherSubject, setTeacherSubject] = useState('')
   const [slotWeekday, setSlotWeekday] = useState('1')
@@ -1785,7 +1816,8 @@ function ClassFilePanel({
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
-  }, [classroom.id, classroom.capacity])
+    setSeries(classroom.series ?? '')
+  }, [classroom.id, classroom.capacity, classroom.series])
 
   async function run(action: () => Promise<void>, ok?: string) {
     onBusy(true)
@@ -1819,8 +1851,11 @@ function ClassFilePanel({
   const availableTeachers = staff.filter((person) => !addedTeacherIds.has(person.id))
   const stage = classroom.grade_level?.stage
   const cycleLabel = classroom.grade_level?.stage_label ?? (stage ? stageLabel(stage) : '')
+  const unit = classroom.grade_level?.unit_label ?? unitLabel(stage)
   const canDelegate = showsDelegate(stage)
   const canCouncil = showsCouncil(stage)
+  const canSeries = stage === 'high'
+  const pickup = file.pickup ?? []
 
   return (
     <div>
@@ -1831,6 +1866,7 @@ function ClassFilePanel({
             <p className="text-xs text-neutral-500">
               {classroom.grade_level?.name ?? 'Niveau'}
               {cycleLabel ? ` · ${cycleLabel}` : ''}
+              {canSeries && classroom.series ? ` · série ${classroom.series}` : ''}
               {classroom.main_teacher ? ` · ${personLabel(classroom.main_teacher)}` : ''}
             </p>
           </div>
@@ -1846,7 +1882,7 @@ function ClassFilePanel({
             </p>
           ) : null
         ) : (
-          <div className={`mt-2 grid gap-2 sm:grid-cols-2 ${canDelegate ? 'lg:grid-cols-4' : ''}`}>
+          <div className={`mt-2 grid gap-2 sm:grid-cols-2 ${canDelegate || canSeries ? 'lg:grid-cols-4' : ''}`}>
             <Field label="Titulaire">
               <select
                 className={inputClass}
@@ -1923,13 +1959,37 @@ function ClassFilePanel({
                 </button>
               </form>
             </Field>
+            {canSeries ? (
+              <Field label="Série">
+                <form
+                  className="flex gap-1"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void patchClassroom({ series: series.trim() === '' ? null : series.trim() })
+                  }}
+                >
+                  <input
+                    className={inputClass}
+                    value={series}
+                    onChange={(e) => setSeries(e.target.value)}
+                    placeholder="S, A, Technique…"
+                    maxLength={32}
+                  />
+                  <button type="submit" className={btnGhost} disabled={busy}>
+                    OK
+                  </button>
+                </form>
+              </Field>
+            ) : null}
           </div>
         )}
       </div>
 
       <ClassSection title={`Effectif · ${file.headcount}`}>
         {file.students.length === 0 ? (
-          <p className="text-xs text-neutral-500">Aucun élève inscrit dans cette classe.</p>
+          <p className="text-xs text-neutral-500">
+            Aucun élève inscrit dans {unit === 'Groupe' ? 'ce groupe' : 'cette classe'}.
+          </p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
@@ -1937,7 +1997,7 @@ function ClassFilePanel({
                 <th className="py-1 font-medium">N°</th>
                 <th className="py-1 font-medium">Élève</th>
                 {canDelegate ? <th className="py-1 font-medium">Office</th> : null}
-                {readOnly || !onAssignClassroom ? null : <th className="py-1 font-medium">Classe</th>}
+                {readOnly || !onAssignClassroom ? null : <th className="py-1 font-medium">{unit}</th>}
               </tr>
             </thead>
             <tbody>
@@ -1970,6 +2030,34 @@ function ClassFilePanel({
           </table>
         )}
       </ClassSection>
+
+      {stage === 'preschool' ? (
+        <ClassSection title="Récupération">
+          {pickup.length === 0 ? (
+            <p className="text-xs text-neutral-500">
+              Aucun enfant dans ce groupe pour l’instant. Les parents, tuteurs et personnes autorisées du foyer
+              apparaîtront ici.
+            </p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {pickup.map((row, index) => (
+                <li key={row.student?.id ?? String(index)} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                  <p className="font-medium">{row.student ? personLabel(row.student) : 'Élève'}</p>
+                  {row.adults.length === 0 ? (
+                    <p className="text-xs text-neutral-500">Personne indiquée pour la récupération.</p>
+                  ) : (
+                    <p className="text-xs text-neutral-600">
+                      {row.adults
+                        .map((adult) => `${personLabel(adult.person)}${adult.via ? ` · ${pickupViaLabel(adult.via)}` : ''}`)
+                        .join(' · ')}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </ClassSection>
+      ) : null}
 
       <ClassSection title="Enseignants">
         {file.teachers.length === 0 ? <p className="text-xs text-neutral-500">Aucun enseignant attribué.</p> : null}
@@ -2467,6 +2555,8 @@ function DirectionScreen({
   const [financePane, setFinancePane] = useState<'baremes' | 'achats'>('baremes')
   const [newClassCapacity, setNewClassCapacity] = useState('')
   const [newClassTeacher, setNewClassTeacher] = useState('')
+  const [selectedPacks, setSelectedPacks] = useState<string[]>([])
+  const [network, setNetwork] = useState<SchoolNetwork | null>(null)
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
@@ -2492,16 +2582,18 @@ function DirectionScreen({
     setYears(yearsPayload.data)
     setYearId(current?.id ?? '')
     setYearLabel(current?.label ?? '2026-2027')
-    const [classList, gradeList, today, staffList] = await Promise.all([
+    const [classList, gradeList, today, staffList, networkPayload] = await Promise.all([
       api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
       api<{ data: GradeRow[] }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
       api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth),
       api<{ data: PersonMini[] }>(`/api/v1/schools/${schoolId}/staff`, auth),
+      api<{ data: SchoolNetwork | null }>(`/api/v1/schools/${schoolId}/network`, auth).catch(() => ({ data: null })),
     ])
     setClassrooms(classList.data)
     setGrades(gradeList.data)
     setCockpit(today)
     setStaff(staffList.data)
+    setNetwork(networkPayload.data)
     setNewClassGrade((prev) => prev || gradeList.data[0]?.id || '')
   }
 
@@ -2671,7 +2763,7 @@ function DirectionScreen({
           ...(newClassTeacher ? { main_teacher_person_id: newClassTeacher } : {}),
         }),
       })
-      setMessage(`Classe ${newClassName} créée.`)
+      setMessage(`${unitLabel(grades.find((grade) => grade.id === newClassGrade)?.stage)} ${newClassName} créé${grades.find((grade) => grade.id === newClassGrade)?.stage === 'preschool' ? '' : 'e'}.`)
       setSelectedClassId(payload.data.id)
       setNewClassTeacher('')
       setNewClassCapacity('')
@@ -2679,6 +2771,46 @@ function DirectionScreen({
       await loadEnrollments()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Classe impossible à créer.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function togglePack(id: string) {
+    setSelectedPacks((prev) => {
+      const on = prev.includes(id)
+      if (on) return prev.filter((pack) => pack !== id)
+      let next = [...prev, id]
+      if (id === 'primary') next = next.filter((pack) => pack !== 'primary_malagasy')
+      if (id === 'primary_malagasy') next = next.filter((pack) => pack !== 'primary')
+      return next
+    })
+  }
+
+  async function applyGradePacks() {
+    if (selectedPacks.length === 0) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const payload = await api<{ data: { created: string[]; skipped: string[] } }>(
+        `/api/v1/schools/${schoolId}/grade-levels/packs`,
+        {
+          ...auth,
+          method: 'POST',
+          body: JSON.stringify({ packs: selectedPacks }),
+        },
+      )
+      const created = payload.data.created.length
+      const skipped = payload.data.skipped.length
+      setSelectedPacks([])
+      setMessage(
+        created === 0
+          ? 'Ces niveaux existent déjà.'
+          : `${created} niveau${created > 1 ? 'x' : ''} ajouté${created > 1 ? 's' : ''}${skipped ? ` · ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}.`,
+      )
+      await loadCore()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Packs impossibles à appliquer.')
     } finally {
       setBusy(false)
     }
@@ -3061,6 +3193,17 @@ function DirectionScreen({
         <div className="grid gap-3 lg:grid-cols-[16rem_1fr]">
           <Panel className="p-3">
             <h2 className="text-sm font-semibold">Classes · {yearLabel}</h2>
+            {network ? (
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {network.name}
+                {network.campuses.filter((campus) => campus.id !== schoolId).length > 0
+                  ? ` · ${network.campuses
+                      .filter((campus) => campus.id !== schoolId)
+                      .map((campus) => campus.name)
+                      .join(', ')}`
+                  : ''}
+              </p>
+            ) : null}
             <form onSubmit={createClassroom} className="mt-3 space-y-2">
               <select className={inputClass} value={newClassGrade} onChange={(e) => setNewClassGrade(e.target.value)}>
                 {gradeGroups.length <= 1
@@ -3100,6 +3243,36 @@ function DirectionScreen({
                 Créer
               </button>
             </form>
+            <div className="mt-3 border-t border-black/5 pt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Niveaux</p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">Cases à cocher, pas un type d’école. T1–T5 est une variante.</p>
+              <ul className="mt-2 space-y-1">
+                {GRADE_PACKS.map((pack) => (
+                  <li key={pack.id}>
+                    <label className="flex cursor-pointer items-start gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={selectedPacks.includes(pack.id)}
+                        onChange={() => togglePack(pack.id)}
+                      />
+                      <span>
+                        <span className="font-medium">{pack.label}</span>
+                        <span className="text-neutral-500"> · {pack.hint}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className={`${btnGhost} mt-2`}
+                disabled={busy || selectedPacks.length === 0}
+                onClick={() => void applyGradePacks()}
+              >
+                Ajouter les niveaux
+              </button>
+            </div>
             <ul className="mt-3 divide-y divide-black/5 text-sm">
               {classGroups.map((group, index) => (
                 <li key={group.stage || 'other'}>
@@ -3111,6 +3284,7 @@ function DirectionScreen({
                   <ul>
                     {group.rows.map((classroom) => {
                       const count = activeEnrollments.filter((row) => row.classroom_id === classroom.id).length
+                      const kind = classroom.grade_level?.unit_label ?? unitLabel(classroom.grade_level?.stage)
                       return (
                         <li key={classroom.id}>
                           <button
@@ -3118,7 +3292,10 @@ function DirectionScreen({
                             className={`flex w-full items-center justify-between py-1.5 text-left ${selectedClassId === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
                             onClick={() => setSelectedClassId(classroom.id)}
                           >
-                            <span>{classroom.name}</span>
+                            <span>
+                              {kind === 'Groupe' ? <span className="mr-1 text-[11px] font-normal text-neutral-500">Groupe</span> : null}
+                              {classroom.name}
+                            </span>
                             <span className="text-xs text-neutral-500">{count}</span>
                           </button>
                         </li>
@@ -3149,7 +3326,7 @@ function DirectionScreen({
               />
             ) : (
               <p className="px-3 py-8 text-center text-sm text-neutral-500">
-                Ouvrez une classe pour son dossier : titulaire, effectif, emploi du temps et activités.
+                Ouvrez une classe ou un groupe pour son dossier : titulaire, effectif, emploi du temps et activités.
               </p>
             )}
           </Panel>
@@ -3567,6 +3744,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
               {classrooms.map((classroom) => (
                 <option key={classroom.id} value={classroom.id}>
+                  {unitLabel(classroom.grade_level?.stage) === 'Groupe' ? 'Groupe ' : ''}
                   {classroom.name}
                 </option>
               ))}

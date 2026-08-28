@@ -3,9 +3,11 @@
 namespace App\Domain\Academic\Actions;
 
 use App\Domain\Academic\Enums\ClassCouncilStatus;
+use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\AcademicTerm;
 use App\Domain\Academic\Models\ClassCouncil;
 use App\Domain\Academic\Models\Classroom;
+use App\Domain\Academic\Support\ClassroomCycle;
 use App\Domain\Platform\Audit\Auditor;
 use App\Domain\Platform\Exceptions\DomainException;
 
@@ -25,6 +27,15 @@ final class SaveClassCouncil
         $classroom = Classroom::query()->find($classroomId);
         if ($classroom === null || (string) $classroom->school_id !== $schoolId) {
             throw new DomainException('Classe introuvable.', 404);
+        }
+
+        $stage = ClassroomCycle::of($classroom);
+        if (! $stage->allowsCouncil()) {
+            throw new DomainException(
+                $stage === GradeStage::Preschool
+                    ? 'Le conseil de classe n\'existe pas en maternelle.'
+                    : 'Le conseil de classe n\'existe pas au primaire.',
+            );
         }
 
         $termId = $data['academic_term_id'] ?? null;
