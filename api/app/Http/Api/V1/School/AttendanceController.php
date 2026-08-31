@@ -62,6 +62,8 @@ final class AttendanceController extends Controller
                         'id' => $record->id,
                         'status' => $record->status->value,
                         'minutes_late' => $record->minutes_late,
+                        'reason' => $record->reason,
+                        'justification' => $record->justification,
                     ],
                 ];
             })->values(),
@@ -80,6 +82,7 @@ final class AttendanceController extends Controller
             'records.*.client_reference' => ['nullable', 'uuid'],
             'records.*.minutes_late' => ['nullable', 'integer', 'min:1'],
             'records.*.reason' => ['nullable', 'string', 'max:255'],
+            'records.*.justification' => ['nullable', 'string', 'max:500'],
         ]);
 
         $session = AttendanceSession::tryFrom($data['session'] ?? AttendanceSession::FullDay->value);
@@ -123,6 +126,7 @@ final class AttendanceController extends Controller
                     recordedVia: $via,
                     minutesLate: $row['minutes_late'] ?? null,
                     reason: $row['reason'] ?? null,
+                    justification: $row['justification'] ?? null,
                 );
             }
 
@@ -136,6 +140,8 @@ final class AttendanceController extends Controller
                 'date' => $row->date?->toDateString(),
                 'session' => $row->session->value,
                 'status' => $row->status->value,
+                'reason' => $row->reason,
+                'justification' => $row->justification,
                 'client_reference' => $row->client_reference,
             ])->values(),
         ], 201);

@@ -42,6 +42,20 @@ final class MessageCatalog
                 'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nPlusieurs absences ont été enregistrées ces derniers jours. Merci de prendre contact avec l’école.\n\nDocument à remettre en main propre.",
             ],
             [
+                'key' => 'same_day_absence',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Absence de {student_first_name}',
+                'body' => 'Bonjour, {student_first_name} a été noté absent le {date}. Merci de prendre contact avec l’école ou de déposer un justificatif à l’accueil. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'same_day_absence',
+                'channel' => 'print',
+                'locale' => 'fr',
+                'subject' => 'Avis d’absence — {school_name}',
+                'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUne absence a été enregistrée le {date}. Merci de prendre contact avec l’école ou de déposer un justificatif à l’accueil.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
+            ],
+            [
                 'key' => 'missing_document',
                 'channel' => 'in_app',
                 'locale' => 'fr',

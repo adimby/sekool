@@ -20,6 +20,12 @@ final class CertificateCopy
             '<p>'.$esc((string) ($snapshot['school_name'] ?? '')).'</p>',
             '<p>'.$esc((string) ($snapshot['year_label'] ?? '')).' · '.$esc((string) ($snapshot['classroom_name'] ?? '')).'</p>',
             '<p>'.$esc((string) ($snapshot['full_name'] ?? '')).'</p>',
+            isset($snapshot['ended_on']) && $snapshot['ended_on'] !== '' && $snapshot['ended_on'] !== null
+                ? '<p>Fin d’inscription le '.$esc((string) $snapshot['ended_on']).'</p>'
+                : '',
+            isset($snapshot['exit_reason']) && $snapshot['exit_reason'] !== '' && $snapshot['exit_reason'] !== null
+                ? '<p>Motif : '.$esc((string) $snapshot['exit_reason']).'</p>'
+                : '',
             '<p>Référence '.$esc((string) ($snapshot['public_reference'] ?? '')).'</p>',
             '<p>Émis le '.$esc((string) ($snapshot['issued_on'] ?? '')).'</p>',
             '<p>'.$esc(self::DISCLAIMER).'</p>',

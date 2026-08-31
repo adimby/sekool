@@ -41,6 +41,8 @@ final class ChildAttendanceController extends Controller
                     'date' => $row->date?->toDateString(),
                     'session' => $row->session->value,
                     'status' => $row->status->value,
+                    'reason' => $row->reason,
+                    'justification' => $row->justification,
                 ])->values(),
             ]);
         });

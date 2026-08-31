@@ -103,6 +103,8 @@ final class StudentOverviewController extends Controller
                     'date' => $row->date?->toDateString(),
                     'session' => $row->session->value,
                     'status' => $row->status->value,
+                    'reason' => $row->reason,
+                    'justification' => $row->justification,
                 ])->values(),
                 'finance' => [
                     'remaining_amount' => $invoice?->remainingAmount() ?? 0,

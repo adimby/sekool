@@ -25,6 +25,7 @@ final class RecordAttendance
         string $recordedVia = 'web',
         ?int $minutesLate = null,
         ?string $reason = null,
+        ?string $justification = null,
     ): AttendanceRecord {
         $enrollment = Enrollment::query()->find($enrollmentId);
         if ($enrollment === null || (string) $enrollment->school_id !== $schoolId) {
@@ -54,6 +55,7 @@ final class RecordAttendance
                 $recordedVia,
                 $minutesLate,
                 $reason,
+                $justification,
             ): AttendanceRecord {
                 $current = AttendanceRecord::query()
                     ->where('enrollment_id', $enrollment->id)
@@ -62,39 +64,49 @@ final class RecordAttendance
                     ->lockForUpdate()
                     ->first();
 
+                $previous = $current?->status;
+
                 if ($current !== null) {
                     $current->fill([
                         'status' => $status,
                         'minutes_late' => $minutesLate,
                         'reason' => $reason,
+                        'justification' => $justification,
                         'recorded_by_person_id' => $recordedByPersonId,
                         'recorded_via' => $recordedVia,
                     ]);
                     $current->save();
+                    $record = $current;
+                } else {
+                    $record = AttendanceRecord::query()->create([
+                        'school_id' => $schoolId,
+                        'enrollment_id' => $enrollment->id,
+                        'date' => $date,
+                        'session' => $session,
+                        'status' => $status,
+                        'minutes_late' => $minutesLate,
+                        'reason' => $reason,
+                        'justification' => $justification,
+                        'recorded_by_person_id' => $recordedByPersonId,
+                        'recorded_via' => $recordedVia,
+                        'client_reference' => $clientReference,
+                    ]);
 
-                    return $current;
+                    Auditor::record(
+                        'attendance.recorded',
+                        'attendance_record',
+                        $record->id,
+                        $enrollment->person_id,
+                        ['date' => $date, 'status' => $status->value],
+                    );
                 }
 
-                $record = AttendanceRecord::query()->create([
-                    'school_id' => $schoolId,
-                    'enrollment_id' => $enrollment->id,
-                    'date' => $date,
-                    'session' => $session,
-                    'status' => $status,
-                    'minutes_late' => $minutesLate,
-                    'reason' => $reason,
-                    'recorded_by_person_id' => $recordedByPersonId,
-                    'recorded_via' => $recordedVia,
-                    'client_reference' => $clientReference,
-                ]);
-
-                Auditor::record(
-                    'attendance.recorded',
-                    'attendance_record',
-                    $record->id,
-                    $enrollment->person_id,
-                    ['date' => $date, 'status' => $status->value],
-                );
+                $becameAbsent = $status === AttendanceStatus::Absent
+                    && $previous !== AttendanceStatus::Absent
+                    && $recordedVia !== 'seed';
+                if ($becameAbsent) {
+                    app(NotifyAbsenceToFamily::class)->execute($enrollment, $date, $session->value);
+                }
 
                 return $record;
             });

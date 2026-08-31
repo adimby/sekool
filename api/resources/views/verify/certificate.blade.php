@@ -26,6 +26,12 @@
         <p>{{ $result['issuer'] ?? '' }}</p>
         <p class="muted">{{ $result['year_label'] ?? '' }} · {{ $result['classroom_name'] ?? '' }}</p>
         <p>{{ $result['person'] ?? '' }}</p>
+        @if (! empty($result['ended_on']))
+            <p>Fin d’inscription le {{ $result['ended_on'] }}</p>
+        @endif
+        @if (! empty($result['exit_reason']))
+            <p>Motif : {{ $result['exit_reason'] }}</p>
+        @endif
         <p class="muted">Référence {{ $result['public_reference'] ?? '' }} · émis le {{ $result['issued_on'] ?? '' }}</p>
     @endif
     <form method="get">
