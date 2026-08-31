@@ -90,6 +90,8 @@ final class VerifyCertificateToken
                 'issued_on' => $snapshot['issued_on'] ?? $certificate->issued_at?->toDateString(),
                 'year_label' => $snapshot['year_label'] ?? null,
                 'classroom_name' => $snapshot['classroom_name'] ?? null,
+                'ended_on' => $snapshot['ended_on'] ?? null,
+                'exit_reason' => $snapshot['exit_reason'] ?? null,
                 'person' => $displayName,
                 'full_name_revealed' => $fullNameRevealed,
                 'public_reference' => $certificate->public_reference,

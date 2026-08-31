@@ -139,7 +139,15 @@ it('withdraws a student and issues a verifiable radiation certificate', function
 
     $this->getJson('/api/v1/verify/certificates/'.$withdrawn['certificate']['token'])
         ->assertOk()
-        ->assertJsonPath('status', 'VALID');
+        ->assertJsonPath('status', 'VALID')
+        ->assertJsonPath('type_label', 'Certificat de radiation')
+        ->assertJsonPath('exit_reason', 'Déménagement');
+
+    $this->get('/verify/'.$withdrawn['certificate']['token'])
+        ->assertOk()
+        ->assertSee('Certificat de radiation', false)
+        ->assertSee('Déménagement', false)
+        ->assertSee(CertificateCopy::DISCLAIMER, false);
 
     $this->actingAs($family['parentAccount'], 'sanctum')
         ->getJson("/api/v1/parent/children/{$family['student']->id}/certificates")
