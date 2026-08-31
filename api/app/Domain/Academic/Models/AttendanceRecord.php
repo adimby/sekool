@@ -23,6 +23,7 @@ class AttendanceRecord extends Model
         'status',
         'minutes_late',
         'reason',
+        'justification',
         'recorded_by_person_id',
         'recorded_via',
         'client_reference',

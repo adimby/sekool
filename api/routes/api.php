@@ -25,6 +25,7 @@ use App\Http\Api\V1\School\CockpitController;
 use App\Http\Api\V1\School\CollectionController;
 use App\Http\Api\V1\School\DocumentAttestController;
 use App\Http\Api\V1\School\EnrollmentController;
+use App\Http\Api\V1\School\EnrollmentWithdrawController;
 use App\Http\Api\V1\School\FamilyController;
 use App\Http\Api\V1\School\FamilyReliabilityController;
 use App\Http\Api\V1\School\FeeScheduleController;
@@ -140,6 +141,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/reliability/school', [ReliabilityController::class, 'school']);
         Route::get('/schools/{school}/reliability/school/compare', [ReliabilityController::class, 'schoolCompare']);
         Route::post('/schools/{school}/enrollments/{enrollment}/certificates', [CertificateController::class, 'store']);
+        Route::post('/schools/{school}/enrollments/{enrollment}/withdraw', EnrollmentWithdrawController::class);
         Route::post('/schools/{school}/certificates/{certificate}/revoke', [CertificateController::class, 'revoke']);
         Route::post('/schools/{school}/documents/{document}/attest', DocumentAttestController::class);
         Route::get('/schools/{school}/kit-orders', [SchoolKitController::class, 'orders']);

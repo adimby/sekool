@@ -167,6 +167,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Phase 7 — Intelligence avancée.** Notes et bulletins (hors maternelle), Student Early Warning à formulation neutre et accusé humain, liste **Attention** du cockpit distincte des actions de recouvrement.
 
+**Vague A — Vie scolaire quotidienne.** Motif et justificatif sur l’appel ; notification in-app/papier le jour d’une absence (pas de SMS) ; certificat de radiation à la sortie d’effectif ; recherche personnes / foyers / classes sur le cockpit.
+
 ---
 
 ## 7. Définition de terminé

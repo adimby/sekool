@@ -21,6 +21,7 @@ final class CertificatePayload
             'expires_at' => $certificate->expires_at?->toDateString(),
             'enrollment_id' => $certificate->enrollment_id,
             'student_name' => trim(($certificate->subject?->first_name ?? $certificate->enrollment?->person?->first_name ?? '').' '.($certificate->subject?->last_name ?? $certificate->enrollment?->person?->last_name ?? '')),
+            'classroom_id' => $certificate->enrollment?->classroom_id,
             'classroom' => $certificate->enrollment?->classroom?->name,
             'disclaimer' => CertificateCopy::DISCLAIMER,
         ];

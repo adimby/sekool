@@ -51,7 +51,18 @@ type AttendanceRow = {
   date: string
   session: string
   status: string
+  reason?: string | null
+  justification?: string | null
 }
+
+type AttendanceMark = { status: string; reason: string; justification: string }
+
+const ATTENDANCE_REASONS = [
+  { id: 'Maladie', label: 'Maladie' },
+  { id: 'Raison familiale', label: 'Raison familiale' },
+  { id: 'Transport', label: 'Transport' },
+  { id: 'Autre', label: 'Autre' },
+]
 
 type ConsentRow = {
   id: string
@@ -289,7 +300,7 @@ type StudentOverview = {
     school: { name: string } | null
     classroom: { name: string } | null
   } | null
-  attendance: Array<{ id: string; date: string; status: string }>
+  attendance: Array<{ id: string; date: string; status: string; reason?: string | null; justification?: string | null }>
   finance: {
     remaining_amount: number
     invoice: InvoiceRow | null
@@ -712,6 +723,13 @@ function attendanceLabel(status?: string): string {
   if (status === 'late') return 'Retard'
   if (status === 'excused') return 'Excusé'
   return status ?? ''
+}
+
+function attendanceDetail(row: { status: string; reason?: string | null; justification?: string | null }): string {
+  const parts = [attendanceLabel(row.status)]
+  if (row.reason) parts.push(row.reason)
+  if (row.justification) parts.push(row.justification)
+  return parts.join(' · ')
 }
 
 function Banner({ message, onClear }: { message: string; onClear: () => void }) {
@@ -1973,6 +1991,7 @@ function ClassFilePanel({
     Array<{
       id: string
       enrollment_id: string
+      classroom_id?: string | null
       type_label: string
       public_reference: string
       status: string
@@ -1981,6 +2000,8 @@ function ClassFilePanel({
     }>
   >([])
   const [certTick, setCertTick] = useState(0)
+  const [withdrawId, setWithdrawId] = useState('')
+  const [withdrawReason, setWithdrawReason] = useState('')
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
@@ -2055,6 +2076,7 @@ function ClassFilePanel({
       data: Array<{
         id: string
         enrollment_id: string
+        classroom_id?: string | null
         type_label: string
         public_reference: string
         status: string
@@ -2063,7 +2085,11 @@ function ClassFilePanel({
       }>
     }>(`/api/v1/schools/${schoolId}/certificates`, auth)
       .then((payload) => {
-        setCertificates(payload.data.filter((row) => enrollmentIds.has(row.enrollment_id)))
+        setCertificates(
+          payload.data.filter(
+            (row) => row.classroom_id === classroomId || enrollmentIds.has(row.enrollment_id),
+          ),
+        )
       })
       .catch(() => setCertificates([]))
   }, [classroomId, schoolId, auth.token, file.students.length, certTick])
@@ -2339,7 +2365,8 @@ function ClassFilePanel({
 
       <ClassSection title="Documents">
         <p className="text-xs text-neutral-500">
-          Certificat de scolarité avec lien de vérification. FANABE n’est pas une signature qualifiée.
+          Certificat de scolarité (élève inscrit) ou certificat de radiation (sortie d’effectif). Lien de vérification.
+          FANABE n’est pas une signature qualifiée.
         </p>
         {verifyUrl ? (
           <p className="mt-2 break-all text-xs">
@@ -2367,30 +2394,70 @@ function ClassFilePanel({
           </ul>
         )}
         {readOnly ? null : (
-          <ul className="mt-2 space-y-1 text-sm">
-            {file.students.map((row) => (
-              <li key={row.enrollment_id} className="flex items-center justify-between gap-2 border-t border-black/5 py-1 first:border-t-0">
-                <span>{row.person ? personLabel(row.person) : 'Élève'}</span>
-                <button
-                  type="button"
-                  className={btnGhost}
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const payload = await api<{ data: { verify_url?: string } }>(
-                        `/api/v1/schools/${schoolId}/enrollments/${row.enrollment_id}/certificates`,
-                        { ...auth, method: 'POST', body: JSON.stringify({}) },
-                      )
-                      setVerifyUrl(payload.data.verify_url ?? null)
-                      setCertTick((n) => n + 1)
-                    }, 'Certificat émis.')
-                  }
-                >
-                  Émettre
+          <>
+            <ul className="mt-2 space-y-1 text-sm">
+              {file.students.map((row) => (
+                <li key={row.enrollment_id} className="flex items-center justify-between gap-2 border-t border-black/5 py-1 first:border-t-0">
+                  <span>{row.person ? personLabel(row.person) : 'Élève'}</span>
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const payload = await api<{ data: { verify_url?: string } }>(
+                          `/api/v1/schools/${schoolId}/enrollments/${row.enrollment_id}/certificates`,
+                          { ...auth, method: 'POST', body: JSON.stringify({}) },
+                        )
+                        setVerifyUrl(payload.data.verify_url ?? null)
+                        setCertTick((n) => n + 1)
+                      }, 'Certificat de scolarité émis.')
+                    }
+                  >
+                    Scolarité
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {file.students.length > 0 ? (
+              <form
+                className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!withdrawId || withdrawReason.trim() === '') return
+                  void run(async () => {
+                    const payload = await api<{ data: { certificate?: { verify_url?: string } } }>(
+                      `/api/v1/schools/${schoolId}/enrollments/${withdrawId}/withdraw`,
+                      { ...auth, method: 'POST', body: JSON.stringify({ reason: withdrawReason.trim() }) },
+                    )
+                    setVerifyUrl(payload.data.certificate?.verify_url ?? null)
+                    setWithdrawId('')
+                    setWithdrawReason('')
+                    setCertTick((n) => n + 1)
+                  }, 'Élève radié. Certificat de radiation émis.')
+                }}
+              >
+                <select className={inputClass} value={withdrawId} onChange={(e) => setWithdrawId(e.target.value)} required>
+                  <option value="">Élève à radier</option>
+                  {file.students.map((row) => (
+                    <option key={row.enrollment_id} value={row.enrollment_id}>
+                      {row.person ? personLabel(row.person) : row.enrollment_id}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={inputClass}
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="Motif (déménagement, autre école…)"
+                  required
+                />
+                <button type="submit" className={btnGhost} disabled={busy || !withdrawId || withdrawReason.trim() === ''}>
+                  Radier
                 </button>
-              </li>
-            ))}
-          </ul>
+              </form>
+            ) : null}
+          </>
         )}
       </ClassSection>
 
@@ -3309,8 +3376,10 @@ function DirectionScreen({
   }, [schoolId, session.token])
 
   useEffect(() => {
-    if (tab === 'famille') {
-      Promise.all([loadPeople(), loadFamilies(), loadTransfers()]).catch((error: Error) => setMessage(error.message))
+    if (tab === 'accueil' || tab === 'famille') {
+      Promise.all([loadPeople(), loadFamilies(), tab === 'famille' ? loadTransfers() : Promise.resolve()]).catch(
+        (error: Error) => setMessage(error.message),
+      )
     }
     if (tab === 'classe') {
       Promise.all([loadEnrollments(), loadTerms()]).catch((error: Error) => setMessage(error.message))
@@ -3657,6 +3726,101 @@ function DirectionScreen({
             <Kpi label="Reste dû" value={formatAr(cockpit?.outstanding_amount ?? 0)} hint={yearLabel} />
             <Kpi label="À relancer" value={String(cockpit?.actions.length ?? 0)} hint="faits, pas un score" />
           </div>
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">Recherche</h2>
+            <p className="mt-1 text-xs text-neutral-500">Personnes, foyers et classes de cet établissement.</p>
+            <input
+              className={`${inputClass} mt-2`}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Nom, identifiant ou classe"
+            />
+            {query.trim() !== '' ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Personnes</p>
+                  <ul className="mt-1 text-sm">
+                    {filteredPeople.slice(0, 6).map((person) => (
+                      <li key={person.id}>
+                        <button
+                          type="button"
+                          className="w-full rounded-md px-2 py-1.5 text-left hover:bg-black/[0.03]"
+                          onClick={() => {
+                            const family = families.find((item) =>
+                              item.members.some((member) => member.id === person.id || member.person_id === person.id),
+                            )
+                            if (family) {
+                              setSelectedFamilyId(family.id)
+                              setFamilyPane('foyers')
+                            } else {
+                              setFamilyPane('personnes')
+                            }
+                            onTab('famille')
+                          }}
+                        >
+                          <span className="font-medium">
+                            {person.first_name} {person.last_name}
+                          </span>
+                          <span className="ml-2 font-mono text-[11px] text-neutral-500">{person.public_id}</span>
+                        </button>
+                      </li>
+                    ))}
+                    {filteredPeople.length === 0 ? <li className="px-2 py-1 text-xs text-neutral-500">Aucune.</li> : null}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Foyers</p>
+                  <ul className="mt-1 text-sm">
+                    {filteredFamilies.slice(0, 6).map((family) => (
+                      <li key={family.id}>
+                        <button
+                          type="button"
+                          className="w-full rounded-md px-2 py-1.5 text-left hover:bg-black/[0.03]"
+                          onClick={() => {
+                            setSelectedFamilyId(family.id)
+                            setFamilyPane('foyers')
+                            onTab('famille')
+                          }}
+                        >
+                          {family.label}
+                        </button>
+                      </li>
+                    ))}
+                    {filteredFamilies.length === 0 ? <li className="px-2 py-1 text-xs text-neutral-500">Aucun.</li> : null}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Classes</p>
+                  <ul className="mt-1 text-sm">
+                    {classrooms
+                      .filter((classroom) => matchesQuery(`${classroom.name} ${classroom.grade_level?.name ?? ''}`, query))
+                      .slice(0, 6)
+                      .map((classroom) => (
+                        <li key={classroom.id}>
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-2 py-1.5 text-left hover:bg-black/[0.03]"
+                            onClick={() => {
+                              setSelectedClassId(classroom.id)
+                              onTab('classe')
+                            }}
+                          >
+                            {classroom.name}
+                            {classroom.grade_level?.name ? (
+                              <span className="ml-2 text-[11px] text-neutral-500">{classroom.grade_level.name}</span>
+                            ) : null}
+                          </button>
+                        </li>
+                      ))}
+                    {classrooms.filter((classroom) => matchesQuery(`${classroom.name} ${classroom.grade_level?.name ?? ''}`, query))
+                      .length === 0 ? (
+                      <li className="px-2 py-1 text-xs text-neutral-500">Aucune.</li>
+                    ) : null}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
+          </Panel>
           <Panel>
             <div className="flex items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
               <h2 className="text-sm font-semibold">Actions du jour</h2>
@@ -4376,7 +4540,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [students, setStudents] = useState<RosterStudent[]>([])
   const [query, setQuery] = useState('')
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [marks, setMarks] = useState<Record<string, string>>({})
+  const [marks, setMarks] = useState<Record<string, AttendanceMark>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [years, setYears] = useState<YearRow[]>([])
@@ -4414,11 +4578,18 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   async function loadAttendance(classroomId: string, date: string) {
     const payload = await api<{
-      data: Array<{ enrollment_id: string; attendance: { status: string } | null }>
+      data: Array<{
+        enrollment_id: string
+        attendance: { status: string; reason?: string | null; justification?: string | null } | null
+      }>
     }>(`/api/v1/schools/${schoolId}/attendance?classroom_id=${classroomId}&date=${date}&session=full_day`, auth)
-    const next: Record<string, string> = {}
+    const next: Record<string, AttendanceMark> = {}
     for (const row of payload.data) {
-      next[row.enrollment_id] = row.attendance?.status ?? 'present'
+      next[row.enrollment_id] = {
+        status: row.attendance?.status ?? 'present',
+        reason: row.attendance?.reason ?? '',
+        justification: row.attendance?.justification ?? '',
+      }
     }
     setMarks(next)
   }
@@ -4444,6 +4615,15 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   async function saveAttendance(event: FormEvent) {
     event.preventDefault()
+    const missing = students.filter((row) => {
+      const mark = marks[row.enrollment_id]
+      const status = mark?.status ?? 'present'
+      return status !== 'present' && !(mark?.reason ?? '').trim()
+    })
+    if (missing.length > 0) {
+      setMessage('Indiquez un motif pour chaque absence, retard ou excuse.')
+      return
+    }
     setBusy(true)
     setMessage(null)
     try {
@@ -4453,14 +4633,19 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         body: JSON.stringify({
           date: attendanceDate,
           session: 'full_day',
-          records: students.map((row) => ({
-            enrollment_id: row.enrollment_id,
-            status: marks[row.enrollment_id] ?? 'present',
-            client_reference: crypto.randomUUID(),
-          })),
+          records: students.map((row) => {
+            const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
+            return {
+              enrollment_id: row.enrollment_id,
+              status: mark.status,
+              reason: mark.status === 'present' ? null : mark.reason || null,
+              justification: mark.status === 'present' ? null : mark.justification || null,
+              client_reference: crypto.randomUUID(),
+            }
+          }),
         }),
       })
-      setMessage('Présence enregistrée pour la classe.')
+      setMessage('Présence enregistrée. Les familles sont prévenues en cas d’absence (dans l’application, pas de SMS).')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Présence impossible à enregistrer.')
     } finally {
@@ -4532,19 +4717,62 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {visibleStudents.map((row) => (
-                    <tr key={row.enrollment_id} className="border-t border-black/5">
-                      <td className="px-3 py-1.5 font-medium">
-                        {row.person?.first_name} {row.person?.last_name}
-                      </td>
-                      <td className="px-3 py-1.5 text-right">
-                        <AttendancePills
-                          value={marks[row.enrollment_id] ?? 'present'}
-                          onChange={(status) => setMarks({ ...marks, [row.enrollment_id]: status })}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {visibleStudents.map((row) => {
+                    const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
+                    return (
+                      <tr key={row.enrollment_id} className="border-t border-black/5">
+                        <td className="px-3 py-1.5 align-top">
+                          <p className="font-medium">
+                            {row.person?.first_name} {row.person?.last_name}
+                          </p>
+                          {mark.status !== 'present' ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <select
+                                className={`${inputClass} w-auto`}
+                                value={mark.reason}
+                                onChange={(e) =>
+                                  setMarks({ ...marks, [row.enrollment_id]: { ...mark, reason: e.target.value } })
+                                }
+                              >
+                                <option value="">Motif</option>
+                                {ATTENDANCE_REASONS.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                className={`${inputClass} min-w-[10rem] flex-1`}
+                                value={mark.justification}
+                                onChange={(e) =>
+                                  setMarks({
+                                    ...marks,
+                                    [row.enrollment_id]: { ...mark, justification: e.target.value },
+                                  })
+                                }
+                                placeholder="Justificatif (ex. certificat vu)"
+                              />
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-1.5 text-right align-top">
+                          <AttendancePills
+                            value={mark.status}
+                            onChange={(status) =>
+                              setMarks({
+                                ...marks,
+                                [row.enrollment_id]: {
+                                  status,
+                                  reason: status === 'present' ? '' : mark.reason,
+                                  justification: status === 'present' ? '' : mark.justification,
+                                },
+                              })
+                            }
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
@@ -4592,7 +4820,12 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         </div>
       ) : null}
 
-      {currentClass && tab === 'appel' ? <p className="mt-2 text-[11px] text-neutral-500">Appel de {currentClass.name} — professeur de la classe uniquement.</p> : null}
+      {currentClass && tab === 'appel' ? (
+        <p className="mt-2 text-[11px] text-neutral-500">
+          Appel de {currentClass.name} — P présent, A absent, R retard, E excusé. Motif obligatoire hors présent. Une
+          absence prévient la famille dans l’application.
+        </p>
+      ) : null}
     </main>
   )
 }
@@ -4663,9 +4896,9 @@ function StudentScreen({ session }: { session: Session }) {
             ) : (
               <ul className="divide-y divide-black/5 text-sm">
                 {overview.attendance.map((row) => (
-                  <li key={row.id} className="flex justify-between px-3 py-1.5">
+                  <li key={row.id} className="flex justify-between gap-2 px-3 py-1.5">
                     <span>{formatDate(row.date)}</span>
-                    <span className="font-medium">{attendanceLabel(row.status)}</span>
+                    <span className="text-right font-medium">{attendanceDetail(row)}</span>
                   </li>
                 ))}
               </ul>
@@ -5287,9 +5520,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                         ) : (
                           <ul className="mt-1 space-y-0.5 text-xs">
                             {presence.map((row) => (
-                              <li key={row.id} className="flex justify-between">
+                              <li key={row.id} className="flex justify-between gap-2">
                                 <span>{formatDate(row.date)}</span>
-                                <span>{attendanceLabel(row.status)}</span>
+                                <span className="text-right">{attendanceDetail(row)}</span>
                               </li>
                             ))}
                           </ul>
