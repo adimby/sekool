@@ -118,6 +118,27 @@ final class MessageCatalog
                 'subject' => 'Événement — {school_name}',
                 'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUn événement est prévu : {title}, le {date}.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
             ],
+            [
+                'key' => 'timetable_substitution',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Emploi du temps de {student_first_name}',
+                'body' => 'Bonjour, le cours de {subject} de {student_first_name} est modifié le {date}. Consultez l’emploi du temps dans l’application. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'exam_session',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Composition pour {student_first_name}',
+                'body' => 'Bonjour, une composition est prévue pour {student_first_name} : {title}, le {date}. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'exam_session',
+                'channel' => 'print',
+                'locale' => 'fr',
+                'subject' => 'Composition — {school_name}',
+                'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUne composition est prévue : {title}, le {date}.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
+            ],
         ];
     }
 

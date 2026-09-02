@@ -86,7 +86,9 @@ Le calcul de Relationship Health suppose des signaux de communication accumulés
 
 Explicitement exclu, sans que cela remette en cause la roadmap :
 
-**Reporté à une phase ultérieure :** WhatsApp, réinscription automatisée, cantine, emploi du temps établissement, remplacements.
+**Reporté à une phase ultérieure :** WhatsApp, réinscription automatisée, cantine.
+
+**Exclu de la vie scolaire post-MVP :** infirmerie, photos d’élèves, cantine ERP. L’emploi du temps établissement, les remplacements et les compositions (date, horaire, salle) sont livrés en Vague D.
 
 **Exclu par le cahier des charges lui-même (§25) :** comptabilité complète, marketplace ouverte, réseau social scolaire, identité biométrique, signature qualifiée comme prérequis, partage automatique entre écoles.
 
@@ -172,6 +174,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 **Vague B — Vie de classe.** Devoirs et cahier journal (texte, date, fichier) visibles des familles ; discipline constat → mesure → suivi, sans score ; événements d’école (réunion, portes ouvertes, tournoi) par destinataires (école, niveau ou classe). Pas un chat élèves, pas Pronote.
 
 **Vague C — Livret, bulletin, Early Warning.** Livret de compétences maternelle–primaire (Pas encore / En cours / Acquis), sans photo d’élève et sans LSU. Bulletin enrichi (absences, appréciation, disclaimer FANABE). Early Warning interne notes + devoirs, formulation neutre, accusé humain ; jamais envoyé aux familles.
+
+**Vague D — EDT établissement et compositions.** Emploi du temps de l’établissement avec conflits professeur et salle ; remplacements (ou cours annulé) datés, notifiés in-app ; compositions par classe (titre, date, horaire, salle), sans photo d’élève et sans plan de salle nominatif. Pas de cantine, pas d’infirmerie.
 
 ---
 

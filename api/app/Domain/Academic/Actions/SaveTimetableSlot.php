@@ -45,7 +45,11 @@ final class SaveTimetableSlot
             $teacherId = null;
         }
 
+        $room = isset($data['room']) && trim((string) $data['room']) !== '' ? trim((string) $data['room']) : null;
+
         $this->assertNoOverlap($classroomId, $weekday, $starts, $ends, $slotId);
+        $this->assertNoTeacherOverlap($teacherId, $weekday, $starts, $ends, $slotId);
+        $this->assertNoRoomOverlap($room, $weekday, $starts, $ends, $slotId);
 
         $attrs = [
             'weekday' => $weekday,
@@ -53,7 +57,7 @@ final class SaveTimetableSlot
             'ends_at' => $ends,
             'subject' => trim($data['subject']),
             'teacher_person_id' => $teacherId,
-            'room' => isset($data['room']) && trim((string) $data['room']) !== '' ? trim((string) $data['room']) : null,
+            'room' => $room,
         ];
 
         if ($slotId !== null) {
@@ -102,6 +106,48 @@ final class SaveTimetableSlot
 
         if ($query->exists()) {
             throw new DomainException('Ce créneau chevauche un autre cours de la classe.');
+        }
+    }
+
+    private function assertNoTeacherOverlap(?string $teacherId, int $weekday, string $starts, string $ends, ?string $exceptId): void
+    {
+        if ($teacherId === null) {
+            return;
+        }
+
+        $query = TimetableSlot::query()
+            ->where('teacher_person_id', $teacherId)
+            ->where('weekday', $weekday)
+            ->where('starts_at', '<', $ends)
+            ->where('ends_at', '>', $starts);
+
+        if ($exceptId !== null) {
+            $query->whereKeyNot($exceptId);
+        }
+
+        if ($query->exists()) {
+            throw new DomainException('Ce professeur a déjà un cours à cette heure.');
+        }
+    }
+
+    private function assertNoRoomOverlap(?string $room, int $weekday, string $starts, string $ends, ?string $exceptId): void
+    {
+        if ($room === null) {
+            return;
+        }
+
+        $query = TimetableSlot::query()
+            ->where('room', $room)
+            ->where('weekday', $weekday)
+            ->where('starts_at', '<', $ends)
+            ->where('ends_at', '>', $starts);
+
+        if ($exceptId !== null) {
+            $query->whereKeyNot($exceptId);
+        }
+
+        if ($query->exists()) {
+            throw new DomainException('Cette salle est déjà prise à cette heure.');
         }
     }
 }
