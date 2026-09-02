@@ -82,7 +82,7 @@ it('records a competency on the preschool livret and shows it to the parent, wit
         ])
         ->assertNotFound();
 
-    $this->actingAs($teacher['account'], 'sanctum')
+    $this->actingAs($outsider['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$otherClass['id']}/competencies", [
             'enrollment_id' => $family['enrollment']->id,
             'competency_item_id' => $itemId,
