@@ -5,8 +5,12 @@ namespace App\Http\Api\V1\ParentPortal;
 use App\Domain\Academic\Models\ClassPost;
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\DisciplinaryCase;
+use App\Domain\Academic\Models\ExamSession;
 use App\Domain\Academic\Models\SchoolEvent;
+use App\Domain\Academic\Models\TimetableSlot;
+use App\Domain\Academic\Models\TimetableSubstitution;
 use App\Domain\Academic\Support\ClassLifePayload;
+use App\Domain\Academic\Support\EstablishmentTimetablePayload;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Identity\Support\ParentAuthorization;
@@ -109,6 +113,71 @@ final class ParentClassLifeController extends Controller
 
             return response()->json([
                 'data' => $rows->map(fn (SchoolEvent $row): array => ClassLifePayload::event($row))->values(),
+            ]);
+        });
+    }
+
+    public function timetable(Request $request, string $person): JsonResponse
+    {
+        if (! ParentAuthorization::isLegalGuardianOf((string) $request->user()->person_id, $person)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        return TenantContext::runWithRlsBypass(function () use ($person): JsonResponse {
+            $classroomId = $this->activeClassroomId($person);
+            if ($classroomId === null) {
+                return response()->json(['data' => [], 'substitutions' => []]);
+            }
+
+            $slots = TimetableSlot::query()
+                ->withoutGlobalScopes()
+                ->with(['classroom', 'teacher'])
+                ->where('classroom_id', $classroomId)
+                ->orderBy('weekday')
+                ->orderBy('starts_at')
+                ->get();
+
+            $from = now()->toDateString();
+            $substitutions = TimetableSubstitution::query()
+                ->withoutGlobalScopes()
+                ->with(['substitute', 'slot'])
+                ->where('classroom_id', $classroomId)
+                ->where('on_date', '>=', $from)
+                ->orderBy('on_date')
+                ->get();
+
+            return response()->json([
+                'data' => $slots->map(fn (TimetableSlot $slot): array => EstablishmentTimetablePayload::slot($slot))->values(),
+                'substitutions' => $substitutions
+                    ->map(fn (TimetableSubstitution $row): array => EstablishmentTimetablePayload::substitution($row))
+                    ->values(),
+            ]);
+        });
+    }
+
+    public function exams(Request $request, string $person): JsonResponse
+    {
+        if (! ParentAuthorization::isLegalGuardianOf((string) $request->user()->person_id, $person)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        return TenantContext::runWithRlsBypass(function () use ($person): JsonResponse {
+            $classroomId = $this->activeClassroomId($person);
+            if ($classroomId === null) {
+                return response()->json(['data' => []]);
+            }
+
+            $rows = ExamSession::query()
+                ->withoutGlobalScopes()
+                ->with('classroom')
+                ->where('classroom_id', $classroomId)
+                ->where('held_on', '>=', now()->toDateString())
+                ->orderBy('held_on')
+                ->orderBy('starts_at')
+                ->get();
+
+            return response()->json([
+                'data' => $rows->map(fn (ExamSession $row): array => EstablishmentTimetablePayload::exam($row))->values(),
             ]);
         });
     }

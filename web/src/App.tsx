@@ -202,6 +202,45 @@ type ClassFile = {
   }>
 }
 
+type SubstitutionRow = {
+  id: string
+  timetable_slot_id: string
+  classroom_id?: string
+  on_date: string | null
+  subject?: string | null
+  cancelled: boolean
+  reason: string | null
+  substitute: PersonMini | null
+}
+
+type ExamRow = {
+  id: string
+  classroom_id?: string
+  classroom?: string | null
+  title: string
+  subject: string | null
+  held_on: string | null
+  starts_at: string
+  ends_at: string
+  room: string | null
+  body: string | null
+}
+
+type SchoolTimetablePayload = {
+  data: Array<{
+    id: string
+    classroom_id: string
+    classroom: string | null
+    weekday: number
+    starts_at: string
+    ends_at: string
+    subject: string
+    room: string | null
+    teacher: PersonMini | null
+  }>
+  substitutions: SubstitutionRow[]
+}
+
 type ExpenseRow = {
   id: string
   kind: string
@@ -2129,6 +2168,19 @@ function ClassFilePanel({
   const [eventEnd, setEventEnd] = useState('')
   const [eventAudience, setEventAudience] = useState('classroom')
   const [eventLocation, setEventLocation] = useState('')
+  const [substitutions, setSubstitutions] = useState<SubstitutionRow[]>([])
+  const [exams, setExams] = useState<ExamRow[]>([])
+  const [edtTick, setEdtTick] = useState(0)
+  const [subSlot, setSubSlot] = useState('')
+  const [subDate, setSubDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [subTeacher, setSubTeacher] = useState('')
+  const [subReason, setSubReason] = useState('')
+  const [examTitle, setExamTitle] = useState('')
+  const [examSubject, setExamSubject] = useState('')
+  const [examDate, setExamDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [examStart, setExamStart] = useState('08:00')
+  const [examEnd, setExamEnd] = useState('10:00')
+  const [examRoom, setExamRoom] = useState('')
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
@@ -2263,6 +2315,19 @@ function ClassFilePanel({
       })
       .catch((error: Error) => onMessage(error.message))
   }, [classroomId, schoolId, auth.token, file.students.length, lifeTick])
+
+  useEffect(() => {
+    Promise.all([
+      api<{ data: SubstitutionRow[] }>(lifeUrl('/substitutions'), auth),
+      api<{ data: ExamRow[] }>(lifeUrl('/exams'), auth),
+    ])
+      .then(([subList, examList]) => {
+        setSubstitutions(subList.data)
+        setExams(examList.data)
+        setSubSlot((prev) => prev || file.timetable[0]?.id || '')
+      })
+      .catch((error: Error) => onMessage(error.message))
+  }, [classroomId, schoolId, auth.token, file.timetable.length, edtTick])
 
   return (
     <div>
@@ -3226,6 +3291,122 @@ function ClassFilePanel({
             </button>
           </form>
         )}
+        {substitutions.length === 0 ? (
+          <p className="mt-3 text-xs text-neutral-500">Aucun remplacement à venir.</p>
+        ) : (
+          <ul className="mt-3 space-y-1 text-sm">
+            {substitutions.map((row) => (
+              <li key={row.id} className="border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+                {row.on_date ? formatDate(row.on_date) : '—'} · {row.subject ?? 'Cours'}
+                {row.cancelled
+                  ? ' · annulé'
+                  : row.substitute
+                    ? ` · ${personLabel(row.substitute)}`
+                    : ''}
+                {row.reason ? <span className="block text-xs text-neutral-500">{row.reason}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {readOnly ? null : (
+          <form
+            className="mt-2 grid gap-2 sm:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(`/api/v1/schools/${schoolId}/timetable/${subSlot}/substitutions`, {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    on_date: subDate,
+                    substitute_person_id: subTeacher || null,
+                    reason: subReason.trim() || null,
+                  }),
+                })
+                setSubReason('')
+                setEdtTick((n) => n + 1)
+              }, 'Remplacement enregistré. Les familles sont prévenues dans l’application (pas de SMS).')
+            }}
+          >
+            <select className={inputClass} value={subSlot} onChange={(e) => setSubSlot(e.target.value)} required>
+              <option value="">Créneau</option>
+              {file.timetable.map((slot) => (
+                <option key={slot.id} value={slot.id}>
+                  {weekdayLabel(slot.weekday)} {slot.starts_at} · {slot.subject}
+                </option>
+              ))}
+            </select>
+            <input className={inputClass} type="date" value={subDate} onChange={(e) => setSubDate(e.target.value)} required />
+            <select className={inputClass} value={subTeacher} onChange={(e) => setSubTeacher(e.target.value)}>
+              <option value="">Annulé / sans remplaçant</option>
+              {staff.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {personLabel(person)}
+                </option>
+              ))}
+            </select>
+            <input className={inputClass} value={subReason} onChange={(e) => setSubReason(e.target.value)} placeholder="Motif (optionnel)" />
+            <button type="submit" className={`${btnGhost} sm:col-span-2`} disabled={busy || !subSlot}>
+              Enregistrer le remplacement
+            </button>
+          </form>
+        )}
+      </ClassSection>
+
+      <ClassSection title="Compositions">
+        <p className="text-xs text-neutral-500">Date, horaire et salle. Pas de photo d’élève, pas de plan de salle nominatif.</p>
+        {exams.length === 0 ? <p className="mt-2 text-xs text-neutral-500">Aucune composition à venir.</p> : null}
+        <ul className="mt-2 space-y-1 text-sm">
+          {exams.map((row) => (
+            <li key={row.id} className="border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+              <p className="font-medium">
+                {row.title}
+                <span className="ml-2 text-xs font-normal text-neutral-500">
+                  {row.held_on ? formatDate(row.held_on) : ''} {row.starts_at}–{row.ends_at}
+                  {row.room ? ` · ${row.room}` : ''}
+                </span>
+              </p>
+            </li>
+          ))}
+        </ul>
+        {readOnly ? null : (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/exams'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    title: examTitle,
+                    subject: examSubject.trim() || null,
+                    held_on: examDate,
+                    starts_at: examStart.slice(0, 5),
+                    ends_at: examEnd.slice(0, 5),
+                    room: examRoom.trim() || null,
+                  }),
+                })
+                setExamTitle('')
+                setExamSubject('')
+                setExamRoom('')
+                setEdtTick((n) => n + 1)
+              }, 'Composition publiée. Les familles sont prévenues dans l’application (pas de SMS).')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input className={inputClass} value={examTitle} onChange={(e) => setExamTitle(e.target.value)} placeholder="Titre" required />
+              <input className={inputClass} value={examSubject} onChange={(e) => setExamSubject(e.target.value)} placeholder="Matière (optionnel)" />
+              <input className={inputClass} type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} required />
+              <input className={inputClass} value={examRoom} onChange={(e) => setExamRoom(e.target.value)} placeholder="Salle" />
+              <input className={inputClass} type="time" value={examStart} onChange={(e) => setExamStart(e.target.value)} required />
+              <input className={inputClass} type="time" value={examEnd} onChange={(e) => setExamEnd(e.target.value)} required />
+            </div>
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Publier la composition
+            </button>
+          </form>
+        )}
       </ClassSection>
 
       {canCouncil ? (
@@ -3858,6 +4039,8 @@ function DirectionScreen({
   const [page, setPage] = useState(1)
   const [classFilter, setClassFilter] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
+  const [showSchoolEdt, setShowSchoolEdt] = useState(false)
+  const [schoolTimetable, setSchoolTimetable] = useState<SchoolTimetablePayload | null>(null)
   const [enrollOpen, setEnrollOpen] = useState(false)
   const [newClassName, setNewClassName] = useState('6ème B')
   const [newClassGrade, setNewClassGrade] = useState('')
@@ -4003,18 +4186,28 @@ function DirectionScreen({
 
   useEffect(() => {
     if (tab !== 'classe') return
+    if (showSchoolEdt) return
     if (selectedClassId === '' && classrooms[0]) {
       setSelectedClassId(classrooms[0].id)
     }
-  }, [tab, classrooms, selectedClassId])
+  }, [tab, classrooms, selectedClassId, showSchoolEdt])
 
   useEffect(() => {
-    if (tab !== 'classe' || !selectedClassId) {
-      setClassFile(null)
+    if (tab !== 'classe' || !schoolId || !showSchoolEdt) {
+      return
+    }
+    api<SchoolTimetablePayload>(`/api/v1/schools/${schoolId}/timetable`, auth)
+      .then(setSchoolTimetable)
+      .catch((error: Error) => setMessage(error.message))
+  }, [tab, schoolId, session.token, showSchoolEdt])
+
+  useEffect(() => {
+    if (tab !== 'classe' || !selectedClassId || showSchoolEdt) {
+      if (showSchoolEdt) setClassFile(null)
       return
     }
     loadClassFile(selectedClassId).catch((error: Error) => setMessage(error.message))
-  }, [tab, selectedClassId, schoolId, session.token])
+  }, [tab, selectedClassId, schoolId, session.token, showSchoolEdt])
 
   useEffect(() => {
     if (tab === 'classe' && yearId) {
@@ -4721,6 +4914,19 @@ function DirectionScreen({
               </button>
             </form>
             <ul className="mt-3 divide-y divide-black/5 text-sm">
+              <li>
+                <button
+                  type="button"
+                  className={`flex w-full items-center justify-between py-1.5 text-left ${showSchoolEdt ? 'font-semibold text-fanabe-leaf' : ''}`}
+                  onClick={() => {
+                    setShowSchoolEdt(true)
+                    setSelectedClassId('')
+                  }}
+                >
+                  <span>Établissement</span>
+                  <span className="text-xs text-neutral-500">EDT</span>
+                </button>
+              </li>
               {classGroups.map((group, index) => (
                 <li key={group.stage || 'other'}>
                   {classGroups.length > 1 ? (
@@ -4737,7 +4943,10 @@ function DirectionScreen({
                           <button
                             type="button"
                             className={`flex w-full items-center justify-between py-1.5 text-left ${selectedClassId === classroom.id ? 'font-semibold text-fanabe-leaf' : ''}`}
-                            onClick={() => setSelectedClassId(classroom.id)}
+                            onClick={() => {
+                              setShowSchoolEdt(false)
+                              setSelectedClassId(classroom.id)
+                            }}
                           >
                             <span>
                               {kind === 'Groupe' ? <span className="mr-1 text-[11px] font-normal text-neutral-500">Groupe</span> : null}
@@ -4784,7 +4993,46 @@ function DirectionScreen({
             </div>
           </Panel>
           <Panel className="min-w-0">
-            {classFile ? (
+            {showSchoolEdt ? (
+              <div className="px-3 py-3">
+                <h2 className="text-sm font-semibold">Emploi du temps de l’établissement</h2>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Conflits professeur et salle à l’enregistrement. Remplacements et compositions se saisissent dans chaque classe.
+                </p>
+                {(schoolTimetable?.data.length ?? 0) === 0 ? (
+                  <p className="mt-3 text-xs text-neutral-500">Aucun créneau pour le moment.</p>
+                ) : (
+                  <ul className="mt-3 space-y-1 text-sm">
+                    {(schoolTimetable?.data ?? []).map((slot) => (
+                      <li key={slot.id} className="flex flex-wrap justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+                        <span>
+                          <span className="text-xs font-medium text-neutral-500">{weekdayLabel(slot.weekday)} {slot.starts_at}–{slot.ends_at}</span>
+                          <span className="ml-2 font-medium">{slot.subject}</span>
+                          <span className="ml-2 text-xs text-neutral-500">{slot.classroom}</span>
+                        </span>
+                        <span className="text-xs text-neutral-600">
+                          {personLabel(slot.teacher)}
+                          {slot.room ? ` · ${slot.room}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {(schoolTimetable?.substitutions.length ?? 0) > 0 ? (
+                  <div className="mt-4">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Remplacements à venir</h3>
+                    <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                      {schoolTimetable?.substitutions.map((row) => (
+                        <li key={row.id}>
+                          {row.on_date ? formatDate(row.on_date) : '—'} · {row.subject ?? 'Cours'}
+                          {row.cancelled ? ' · annulé' : row.substitute ? ` · ${personLabel(row.substitute)}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : classFile ? (
               <ClassFilePanel
                 schoolId={schoolId}
                 auth={auth}
@@ -5831,6 +6079,10 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [childPosts, setChildPosts] = useState<Record<string, ClassPostRow[]>>({})
   const [childDiscipline, setChildDiscipline] = useState<Record<string, DisciplineRow[]>>({})
   const [childEvents, setChildEvents] = useState<Record<string, SchoolEventRow[]>>({})
+  const [childTimetables, setChildTimetables] = useState<
+    Record<string, { slots: SchoolTimetablePayload['data']; substitutions: SubstitutionRow[] }>
+  >({})
+  const [childExams, setChildExams] = useState<Record<string, ExamRow[]>>({})
   const [consents, setConsents] = useState<ConsentRow[]>([])
   const [linkRequests, setLinkRequests] = useState<LinkRequestRow[]>([])
   const [transfers, setTransfers] = useState<TransferRow[]>([])
@@ -5856,7 +6108,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       childId: prev.childId || firstGuardian?.id || payload.data[0]?.id || '',
       schoolId: prev.schoolId || schoolId,
     }))
-    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries, postEntries, discEntries, eventEntries, livretEntries] = await Promise.all([
+    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries, postEntries, discEntries, eventEntries, livretEntries, timetableEntries, examEntries] = await Promise.all([
       Promise.all(
         payload.data.map(async (child) => {
           const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, auth)
@@ -5935,6 +6187,25 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             return [child.id, row] as const
           }),
       ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: SchoolTimetablePayload['data']; substitutions: SubstitutionRow[] }>(
+              `/api/v1/parent/children/${child.id}/timetable`,
+              auth,
+            )
+            return [child.id, { slots: row.data, substitutions: row.substitutions ?? [] }] as const
+          }),
+      ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: ExamRow[] }>(`/api/v1/parent/children/${child.id}/exams`, auth)
+            return [child.id, row.data] as const
+          }),
+      ),
     ])
     setFinances(Object.fromEntries(entries))
     setAttendance(Object.fromEntries(presence))
@@ -5946,6 +6217,8 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
     setChildDiscipline(Object.fromEntries(discEntries))
     setChildEvents(Object.fromEntries(eventEntries))
     setLivrets(Object.fromEntries(livretEntries))
+    setChildTimetables(Object.fromEntries(timetableEntries))
+    setChildExams(Object.fromEntries(examEntries))
   }
 
   async function loadAccount() {
@@ -6222,6 +6495,55 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                             ))}
                           </ul>
                         )}
+                        {(childTimetables[child.id]?.slots.length ?? 0) > 0 ? (
+                          <>
+                            <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                              Emploi du temps
+                            </h3>
+                            <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+                              {childTimetables[child.id].slots.map((slot) => (
+                                <li key={slot.id}>
+                                  {weekdayLabel(slot.weekday)} {slot.starts_at}–{slot.ends_at} · {slot.subject}
+                                  {slot.room ? ` · ${slot.room}` : ''}
+                                  {slot.teacher ? ` · ${personLabel(slot.teacher)}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                            {(childTimetables[child.id]?.substitutions.length ?? 0) > 0 ? (
+                              <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+                                {childTimetables[child.id].substitutions.map((row) => (
+                                  <li key={row.id}>
+                                    {row.on_date ? formatDate(row.on_date) : '—'} · {row.subject ?? 'Cours'}
+                                    {row.cancelled
+                                      ? ' · annulé'
+                                      : row.substitute
+                                        ? ` · ${personLabel(row.substitute)}`
+                                        : ''}
+                                    {row.reason ? ` · ${row.reason}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </>
+                        ) : null}
+                        {(childExams[child.id]?.length ?? 0) > 0 ? (
+                          <>
+                            <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                              Compositions
+                            </h3>
+                            <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                              {childExams[child.id].map((row) => (
+                                <li key={row.id}>
+                                  <span className="font-medium">{row.title}</span>
+                                  {row.held_on ? ` · ${formatDate(row.held_on)}` : ''} {row.starts_at}–{row.ends_at}
+                                  {row.room ? ` · ${row.room}` : ''}
+                                  {row.subject ? ` · ${row.subject}` : ''}
+                                  {row.body ? <span className="block text-neutral-500">{row.body}</span> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : null}
                         {livrets[child.id]?.competencies_enabled && (livrets[child.id]?.domains.length ?? 0) > 0 ? (
                           <>
                             <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Livret</h3>

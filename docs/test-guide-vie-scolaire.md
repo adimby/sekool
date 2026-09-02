@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–C et socle)
+# Guide de test — FANABE (Vagues A–D et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -189,7 +189,37 @@ Deux devoirs plus une baisse de notes produisent la catégorie travail demandé 
 
 ---
 
-## 15. Ce qui ne doit pas arriver
+## 15. Emploi du temps établissement et remplacements (Vague D)
+
+Sur **6ème A**. Un créneau Malagasy lundi 07:30–08:25 salle A1 existe déjà en démo.
+
+1. Direction → **Classes** → **Établissement**.
+2. **Attendu :** la grille de toutes les classes (dont 6ème A, Malagasy lundi). Pas de cantine, pas d’infirmerie.
+3. Ouvrir **6ème A** → section **Emploi du temps**.
+4. Enregistrer un remplacement sur le créneau du **prochain lundi** (date = un lundi), remplaçant au choix, motif `Indisponibilité du titulaire.`.
+5. **Attendu :** bandeau « Remplacement enregistré… » (pas de SMS). La ligne apparaît. Un mot interdit (`score`, `risque`) est refusé.
+6. Parent Andry → **Enfants** → Hery → **Emploi du temps**.
+7. **Attendu :** créneaux de la semaine et le remplacement du lundi. Parent → **Messages** : « Emploi du temps de Hery ».
+8. Professeur → **Classe** → 6ème A : la liste des remplacements est visible ; **pas** de formulaire d’enregistrement.
+
+Un second cours au même horaire, même professeur ou même salle, est refusé (422) : « Ce professeur a déjà un cours à cette heure. » / « Cette salle est déjà prise à cette heure. »
+
+---
+
+## 16. Compositions (Vague D)
+
+1. Direction → **Classes** → **6ème A** → section **Compositions**.
+2. Titre `Composition Malagasy`, matière `Malagasy`, date dans quelques jours, 08:00–10:00, salle `A1`. **Publier la composition**.
+3. **Attendu :** bandeau « Composition publiée… ». Aucun champ photo, aucun plan de salle nominatif.
+4. Parent Andry → **Enfants** → Hery → **Compositions**.
+5. **Attendu :** `Composition Malagasy` avec date, horaire et salle.
+6. Parent → **Messages**.
+7. **Attendu :** « Composition pour Hery ». Aucun mot *score*, *risque*, *élève en difficulté*.
+8. Professeur → **Classe** → 6ème A : la composition est listée ; **pas** de bouton Publier.
+
+---
+
+## 17. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -202,3 +232,4 @@ Deux devoirs plus une baisse de notes produisent la catégorie travail demandé 
 - Le livret n’a pas de photo d’élève.
 - Le bulletin n’est pas un LSU.
 - L’Early Warning n’est jamais envoyé aux familles.
+- Pas de cantine, pas d’infirmerie, pas de photo d’élève sur les compositions.
