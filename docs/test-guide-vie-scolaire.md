@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–D et socle)
+# Guide de test — FANABE (Vagues A–E et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -219,7 +219,29 @@ Un second cours au même horaire, même professeur ou même salle, est refusé (
 
 ---
 
-## 17. Ce qui ne doit pas arriver
+## 17. Courrier papier (Vague E)
+
+Le canal papier existe déjà (absence, devoir, composition…). La direction le voit et le coche.
+
+1. Si besoin : professeur → **Appel** → 6ème A → Hery **A** + motif **Maladie** → **Enregistrer**.
+2. Direction → **Aujourd’hui** → section **Courrier à remettre**.
+3. **Attendu :** une lettre « Absence de Hery » (ou composition / devoir). Texte à remettre en main propre. **Pas de SMS.**
+4. **Imprimer** ouvre la lettre. **Remis** la retire de la file.
+5. **Attendu :** bandeau « Courrier marqué remis… ». La ligne disparaît.
+6. Professeur → **Aujourd’hui** n’existe pas ; un GET courrier côté titulaire est refusé.
+
+---
+
+## 18. Export des données (Vague E)
+
+1. Parent Andry → **Compte**.
+2. Section **Mes données** → **Télécharger mes données**.
+3. **Attendu :** un fichier `fanabe-mes-donnees.json` avec Hery (et Voahirana), messages, consentements. Mention « Pas un LSU ». Aucun mot *score*, *risque*, *élève en difficulté*.
+4. Un parent d’une autre famille ne voit pas Hery dans son archive.
+
+---
+
+## 19. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.

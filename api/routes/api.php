@@ -11,6 +11,7 @@ use App\Http\Api\V1\ParentPortal\ConsentController;
 use App\Http\Api\V1\ParentPortal\LinkRequestController;
 use App\Http\Api\V1\ParentPortal\ParentAcademicController;
 use App\Http\Api\V1\ParentPortal\ParentClassLifeController;
+use App\Http\Api\V1\ParentPortal\ParentExportController;
 use App\Http\Api\V1\ParentPortal\ParentKitController;
 use App\Http\Api\V1\ParentPortal\ParentMessageController;
 use App\Http\Api\V1\ParentPortal\ShareTokenController;
@@ -150,7 +151,8 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/enrollments/{enrollment}/risk', [RiskAssessmentController::class, 'show']);
         Route::post('/schools/{school}/enrollments/{enrollment}/risk/override', [RiskAssessmentController::class, 'override']);
         Route::post('/schools/{school}/workflows/run', WorkflowRunController::class);
-        Route::get('/schools/{school}/messages/outbox', OutboxController::class);
+        Route::get('/schools/{school}/messages/outbox', [OutboxController::class, 'index']);
+        Route::post('/schools/{school}/messages/{message}/printed', [OutboxController::class, 'markPrinted']);
         Route::get('/schools/{school}/families/{family}/reliability', FamilyReliabilityController::class);
         Route::get('/schools/{school}/families/{family}/reliability/compare', [ReliabilityController::class, 'familyCompare']);
         Route::get('/schools/{school}/families/{family}/relationship', [ReliabilityController::class, 'relationship']);
@@ -208,6 +210,7 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::get('/kits', [ParentKitController::class, 'index']);
     Route::post('/kit-orders', [ParentKitController::class, 'store']);
     Route::get('/messages', ParentMessageController::class);
+    Route::get('/export', ParentExportController::class);
     Route::post('/share-tokens', [ShareTokenController::class, 'store']);
 
     Route::get('/link-requests', [LinkRequestController::class, 'index']);
