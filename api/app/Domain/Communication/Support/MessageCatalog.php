@@ -69,6 +69,55 @@ final class MessageCatalog
                 'subject' => 'Document à remettre — {school_name}',
                 'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUn document manque encore au dossier. Merci de le déposer à l’accueil.\n\nDocument à remettre en main propre.",
             ],
+            [
+                'key' => 'homework_published',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Devoir pour {student_first_name}',
+                'body' => 'Bonjour, un devoir a été donné à la classe de {student_first_name} : {title}. Date prévue : {date}. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'homework_published',
+                'channel' => 'print',
+                'locale' => 'fr',
+                'subject' => 'Devoir — {school_name}',
+                'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUn devoir a été donné : {title}. Date prévue : {date}.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
+            ],
+            [
+                'key' => 'journal_published',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Mot de classe pour {student_first_name}',
+                'body' => 'Bonjour, un mot de classe a été publié pour {student_first_name} : {title}. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'discipline_measure',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => 'Mesure enregistrée pour {student_first_name}',
+                'body' => 'Bonjour, une mesure a été enregistrée pour {student_first_name} le {date} ({measure}). Merci de prendre contact avec l’école. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'discipline_measure',
+                'channel' => 'print',
+                'locale' => 'fr',
+                'subject' => 'Note à la famille — {school_name}',
+                'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUne mesure a été enregistrée le {date} ({measure}). Merci de prendre contact avec l’école.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
+            ],
+            [
+                'key' => 'school_event',
+                'channel' => 'in_app',
+                'locale' => 'fr',
+                'subject' => '{title} — {school_name}',
+                'body' => 'Bonjour, un événement est prévu à {school_name} : {title}, le {date}. FANABE n’envoie pas de SMS.',
+            ],
+            [
+                'key' => 'school_event',
+                'channel' => 'print',
+                'locale' => 'fr',
+                'subject' => 'Événement — {school_name}',
+                'body' => "À l’attention de la famille de {student_first_name} {student_last_name}.\n\nUn événement est prévu : {title}, le {date}.\n\nDocument à remettre en main propre. FANABE n’envoie pas de SMS.",
+            ],
         ];
     }
 

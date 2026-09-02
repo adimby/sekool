@@ -169,6 +169,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague A — Vie scolaire quotidienne.** Motif et justificatif sur l’appel ; notification in-app/papier le jour d’une absence (pas de SMS) ; certificat de radiation à la sortie d’effectif ; recherche personnes / foyers / classes sur le cockpit.
 
+**Vague B — Vie de classe.** Devoirs et cahier journal (texte, date, fichier) visibles des familles ; discipline constat → mesure → suivi, sans score ; événements d’école (réunion, portes ouvertes, tournoi) par destinataires (école, niveau ou classe). Pas un chat élèves, pas Pronote.
+
 ---
 
 ## 7. Définition de terminé
