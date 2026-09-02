@@ -122,3 +122,78 @@ it('records grades, builds a bulletin, and hides notes from preschool and financ
         ->assertJsonPath('grades_enabled', false)
         ->assertJsonCount(0, 'data');
 });
+
+it('adds a family-safe bulletin comment and presence counts, without becoming a LSU', function () {
+    $school = $this->provisionSchool();
+    $family = $this->provisionEnrolledFamily($school);
+    $core = $this->provisionFeeSchedule($school);
+    $schoolId = $school['school']->id;
+
+    $classroom = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms", [
+            'school_year_id' => $school['year']->id,
+            'grade_level_id' => $core['grade']->id,
+            'name' => '6ème A',
+        ])->json('data');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/assign-classroom", [
+            'classroom_id' => $classroom['id'],
+        ]);
+
+    $teacher = $this->provisionTeacher($school, $classroom['id']);
+
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => now()->toDateString(),
+            'session' => 'full_day',
+            'records' => [[
+                'enrollment_id' => $family['enrollment']->id,
+                'status' => 'absent',
+                'reason' => 'illness',
+            ]],
+        ])
+        ->assertCreated();
+
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/bulletin/comments", [
+            'body' => 'Travail régulier. Continuer ainsi.',
+        ])
+        ->assertCreated();
+
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/enrollments/{$family['enrollment']->id}/bulletin/comments", [
+            'body' => 'Élève en difficulté, score trop bas.',
+        ])
+        ->assertStatus(422);
+
+    $bulletin = $this->actingAs($family['parentAccount'], 'sanctum')
+        ->getJson("/api/v1/parent/children/{$family['student']->id}/bulletin")
+        ->assertOk()
+        ->json('data');
+
+    expect($bulletin['disclaimer'])->toContain('pas un LSU')
+        ->and($bulletin['overall_comment'])->toBe('Travail régulier. Continuer ainsi.')
+        ->and($bulletin['absences'])->toBe(1)
+        ->and(mb_strtolower($bulletin['overall_comment']))->not->toContain('élève en difficulté');
+
+    $financeAdult = $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/families/{$family['family']->id}/adults", [
+            'first_name' => 'Soa',
+            'last_name' => 'Andria',
+            'email' => 'soa.'.uniqid().'@fanabe.test',
+            'relationship' => RelationshipType::FinancialContactFor->value,
+        ])
+        ->assertSuccessful()
+        ->json('adult');
+
+    $financeAccount = UserAccount::factory()->create([
+        'person_id' => $financeAdult['id'],
+        'email' => 'finance.'.uniqid().'@fanabe.test',
+        'password' => 'password',
+    ]);
+
+    $this->actingAs($financeAccount, 'sanctum')
+        ->getJson("/api/v1/parent/children/{$family['student']->id}/bulletin")
+        ->assertNotFound();
+});

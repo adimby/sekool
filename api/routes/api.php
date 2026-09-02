@@ -26,6 +26,7 @@ use App\Http\Api\V1\School\ClassroomLifeController;
 use App\Http\Api\V1\School\DisciplinaryCaseController;
 use App\Http\Api\V1\School\CockpitController;
 use App\Http\Api\V1\School\CollectionController;
+use App\Http\Api\V1\School\CompetencyController;
 use App\Http\Api\V1\School\DocumentAttestController;
 use App\Http\Api\V1\School\EnrollmentController;
 use App\Http\Api\V1\School\EnrollmentWithdrawController;
@@ -79,6 +80,9 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/classrooms/{classroom}/grades', [GradeController::class, 'index']);
         Route::post('/schools/{school}/classrooms/{classroom}/grades', [GradeController::class, 'store']);
         Route::get('/schools/{school}/enrollments/{enrollment}/bulletin', [GradeController::class, 'bulletin']);
+        Route::post('/schools/{school}/enrollments/{enrollment}/bulletin/comments', [GradeController::class, 'storeComment']);
+        Route::get('/schools/{school}/classrooms/{classroom}/competencies', [CompetencyController::class, 'index']);
+        Route::post('/schools/{school}/classrooms/{classroom}/competencies', [CompetencyController::class, 'store']);
         Route::get('/schools/{school}/certificates', [CertificateController::class, 'index']);
         Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
         Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
@@ -187,6 +191,7 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::get('/children/{person}/finance', ChildFinanceController::class);
     Route::get('/children/{person}/attendance', ChildAttendanceController::class);
     Route::get('/children/{person}/bulletin', [ParentAcademicController::class, 'bulletin']);
+    Route::get('/children/{person}/competencies', [ParentAcademicController::class, 'competencies']);
     Route::get('/children/{person}/certificates', [ParentAcademicController::class, 'certificates']);
     Route::get('/children/{person}/posts', [ParentClassLifeController::class, 'posts']);
     Route::get('/children/{person}/discipline', [ParentClassLifeController::class, 'discipline']);

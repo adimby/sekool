@@ -3,6 +3,7 @@
 namespace App\Http\Api\V1\School;
 
 use App\Domain\Academic\Actions\BulletinPayload;
+use App\Domain\Academic\Actions\RecordBulletinComment;
 use App\Domain\Academic\Actions\RecordGrade;
 use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\Classroom;
@@ -112,6 +113,37 @@ final class GradeController extends Controller
         $termId = is_string($termId) && $termId !== '' ? $termId : null;
 
         return response()->json(['data' => $bulletin->forEnrollment($row, $termId)]);
+    }
+
+    public function storeComment(Request $request, string $school, string $enrollment, RecordBulletinComment $record): JsonResponse
+    {
+        $row = Enrollment::query()->with('classroom.gradeLevel')->find($enrollment);
+        if ($row === null) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+        if ($row->classroom === null || ! SchoolGate::canViewClassroom($request, $row->classroom)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+        if (! SchoolGate::isDirection($request) && ! SchoolGate::teaches($request, $row->classroom)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:4000'],
+            'subject_id' => ['nullable', 'uuid'],
+            'academic_term_id' => ['nullable', 'uuid'],
+        ]);
+
+        $comment = $record->execute($school, $enrollment, (string) $request->user()->person_id, $data);
+
+        return response()->json([
+            'data' => [
+                'id' => $comment->id,
+                'enrollment_id' => $comment->enrollment_id,
+                'subject_id' => $comment->subject_id,
+                'body' => $comment->body,
+            ],
+        ], 201);
     }
 
     /**

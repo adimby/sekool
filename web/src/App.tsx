@@ -672,10 +672,38 @@ function certificateStatusLabel(status: string): string {
 
 type BulletinRow = {
   overall_average: number | null
+  classroom?: string | null
+  grade_level?: string | null
+  stage?: string | null
+  disclaimer?: string | null
+  absences?: number
+  late?: number
+  overall_comment?: string | null
   subjects?: Array<{
+    subject_id?: string
     subject: string | null
     average: number | null
+    comment?: string | null
     entries: Array<{ value: number; assessed_on: string | null }>
+  }>
+}
+
+type CompetencyLivret = {
+  competencies_enabled: boolean
+  levels: Array<{ value: string; label: string }>
+  domains: Array<{
+    id: string
+    label: string
+    items: Array<{ id: string; label: string; sequence: number }>
+  }>
+  assessments: Array<{
+    id: string
+    enrollment_id: string
+    competency_item_id: string
+    level: string
+    level_label: string
+    comment: string | null
+    assessed_on: string | null
   }>
 }
 
@@ -1053,6 +1081,10 @@ function showsCouncil(stage?: string | null): boolean {
 
 function showsGrades(stage?: string | null): boolean {
   return stage !== 'preschool'
+}
+
+function showsCompetencies(stage?: string | null): boolean {
+  return stage === 'preschool' || stage === 'primary'
 }
 
 function unitLabel(stage?: string | null): string {
@@ -2048,6 +2080,13 @@ function ClassFilePanel({
   const [verifyUrl, setVerifyUrl] = useState<string | null>(null)
   const [gradeTick, setGradeTick] = useState(0)
   const [newSubject, setNewSubject] = useState('')
+  const [bulletin, setBulletin] = useState<BulletinRow | null>(null)
+  const [overallComment, setOverallComment] = useState('')
+  const [livret, setLivret] = useState<CompetencyLivret | null>(null)
+  const [competencyStudent, setCompetencyStudent] = useState('')
+  const [competencyComment, setCompetencyComment] = useState('')
+  const [competencyDate, setCompetencyDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [competencyTick, setCompetencyTick] = useState(0)
   const [certificates, setCertificates] = useState<
     Array<{
       id: string
@@ -2132,6 +2171,7 @@ function ClassFilePanel({
   const canDelegate = showsDelegate(stage)
   const canCouncil = showsCouncil(stage)
   const canGrades = showsGrades(stage)
+  const canCompetencies = showsCompetencies(stage)
   const writeGrades = canWriteGrades ?? !readOnly
   const writeVie = canWriteVieScolaire ?? !readOnly
   const canSeries = stage === 'high'
@@ -2158,6 +2198,32 @@ function ClassFilePanel({
       })
       .catch((error: Error) => onMessage(error.message))
   }, [canGrades, classroomId, schoolId, auth.token, file.students.length, gradeTick])
+
+  useEffect(() => {
+    if (!canGrades || !gradeStudent) {
+      setBulletin(null)
+      return
+    }
+    api<{ data: BulletinRow }>(`/api/v1/schools/${schoolId}/enrollments/${gradeStudent}/bulletin`, auth)
+      .then((payload) => {
+        setBulletin(payload.data)
+        setOverallComment(payload.data.overall_comment ?? '')
+      })
+      .catch(() => setBulletin(null))
+  }, [canGrades, gradeStudent, schoolId, auth.token, gradeTick])
+
+  useEffect(() => {
+    if (!canCompetencies) {
+      setLivret(null)
+      return
+    }
+    api<CompetencyLivret>(lifeUrl('/competencies'), auth)
+      .then((payload) => {
+        setLivret(payload)
+        setCompetencyStudent((prev) => prev || file.students[0]?.enrollment_id || '')
+      })
+      .catch((error: Error) => onMessage(error.message))
+  }, [canCompetencies, classroomId, schoolId, auth.token, file.students.length, competencyTick])
 
   useEffect(() => {
     const enrollmentIds = new Set(file.students.map((row) => row.enrollment_id))
@@ -2372,6 +2438,90 @@ function ClassFilePanel({
         )}
       </ClassSection>
 
+      {canCompetencies ? (
+        <ClassSection title="Livret">
+          <p className="text-xs text-neutral-500">
+            Pas encore / En cours / Acquis. Pas une note, pas une photo d’élève.
+          </p>
+          {file.students.length === 0 ? (
+            <p className="mt-2 text-xs text-neutral-500">Aucun élève dans ce groupe pour le moment. Le catalogue est prêt.</p>
+          ) : null}
+          {(livret?.domains ?? []).map((domain) => (
+            <div key={domain.id} className="mt-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{domain.label}</h4>
+              <ul className="mt-1 space-y-2 text-sm">
+                {domain.items.map((item) => {
+                  const current = (livret?.assessments ?? []).find(
+                    (row) => row.competency_item_id === item.id && row.enrollment_id === competencyStudent,
+                  )
+                  return (
+                    <li key={item.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                      <p className="font-medium">{item.label}</p>
+                      {current ? (
+                        <p className="text-xs text-neutral-500">
+                          {current.level_label}
+                          {current.comment ? ` · ${current.comment}` : ''}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-neutral-500">Pas encore renseigné.</p>
+                      )}
+                      {writeVie && competencyStudent ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(livret?.levels ?? []).map((level) => (
+                            <button
+                              key={level.value}
+                              type="button"
+                              className={current?.level === level.value ? btnPrimary : btnGhost}
+                              disabled={busy}
+                              onClick={() => {
+                                void run(async () => {
+                                  await api(lifeUrl('/competencies'), {
+                                    ...auth,
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                      enrollment_id: competencyStudent,
+                                      competency_item_id: item.id,
+                                      level: level.value,
+                                      comment: competencyComment.trim() || null,
+                                      assessed_on: competencyDate,
+                                    }),
+                                  })
+                                  setCompetencyTick((n) => n + 1)
+                                }, `${level.label} enregistré.`)
+                              }}
+                            >
+                              {level.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+          {writeVie && file.students.length > 0 ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <select className={inputClass} value={competencyStudent} onChange={(e) => setCompetencyStudent(e.target.value)}>
+                {file.students.map((row) => (
+                  <option key={row.enrollment_id} value={row.enrollment_id}>
+                    {row.person ? personLabel(row.person) : row.enrollment_id}
+                  </option>
+                ))}
+              </select>
+              <input className={inputClass} type="date" value={competencyDate} onChange={(e) => setCompetencyDate(e.target.value)} />
+              <input
+                className={`${inputClass} sm:col-span-2`}
+                value={competencyComment}
+                onChange={(e) => setCompetencyComment(e.target.value)}
+                placeholder="Commentaire (optionnel, visible de la famille)"
+              />
+            </div>
+          ) : null}
+        </ClassSection>
+      ) : null}
+
       {canGrades ? (
         <ClassSection title="Notes">
           {grades.length === 0 ? <p className="text-xs text-neutral-500">Aucune note pour cette classe.</p> : null}
@@ -2463,6 +2613,48 @@ function ClassFilePanel({
                 </button>
               </form>
             </>
+          ) : null}
+          {gradeStudent && bulletin ? (
+            <div className="mt-3 border-t border-black/5 pt-3">
+              <p className="text-xs text-neutral-500">{bulletin.disclaimer ?? 'Ce relevé est un document FANABE. Ce n’est pas un LSU.'}</p>
+              <p className="mt-1 text-xs text-neutral-600">
+                Absences (30 j.) : {bulletin.absences ?? 0}
+                {bulletin.late != null ? ` · Retards : ${bulletin.late}` : ''}
+                {bulletin.overall_average != null ? ` · Moyenne : ${bulletin.overall_average}` : ''}
+              </p>
+              {bulletin.overall_comment ? (
+                <p className="mt-1 text-sm text-neutral-700">{bulletin.overall_comment}</p>
+              ) : (
+                <p className="mt-1 text-xs text-neutral-500">Pas encore d’appréciation générale.</p>
+              )}
+              {writeGrades ? (
+                <form
+                  className="mt-2 space-y-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void run(async () => {
+                      await api(`/api/v1/schools/${schoolId}/enrollments/${gradeStudent}/bulletin/comments`, {
+                        ...auth,
+                        method: 'POST',
+                        body: JSON.stringify({ body: overallComment }),
+                      })
+                      setGradeTick((n) => n + 1)
+                    }, 'Appréciation enregistrée.')
+                  }}
+                >
+                  <textarea
+                    className={`${inputClass} h-16 py-1.5`}
+                    value={overallComment}
+                    onChange={(e) => setOverallComment(e.target.value)}
+                    placeholder="Appréciation générale (pas un LSU)"
+                    required
+                  />
+                  <button type="submit" className={btnGhost} disabled={busy || overallComment.trim() === ''}>
+                    Enregistrer l’appréciation
+                  </button>
+                </form>
+              ) : null}
+            </div>
           ) : null}
         </ClassSection>
       ) : null}
@@ -5634,6 +5826,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
     orders: KitOrderRow[]
   }>({ children: [], catalog: [], orders: [] })
   const [bulletins, setBulletins] = useState<Record<string, BulletinRow>>({})
+  const [livrets, setLivrets] = useState<Record<string, CompetencyLivret>>({})
   const [certificates, setCertificates] = useState<Record<string, Array<{ id: string; type_label: string; public_reference: string; status: string }>>>({})
   const [childPosts, setChildPosts] = useState<Record<string, ClassPostRow[]>>({})
   const [childDiscipline, setChildDiscipline] = useState<Record<string, DisciplineRow[]>>({})
@@ -5663,7 +5856,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       childId: prev.childId || firstGuardian?.id || payload.data[0]?.id || '',
       schoolId: prev.schoolId || schoolId,
     }))
-    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries, postEntries, discEntries, eventEntries] = await Promise.all([
+    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries, postEntries, discEntries, eventEntries, livretEntries] = await Promise.all([
       Promise.all(
         payload.data.map(async (child) => {
           const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, auth)
@@ -5734,6 +5927,14 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             return [child.id, row.data] as const
           }),
       ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<CompetencyLivret>(`/api/v1/parent/children/${child.id}/competencies`, auth)
+            return [child.id, row] as const
+          }),
+      ),
     ])
     setFinances(Object.fromEntries(entries))
     setAttendance(Object.fromEntries(presence))
@@ -5744,6 +5945,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
     setChildPosts(Object.fromEntries(postEntries))
     setChildDiscipline(Object.fromEntries(discEntries))
     setChildEvents(Object.fromEntries(eventEntries))
+    setLivrets(Object.fromEntries(livretEntries))
   }
 
   async function loadAccount() {
@@ -6020,7 +6222,36 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                             ))}
                           </ul>
                         )}
+                        {livrets[child.id]?.competencies_enabled && (livrets[child.id]?.domains.length ?? 0) > 0 ? (
+                          <>
+                            <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Livret</h3>
+                            <div className="mt-1 space-y-2 text-xs text-neutral-600">
+                              {livrets[child.id].domains.map((domain) => (
+                                <div key={domain.id}>
+                                  <p className="font-medium">{domain.label}</p>
+                                  <ul className="mt-0.5 space-y-0.5">
+                                    {domain.items.map((item) => {
+                                      const current = (livrets[child.id]?.assessments ?? []).find(
+                                        (row) => row.competency_item_id === item.id,
+                                      )
+                                      return (
+                                        <li key={item.id} className="flex justify-between gap-2">
+                                          <span>{item.label}</span>
+                                          <span>{current?.level_label ?? '—'}</span>
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                </div>
+                              ))}
+                              <p className="text-[11px] text-neutral-500">Pas une photo d’élève. Pas un LSU.</p>
+                            </div>
+                          </>
+                        ) : null}
                         <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Notes</h3>
+                        {bulletins[child.id]?.disclaimer ? (
+                          <p className="mt-1 text-[11px] text-neutral-500">{bulletins[child.id].disclaimer}</p>
+                        ) : null}
                         {bulletins[child.id]?.overall_average != null ? (
                           <p className="mt-1 text-xs text-neutral-600">
                             Moyenne : <strong>{bulletins[child.id].overall_average}</strong>
@@ -6028,12 +6259,24 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                         ) : (
                           <p className="mt-1 text-xs text-neutral-600">Aucune note pour le moment.</p>
                         )}
+                        {bulletins[child.id] && (bulletins[child.id].absences != null || bulletins[child.id].late != null) ? (
+                          <p className="mt-0.5 text-xs text-neutral-600">
+                            Absences (30 j.) : {bulletins[child.id].absences ?? 0}
+                            {bulletins[child.id].late != null ? ` · Retards : ${bulletins[child.id].late}` : ''}
+                          </p>
+                        ) : null}
+                        {bulletins[child.id]?.overall_comment ? (
+                          <p className="mt-1 text-xs text-neutral-600">{bulletins[child.id].overall_comment}</p>
+                        ) : null}
                         {(bulletins[child.id]?.subjects ?? []).length > 0 ? (
                           <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
                             {bulletins[child.id].subjects?.map((subject) => (
-                              <li key={subject.subject ?? 'matiere'} className="flex justify-between gap-2">
-                                <span>{subject.subject ?? 'Matière'}</span>
-                                <span className="tabular-nums">{subject.average ?? '—'}</span>
+                              <li key={subject.subject ?? 'matiere'}>
+                                <span className="flex justify-between gap-2">
+                                  <span>{subject.subject ?? 'Matière'}</span>
+                                  <span className="tabular-nums">{subject.average ?? '—'}</span>
+                                </span>
+                                {subject.comment ? <span className="block text-neutral-500">{subject.comment}</span> : null}
                               </li>
                             ))}
                           </ul>

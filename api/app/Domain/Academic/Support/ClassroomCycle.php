@@ -18,4 +18,9 @@ final class ClassroomCycle
 
         return GradeStage::tryFrom((string) $stage) ?? GradeStage::Middle;
     }
+
+    public static function usesLivret(Classroom $classroom): bool
+    {
+        return self::of($classroom)->usesLivret();
+    }
 }
