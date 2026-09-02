@@ -78,7 +78,7 @@ final class StudentOverviewController extends Controller
                 ? collect()
                 : AttendanceRecord::query()
                     ->withoutGlobalScopes()
-                    ->with('timetableSlot')
+                    ->with(['timetableSlot' => fn ($query) => $query->withoutGlobalScopes()])
                     ->where('enrollment_id', $enrollment->id)
                     ->whereBetween('date', [$from, $to])
                     ->orderByDesc('date')

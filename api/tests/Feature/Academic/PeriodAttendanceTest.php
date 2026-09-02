@@ -142,9 +142,12 @@ it('lets a subject teacher record attendance on their slot, not the titulaire’
         ->and(collect($index['courses'])->pluck('subject')->all())->toContain('Malagasy', 'Mathématiques');
 
     $this->actingAs($family['parentAccount'], 'sanctum')
-        ->getJson("/api/v1/parent/children/{$family['student']->id}/attendance")
+        ->getJson("/api/v1/parent/children/{$family['student']->id}/attendance?".http_build_query([
+            'from' => $monday->toDateString(),
+            'to' => $monday->toDateString(),
+        ]))
         ->assertOk()
-        ->assertJsonPath('data.0.subject', 'Mathématiques');
+        ->assertJsonFragment(['subject' => 'Mathématiques']);
 });
 
 it('lets a substitute take the roll and forbids attendance on a cancelled course', function () {

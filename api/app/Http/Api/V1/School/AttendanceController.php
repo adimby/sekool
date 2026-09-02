@@ -136,6 +136,10 @@ final class AttendanceController extends Controller
             ->whereIn('id', $enrollments->pluck('classroom_id')->unique())
             ->get();
 
+        if ($classrooms->isEmpty()) {
+            return response()->json(['message' => 'Inscription introuvable.'], 404);
+        }
+
         foreach ($classrooms as $classroom) {
             if (! SchoolGate::isTeacher($request)) {
                 return response()->json(['message' => 'L’appel se fait par le professeur du cours.'], 403);

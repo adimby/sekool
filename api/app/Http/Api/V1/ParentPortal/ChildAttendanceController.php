@@ -30,7 +30,7 @@ final class ChildAttendanceController extends Controller
 
             $rows = AttendanceRecord::query()
                 ->withoutGlobalScopes()
-                ->with('timetableSlot')
+                ->with(['timetableSlot' => fn ($query) => $query->withoutGlobalScopes()])
                 ->whereIn('enrollment_id', $enrollmentIds)
                 ->whereBetween('date', [$from, $to])
                 ->orderByDesc('date')

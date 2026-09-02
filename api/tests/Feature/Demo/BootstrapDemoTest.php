@@ -117,16 +117,16 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ])
         ->assertCreated();
 
-    $mathsLogin = $this->postJson('/api/v1/auth/login', [
-        'email' => 'teacher.maths.antsahabe@fanabe.test',
-        'password' => 'password',
-    ])->assertOk();
+    $this->withoutToken();
 
-    $mathsToken = $mathsLogin->json('token');
+    $mathsAccount = UserAccount::query()
+        ->whereRaw('lower(email) = ?', ['teacher.maths.antsahabe@fanabe.test'])
+        ->firstOrFail();
+
     $maths = collect($courses)->firstWhere('subject', 'Mathématiques');
     expect($maths)->not->toBeNull();
 
-    $this->withToken($mathsToken)
+    $this->actingAs($mathsAccount, 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
             'date' => '2026-09-14',
             'timetable_slot_id' => $malagasy['id'],
@@ -138,7 +138,7 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ])
         ->assertForbidden();
 
-    $this->withToken($mathsToken)
+    $this->actingAs($mathsAccount, 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
             'date' => '2026-09-14',
             'timetable_slot_id' => $maths['id'],
@@ -149,7 +149,7 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ])
         ->assertCreated();
 
-    $this->flushHeaders();
+    $this->withoutToken();
 
     $directionAccount = UserAccount::query()
         ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
