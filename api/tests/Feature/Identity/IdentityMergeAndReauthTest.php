@@ -172,11 +172,10 @@ it('requires a TOTP reauth before direction can revoke a certificate', function 
         ->assertForbidden()
         ->assertJsonPath('message', 'Confirmez votre identité pour continuer.');
 
-    $this->flushHeaders();
-    $session = $this->loginJson($school['account']->email);
-    $token = $session->json('token');
+    $this->loginJson($school['account']->email);
+    $account = $school['account']->fresh();
 
-    $hint = $this->withToken($token)
+    $hint = $this->actingAs($account, 'sanctum')
         ->getJson('/api/v1/auth/reauth')
         ->assertOk()
         ->assertJsonPath('method', 'totp')
@@ -184,15 +183,15 @@ it('requires a TOTP reauth before direction can revoke a certificate', function 
 
     expect($hint['demo_code'])->toHaveLength(6);
 
-    $this->withToken($token)
+    $this->actingAs($account, 'sanctum')
         ->postJson('/api/v1/auth/reauth', ['code' => '000000'])
         ->assertUnprocessable();
 
-    $this->withToken($token)
+    $this->actingAs($account, 'sanctum')
         ->postJson('/api/v1/auth/reauth', ['code' => $hint['demo_code']])
         ->assertOk();
 
-    $this->withToken($token)
+    $this->actingAs($account, 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/certificates/{$issued['id']}/revoke", [
             'reason' => 'Erreur de classe',
         ])
