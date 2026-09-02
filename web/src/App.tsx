@@ -130,6 +130,17 @@ type AccessLogRow = {
 
 type PersonMini = { id: string; first_name: string; last_name: string }
 
+type OutboxRow = {
+  id: string
+  channel: string
+  template_key: string
+  subject: string
+  body: string
+  queued_at: string | null
+  delivery_status: string
+  student: PersonMini | null
+}
+
 type GradeRow = { id: string; name: string; stage?: string }
 
 type SchoolNetwork = {
@@ -751,6 +762,14 @@ function formatDate(value: string): string {
     day: 'numeric',
     month: 'short',
   })
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }
 
 function kindLabel(kind?: string): string {
@@ -4081,6 +4100,7 @@ function DirectionScreen({
   const [newClassTeacher, setNewClassTeacher] = useState('')
   const [selectedPacks, setSelectedPacks] = useState<string[]>([])
   const [network, setNetwork] = useState<SchoolNetwork | null>(null)
+  const [outbox, setOutbox] = useState<OutboxRow[]>([])
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
@@ -4165,15 +4185,36 @@ function DirectionScreen({
     setClassFile(payload.data)
   }
 
+  async function loadOutbox() {
+    const payload = await api<{ data: OutboxRow[] }>(`/api/v1/schools/${schoolId}/messages/outbox`, auth)
+    setOutbox(payload.data)
+  }
+
+  function printLetter(row: OutboxRow) {
+    const popup = window.open('', '_blank', 'width=640,height=720')
+    if (!popup) return
+    popup.document.write(
+      `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(row.subject)}</title>
+      <style>body{font-family:Georgia,serif;padding:2rem;white-space:pre-wrap;line-height:1.4}</style></head>
+      <body><p>${escapeHtml(row.body)}</p></body></html>`,
+    )
+    popup.document.close()
+    popup.focus()
+    popup.print()
+  }
+
   useEffect(() => {
     loadCore().catch((error: Error) => setMessage(error.message))
   }, [schoolId, session.token])
 
   useEffect(() => {
     if (tab === 'accueil' || tab === 'famille') {
-      Promise.all([loadPeople(), loadFamilies(), tab === 'famille' ? loadTransfers() : Promise.resolve()]).catch(
-        (error: Error) => setMessage(error.message),
-      )
+      Promise.all([
+        loadPeople(),
+        loadFamilies(),
+        tab === 'famille' ? loadTransfers() : Promise.resolve(),
+        tab === 'accueil' ? loadOutbox() : Promise.resolve(),
+      ]).catch((error: Error) => setMessage(error.message))
     }
     if (tab === 'classe') {
       Promise.all([loadEnrollments(), loadTerms()]).catch((error: Error) => setMessage(error.message))
@@ -4696,6 +4737,48 @@ function DirectionScreen({
                 ) : null}
               </tbody>
             </table>
+          </Panel>
+          <Panel>
+            <div className="flex items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
+              <h2 className="text-sm font-semibold">Courrier à remettre</h2>
+              <p className="text-xs text-neutral-500">Papier, pas de SMS</p>
+            </div>
+            {outbox.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-neutral-600">Rien à imprimer pour le moment.</p>
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {outbox.map((row) => (
+                  <li key={row.id} className="px-3 py-2">
+                    <p className="text-sm font-medium">
+                      {row.student ? personLabel(row.student) : 'Famille'}
+                      <span className="ml-2 text-xs font-normal text-neutral-500">{row.subject}</span>
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-neutral-600">{row.body}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <button type="button" className={btnGhost} onClick={() => printLetter(row)}>
+                        Imprimer
+                      </button>
+                      <button
+                        type="button"
+                        className={btnPrimary}
+                        disabled={busy}
+                        onClick={() => {
+                          setBusy(true)
+                          setMessage(null)
+                          api(`/api/v1/schools/${schoolId}/messages/${row.id}/printed`, { ...auth, method: 'POST', body: JSON.stringify({}) })
+                            .then(() => loadOutbox())
+                            .then(() => setMessage('Courrier marqué remis en main propre.'))
+                            .catch((error: Error) => setMessage(error.message))
+                            .finally(() => setBusy(false))
+                        }}
+                      >
+                        Remis
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
           <div className="flex flex-wrap gap-2 text-xs">
             <button
@@ -6327,6 +6410,27 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
     }
   }
 
+  async function downloadExport() {
+    setBusy(true)
+    setMessage(null)
+    try {
+      const archive = await api<Record<string, unknown>>('/api/v1/parent/export', auth)
+      const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'fanabe-mes-donnees.json'
+      link.click()
+      URL.revokeObjectURL(url)
+      setMessage('Archive téléchargée. FANABE n’envoie pas de SMS.')
+      await loadAccount()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Export impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function grantConsent(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
@@ -6903,6 +7007,15 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                 </li>
               ))}
             </ul>
+          </Panel>
+          <Panel className="p-3">
+            <h2 className="text-sm font-semibold">Mes données</h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              Archive JSON de vos enfants, messages, consentements et documents. Pas un LSU. FANABE n’encaisse pas.
+            </p>
+            <button type="button" className={`${btnGhost} mt-2`} disabled={busy} onClick={() => void downloadExport()}>
+              Télécharger mes données
+            </button>
           </Panel>
           <Panel>
             <h2 className="border-b border-black/5 px-3 py-2 text-sm font-semibold">Journal d’accès</h2>

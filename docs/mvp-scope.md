@@ -177,6 +177,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague D — EDT établissement et compositions.** Emploi du temps de l’établissement avec conflits professeur et salle ; remplacements (ou cours annulé) datés, notifiés in-app ; compositions par classe (titre, date, horaire, salle), sans photo d’élève et sans plan de salle nominatif. Pas de cantine, pas d’infirmerie.
 
+**Vague E — Courrier papier et export famille.** File d’impression des messages canal papier (remettre en main propre, pas de SMS) ; la direction marque le courrier remis. Le parent télécharge une archive de ses données (identité, présence, messages, consentements, documents). Pas un LSU.
+
 ---
 
 ## 7. Définition de terminé
