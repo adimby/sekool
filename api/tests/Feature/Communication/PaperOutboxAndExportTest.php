@@ -74,6 +74,15 @@ it('lists print letters for direction, marks them handed, and exports the family
 
     $archive = $this->actingAs($family['parentAccount'], 'sanctum')
         ->getJson('/api/v1/parent/export')
+        ->assertForbidden()
+        ->json();
+
+    expect($archive['message'])->toBe('Confirmez votre identité pour continuer.');
+
+    $this->confirmSensitive($family['parentAccount']);
+
+    $archive = $this->actingAs($family['parentAccount'], 'sanctum')
+        ->getJson('/api/v1/parent/export')
         ->assertOk()
         ->json();
 

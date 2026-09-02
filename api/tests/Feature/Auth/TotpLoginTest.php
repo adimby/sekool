@@ -84,3 +84,25 @@ it('requires TOTP for an accountant and never for a parent', function () {
         ->assertJsonMissingPath('challenge')
         ->assertJsonPath('is_parent', true);
 });
+
+it('requires TOTP for a platform admin without a school', function () {
+    $account = $this->provisionPlatformAdmin();
+
+    $challenge = $this->postJson('/api/v1/auth/login', [
+        'email' => $account->email,
+        'password' => 'password',
+    ])->assertOk()
+        ->json();
+
+    expect($challenge['challenge'])->toBe('totp_enroll')
+        ->and($challenge)->not->toHaveKey('token');
+
+    $session = $this->postJson('/api/v1/auth/totp', [
+        'challenge_id' => $challenge['challenge_id'],
+        'code' => $challenge['demo_code'],
+    ])->assertOk()
+        ->assertJsonPath('is_platform_admin', true)
+        ->assertJsonCount(0, 'schools');
+
+    expect($session['token'])->not->toBeEmpty();
+});

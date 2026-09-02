@@ -63,6 +63,7 @@ it('requires school_id, a leading index, and RLS on every tenant table', functio
         'bulletin_comments',
         'timetable_substitutions',
         'exam_sessions',
+        'identity_merges',
     ];
 
     foreach ($tenantTables as $table) {

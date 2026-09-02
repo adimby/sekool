@@ -6,6 +6,7 @@ use App\Domain\Certificate\Actions\IssueEnrollmentCertificate;
 use App\Domain\Certificate\Actions\RevokeCertificate;
 use App\Domain\Certificate\Models\Certificate;
 use App\Domain\Certificate\Support\CertificatePayload;
+use App\Domain\Identity\Support\SensitiveReauth;
 use App\Domain\School\Support\SchoolGate;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -45,6 +46,8 @@ final class CertificateController extends Controller
 
     public function revoke(Request $request, string $school, string $certificate, RevokeCertificate $revoke): JsonResponse
     {
+        SensitiveReauth::assert($request->user());
+
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:255'],
         ]);

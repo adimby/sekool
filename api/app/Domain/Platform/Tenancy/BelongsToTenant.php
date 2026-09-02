@@ -17,7 +17,7 @@ trait BelongsToTenant
         static::addGlobalScope('tenant', function (Builder $query): void {
             $context = TenantContext::current();
 
-            if ($context?->rlsBypass) {
+            if ($context?->rlsBypass || $context?->isPlatformAdmin) {
                 return;
             }
 

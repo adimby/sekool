@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Platform\Exceptions\DomainException;
+use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureSchoolRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
         $middleware->alias([
             'school.role' => EnsureSchoolRole::class,
+            'platform.admin' => EnsurePlatformAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

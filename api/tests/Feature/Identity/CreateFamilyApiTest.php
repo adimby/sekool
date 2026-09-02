@@ -25,7 +25,7 @@ it('lets a school create a family, a student and a parent invitation', function 
         ->assertJsonPath('parent.phone_e164', '+261349876543')
         ->assertJsonPath('student.first_name', 'Tiana')
         ->assertJsonPath('family_label', 'Rasoa')
-        ->assertJsonStructure(['invitation_code', 'family_id', 'enrollment_id']);
+        ->assertJsonStructure(['invitation_code', 'family_id', 'enrollment_id', 'warnings']);
 
     $code = $response->json('invitation_code');
 

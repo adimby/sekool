@@ -11,4 +11,5 @@ enum PersonRoleType: string
     case FinancialContact = 'financial_contact';
     case Staff = 'staff';
     case SupplierAgent = 'supplier_agent';
+    case PlatformAdmin = 'platform_admin';
 }

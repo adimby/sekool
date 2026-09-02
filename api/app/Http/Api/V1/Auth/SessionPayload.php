@@ -6,6 +6,7 @@ use App\Domain\Identity\Enums\PersonRoleType;
 use App\Domain\Identity\Models\PersonRole;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Identity\Support\PersonPayload;
+use App\Domain\Identity\Support\PrivilegedAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
 use App\Domain\School\Models\SchoolRoleAssignment;
@@ -79,6 +80,7 @@ final class SessionPayload
                 ], true);
             }),
             'is_student' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Student || $role === PersonRoleType::Student->value),
+            'is_platform_admin' => PrivilegedAccount::isPlatformAdmin($account),
         ];
     }
 
