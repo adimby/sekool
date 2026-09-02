@@ -57,6 +57,10 @@ it('requires school_id, a leading index, and RLS on every tenant table', functio
         'class_posts',
         'disciplinary_cases',
         'school_events',
+        'competency_domains',
+        'competency_items',
+        'competency_assessments',
+        'bulletin_comments',
     ];
 
     foreach ($tenantTables as $table) {

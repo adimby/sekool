@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–B et socle)
+# Guide de test — FANABE (Vagues A–C et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -101,7 +101,7 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 1. Professeur → **Classe** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
 3. Parent → **Enfants** → section **Notes**.
-4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes.
+4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
 
 ---
 
@@ -146,7 +146,50 @@ Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire
 
 ---
 
-## 12. Ce qui ne doit pas arriver
+## 12. Livret de compétences (Vague C)
+
+Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le catalogue (Langage, Vivre ensemble…) s’affiche quand même. Pour un élève réel, inscrire un enfant en GS ou s’appuyer sur les tests Pest `CompetencyLivretTest`.
+
+1. Direction ou titulaire → **Classes** / **Classe** → **GS A**.
+2. **Attendu :** section **Livret**, pas de section Notes. Aucun champ photo.
+3. S’il y a un élève : choisir l’élève, commentaire optionnel, bouton **Acquis** sur « S’exprimer à l’oral ».
+4. **Attendu :** bandeau de confirmation ; le niveau **Acquis** s’affiche. Pas une note chiffrée.
+5. Parent de cet élève → **Enfants** → **Livret**.
+6. **Attendu :** Langage / S’exprimer à l’oral · Acquis. Pas de photo.
+
+---
+
+## 13. Bulletin enrichi (Vague C)
+
+Sur **Hery** (6ème A). Ce n’est pas un LSU.
+
+1. Professeur → **Classe** → **6ème A** → section **Notes**.
+2. Choisir Hery dans le sélecteur de notes (le relevé se charge en dessous).
+3. **Attendu :** mention « Ce relevé est un document FANABE. Ce n’est pas un LSU. » et le compte d’absences sur 30 jours.
+4. Appréciation `Travail régulier. Continuer ainsi.` → **Enregistrer l’appréciation**.
+5. **Attendu :** le texte apparaît. Un mot interdit (`élève en difficulté`, `score`) est refusé.
+6. Parent Andry → **Enfants** → Hery → **Notes**.
+7. **Attendu :** moyenne / matières, absences, appréciation, disclaimer. Pas de LSU, pas de photo.
+
+---
+
+## 14. Early Warning notes (Vague C)
+
+Signalement **interne** : direction uniquement, jamais envoyé à la famille.
+
+1. Professeur → **Classe** → **6ème A** → deux notes en **Mathématiques** pour Hery : `14` puis `8` (baisse de 6 points).
+2. Direction → **Aujourd’hui** → **Attention**.
+3. **Attendu :** une ligne pour Hery, formulation « Évolution inhabituelle des résultats… ». Aucun mot *score*, *risque*, *élève en difficulté*.
+4. **Accuser**.
+5. **Attendu :** la ligne disparaît de Attention.
+6. Parent Andry → **Messages**.
+7. **Attendu :** aucun message d’alerte Early Warning.
+
+Deux devoirs plus une baisse de notes produisent la catégorie travail demandé (toujours interne). Les tests Pest `StudentAlertTest` couvrent ce cas.
+
+---
+
+## 15. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -156,3 +199,6 @@ Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire
 - Le titulaire ne peut pas radier un élève.
 - La discipline n’est pas une note qui punit.
 - Pas de chat élèves ni de fil de discussion interne.
+- Le livret n’a pas de photo d’élève.
+- Le bulletin n’est pas un LSU.
+- L’Early Warning n’est jamais envoyé aux familles.

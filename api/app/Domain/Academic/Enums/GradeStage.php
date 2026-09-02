@@ -33,4 +33,9 @@ enum GradeStage: string
     {
         return $this === self::Preschool ? 'Groupe' : 'Classe';
     }
+
+    public function usesLivret(): bool
+    {
+        return $this === self::Preschool || $this === self::Primary;
+    }
 }
