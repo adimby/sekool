@@ -2,9 +2,10 @@
 
 it('authenticates a school user with email and password', function () {
     $fixture = $this->provisionSchool();
+    $teacher = $this->provisionTeacher($fixture);
 
     $this->postJson('/api/v1/auth/login', [
-        'email' => $fixture['account']->email,
+        'email' => $teacher['account']->email,
         'password' => 'password',
     ])->assertOk()
         ->assertJsonStructure(['token', 'person_id', 'person', 'schools', 'is_parent', 'is_student'])

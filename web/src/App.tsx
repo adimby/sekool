@@ -3,12 +3,16 @@ import {
   api,
   clearSession,
   defaultWorkspace,
+  isNetworkError,
+  isTotpChallenge,
   loadSession,
   saveSession,
   workspacesOf,
   type Session,
+  type TotpChallenge,
   type Workspace,
 } from './session'
+import { enqueueAttendance, flushAttendanceQueue, pendingAttendanceCount } from './offline/attendanceQueue'
 
 type PersonRow = {
   id: string
@@ -497,6 +501,7 @@ export default function App() {
 
   return (
     <div className="min-h-svh">
+      <OfflineBanner />
       <header className="sticky top-0 z-20 border-b border-black/10 bg-fanabe-ink text-white">
         <div className="flex h-11 items-center gap-2 px-3">
           <Logo />
@@ -935,11 +940,38 @@ function Pager({ page, total, onPage }: { page: number; total: number; onPage: (
   )
 }
 
+function OfflineBanner() {
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+
+  if (online) {
+    return null
+  }
+
+  return (
+    <p role="status" className="bg-amber-100 px-3 py-1.5 text-center text-xs text-amber-950">
+      Hors ligne. L’appel peut être saisi ; la caisse et le reste exigent une connexion. Pas de SMS.
+    </p>
+  )
+}
+
 function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
   const [mode, setMode] = useState<'login' | 'invite'>('login')
   const [email, setEmail] = useState('direction.antsahabe@fanabe.test')
   const [password, setPassword] = useState('password')
   const [code, setCode] = useState('')
+  const [totp, setTotp] = useState('')
+  const [challenge, setChallenge] = useState<TotpChallenge | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -948,9 +980,17 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
     setBusy(true)
     setMessage(null)
     try {
+      if (challenge) {
+        const payload = await api<Session>('/api/v1/auth/totp', {
+          method: 'POST',
+          body: JSON.stringify({ challenge_id: challenge.challenge_id, code: totp }),
+        })
+        onSuccess(payload)
+        return
+      }
       const payload =
         mode === 'login'
-          ? await api<Session>('/api/v1/auth/login', {
+          ? await api<Session | TotpChallenge>('/api/v1/auth/login', {
               method: 'POST',
               body: JSON.stringify({ email, password }),
             })
@@ -958,6 +998,16 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
               method: 'POST',
               body: JSON.stringify({ code, email, password }),
             })
+      if (isTotpChallenge(payload)) {
+        setChallenge(payload)
+        setTotp(payload.demo_code ?? '')
+        setMessage(
+          payload.challenge === 'totp_enroll'
+            ? 'Enregistrez FANABE dans l’application d’authentification, puis confirmez le code. Pas de SMS.'
+            : 'Saisissez le code TOTP. Pas de SMS.',
+        )
+        return
+      }
       onSuccess(payload)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Connexion impossible.')
@@ -999,19 +1049,60 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
           </button>
         </div>
         <form onSubmit={onSubmit} className="mt-4 max-w-sm space-y-3" aria-label="Connexion">
-          {mode === 'invite' ? (
-            <Field label="Code imprimé">
-              <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} required autoComplete="one-time-code" />
-            </Field>
-          ) : null}
-          <Field label="Email">
-            <input className={inputClass} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </Field>
-          <Field label="Mot de passe">
-            <input className={inputClass} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </Field>
+          {challenge ? (
+            <>
+              {challenge.challenge === 'totp_enroll' && challenge.secret ? (
+                <div className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs">
+                  <p className="font-medium">Clé TOTP (à saisir dans l’application)</p>
+                  <p className="mt-1 break-all font-mono text-sm">{challenge.secret}</p>
+                  {challenge.otpauth_uri ? (
+                    <a className="mt-1 inline-block underline" href={challenge.otpauth_uri}>
+                      Ouvrir l’application d’authentification
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
+              {challenge.demo_code ? (
+                <p className="text-xs text-neutral-600">Code de démo (local) : {challenge.demo_code}</p>
+              ) : null}
+              <Field label="Code TOTP">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value)}
+                  required
+                />
+              </Field>
+              <button
+                type="button"
+                className="text-xs underline"
+                onClick={() => {
+                  setChallenge(null)
+                  setTotp('')
+                }}
+              >
+                Revenir au mot de passe
+              </button>
+            </>
+          ) : (
+            <>
+              {mode === 'invite' ? (
+                <Field label="Code imprimé">
+                  <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} required autoComplete="one-time-code" />
+                </Field>
+              ) : null}
+              <Field label="Email">
+                <input className={inputClass} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </Field>
+              <Field label="Mot de passe">
+                <input className={inputClass} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              </Field>
+            </>
+          )}
           <button type="submit" disabled={busy} className={btnBlock}>
-            {busy ? 'Connexion…' : mode === 'login' ? 'Entrer' : 'Activer le compte'}
+            {busy ? 'Connexion…' : challenge ? 'Valider le code' : mode === 'login' ? 'Entrer' : 'Activer le compte'}
           </button>
         </form>
         {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
@@ -1027,6 +1118,8 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
                   setMode('login')
                   setEmail(demo.email)
                   setPassword('password')
+                  setChallenge(null)
+                  setTotp('')
                 }}
               >
                 {demo.label}
@@ -5487,6 +5580,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [busy, setBusy] = useState(false)
   const [years, setYears] = useState<YearRow[]>([])
   const [yearId, setYearId] = useState('')
+  const [queued, setQueued] = useState(0)
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const currentClass = classrooms.find((row) => row.id === selectedClassroom)
   const visibleStudents = students.filter((row) =>
@@ -5552,8 +5646,59 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   useEffect(() => {
     if (!selectedClassroom || tab !== 'appel') return
-    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => setMessage(error.message))
+    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => {
+      if (!isNetworkError(error) && navigator.onLine) {
+        setMessage(error.message)
+      }
+    })
   }, [selectedClassroom, attendanceDate, tab, schoolId, session.token])
+
+  useEffect(() => {
+    let cancelled = false
+    async function flush() {
+      if (!navigator.onLine) {
+        pendingAttendanceCount().then((n) => {
+          if (!cancelled) setQueued(n)
+        })
+        return
+      }
+      try {
+        const sent = await flushAttendanceQueue((item) =>
+          api(`/api/v1/schools/${item.schoolId}/attendance`, {
+            ...auth,
+            method: 'POST',
+            body: JSON.stringify({
+              date: item.date,
+              session: item.session,
+              recorded_via: 'offline_sync',
+              records: item.records,
+            }),
+          }).then(() => undefined),
+        )
+        const n = await pendingAttendanceCount()
+        if (!cancelled) {
+          setQueued(n)
+          if (sent > 0) {
+            setMessage(
+              sent === 1
+                ? 'Appel hors ligne envoyé. Les familles sont prévenues en cas d’absence (pas de SMS).'
+                : `${sent} appels hors ligne envoyés. Pas de SMS.`,
+            )
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(error instanceof Error ? error.message : 'File hors ligne impossible à envoyer.')
+        }
+      }
+    }
+    window.addEventListener('online', flush)
+    void flush()
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', flush)
+    }
+  }, [auth, session.token])
 
   async function saveAttendance(event: FormEvent) {
     event.preventDefault()
@@ -5566,29 +5711,39 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       setMessage('Indiquez un motif pour chaque absence, retard ou excuse.')
       return
     }
+    const records = students.map((row) => {
+      const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
+      return {
+        enrollment_id: row.enrollment_id,
+        status: mark.status,
+        reason: mark.status === 'present' ? null : mark.reason || null,
+        justification: mark.status === 'present' ? null : mark.justification || null,
+        client_reference: crypto.randomUUID(),
+      }
+    })
+    const payload = { date: attendanceDate, session: 'full_day', records }
     setBusy(true)
     setMessage(null)
     try {
+      if (!navigator.onLine) {
+        await enqueueAttendance({ schoolId, ...payload })
+        setQueued(await pendingAttendanceCount())
+        setMessage('Hors ligne. L’appel est enregistré sur cet appareil et partira à la reconnexion. Pas de SMS.')
+        return
+      }
       await api(`/api/v1/schools/${schoolId}/attendance`, {
         ...auth,
         method: 'POST',
-        body: JSON.stringify({
-          date: attendanceDate,
-          session: 'full_day',
-          records: students.map((row) => {
-            const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
-            return {
-              enrollment_id: row.enrollment_id,
-              status: mark.status,
-              reason: mark.status === 'present' ? null : mark.reason || null,
-              justification: mark.status === 'present' ? null : mark.justification || null,
-              client_reference: crypto.randomUUID(),
-            }
-          }),
-        }),
+        body: JSON.stringify({ ...payload, recorded_via: 'web' }),
       })
       setMessage('Présence enregistrée. Les familles sont prévenues en cas d’absence (dans l’application, pas de SMS).')
     } catch (error) {
+      if (isNetworkError(error)) {
+        await enqueueAttendance({ schoolId, ...payload })
+        setQueued(await pendingAttendanceCount())
+        setMessage('Hors ligne. L’appel est enregistré sur cet appareil et partira à la reconnexion. Pas de SMS.')
+        return
+      }
       setMessage(error instanceof Error ? error.message : 'Présence impossible à enregistrer.')
     } finally {
       setBusy(false)
@@ -5655,6 +5810,11 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
                 {busy ? '…' : 'Enregistrer'}
               </button>
             </div>
+            {queued > 0 ? (
+              <p className="border-b border-black/5 px-3 py-1.5 text-xs text-neutral-600">
+                {queued} appel{queued > 1 ? 's' : ''} en attente sur cet appareil (hors ligne).
+              </p>
+            ) : null}
             {visibleStudents.length === 0 ? (
               <p className="px-3 py-6 text-sm text-neutral-600">Aucun élève.</p>
             ) : (

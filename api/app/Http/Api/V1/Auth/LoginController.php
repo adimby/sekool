@@ -2,9 +2,11 @@
 
 namespace App\Http\Api\V1\Auth;
 
+use App\Domain\Identity\Actions\StartTotpChallenge;
 use App\Domain\Identity\Models\UserAccount;
-use App\Http\Controllers\Controller;
+use App\Domain\Identity\Support\PrivilegedAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 
 final class LoginController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, StartTotpChallenge $totp): JsonResponse
     {
         $data = $request->validate([
             'email' => ['required', 'email'],
@@ -40,6 +42,10 @@ final class LoginController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['Compte temporairement verrouillé.'],
             ]);
+        }
+
+        if (PrivilegedAccount::requiresTotp($account)) {
+            return response()->json($totp->execute($account));
         }
 
         TenantContext::runWithRlsBypass(function () use ($account): void {

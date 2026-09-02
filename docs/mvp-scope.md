@@ -179,6 +179,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague E — Courrier papier et export famille.** File d’impression des messages canal papier (remettre en main propre, pas de SMS) ; la direction marque le courrier remis. Le parent télécharge une archive de ses données (identité, présence, messages, consentements, documents). Pas un LSU.
 
+**Vague F — TOTP et appel hors ligne.** TOTP obligatoire pour direction / caisse (`school_owner`, `school_admin`, `accountant`), pas de SMS. Le titulaire peut saisir l’appel hors ligne (file IndexedDB, `client_reference`, rejeu `offline_sync`) ; aucune écriture financière différée.
+
 ---
 
 ## 7. Définition de terminé

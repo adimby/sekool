@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–E et socle)
+# Guide de test — FANABE (Vagues A–F et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -241,7 +241,28 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ---
 
-## 19. Ce qui ne doit pas arriver
+## 19. TOTP direction (Vague F)
+
+1. Se déconnecter. Connexion **Direction**.
+2. **Attendu :** écran TOTP (clé + code), pas de SMS. En local, un « Code de démo » est affiché.
+3. Valider le code.
+4. **Attendu :** Aujourd’hui. Une seconde connexion demande le TOTP sans réafficher la clé.
+5. Professeur et parent : connexion email + mot de passe, **sans** TOTP.
+
+---
+
+## 20. Appel hors ligne (Vague F)
+
+1. Professeur → **Appel** → 6ème A, effectif chargé.
+2. Couper le réseau (hors ligne du navigateur).
+3. Marquer Hery **A** + motif **Maladie** → **Enregistrer**.
+4. **Attendu :** bandeau « Hors ligne. L’appel est enregistré sur cet appareil… ». File en attente. **Pas** d’écriture caisse possible.
+5. Rétablir le réseau.
+6. **Attendu :** bandeau d’envoi de la file. Parent → **Messages** : avis d’absence (in-app, pas de SMS).
+
+---
+
+## 21. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -255,3 +276,5 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 - Le bulletin n’est pas un LSU.
 - L’Early Warning n’est jamais envoyé aux familles.
 - Pas de cantine, pas d’infirmerie, pas de photo d’élève sur les compositions.
+- Le TOTP ne passe jamais par SMS.
+- La caisse n’écrit rien hors ligne.

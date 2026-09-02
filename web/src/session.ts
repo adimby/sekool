@@ -87,3 +87,23 @@ export async function api<T>(path: string, init: RequestInit & { token?: string;
   }
   return payload
 }
+
+export function isNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError) {
+    return true
+  }
+  const message = error instanceof Error ? error.message : ''
+  return /failed to fetch|networkerror|load failed|offline/i.test(message)
+}
+
+export type TotpChallenge = {
+  challenge: 'totp' | 'totp_enroll'
+  challenge_id: string
+  secret?: string
+  otpauth_uri?: string
+  demo_code?: string
+}
+
+export function isTotpChallenge(payload: Session | TotpChallenge): payload is TotpChallenge {
+  return 'challenge' in payload && typeof (payload as TotpChallenge).challenge_id === 'string'
+}
