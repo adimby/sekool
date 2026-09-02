@@ -1,9 +1,10 @@
-# Guide de test — FANABE (Vagues A–F et socle)
+# Guide de test — FANABE (Vagues A–G et socle)
 
 Comptes démo (mot de passe `password`) :
 
 | Rôle | Email | Espace |
 |---|---|---|
+| Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
 | Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Classe, Kits |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
@@ -236,8 +237,10 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 1. Parent Andry → **Compte**.
 2. Section **Mes données** → **Télécharger mes données**.
-3. **Attendu :** un fichier `fanabe-mes-donnees.json` avec Hery (et Voahirana), messages, consentements. Mention « Pas un LSU ». Aucun mot *score*, *risque*, *élève en difficulté*.
-4. Un parent d’une autre famille ne voit pas Hery dans son archive.
+3. **Attendu :** une fenêtre demande le mot de passe (pas de SMS).
+4. Saisir `password`, confirmer.
+5. **Attendu :** un fichier `fanabe-mes-donnees.json` avec Hery (et Voahirana), messages, consentements. Mention « Pas un LSU ». Aucun mot *score*, *risque*, *élève en difficulté*.
+6. Un parent d’une autre famille ne voit pas Hery dans son archive.
 
 ---
 
@@ -262,7 +265,29 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ---
 
-## 21. Ce qui ne doit pas arriver
+## 21. Fusion d’identité (Vague G)
+
+1. Direction → **Familles** → **Personnes**. Noter deux identifiants `7-XXXXXXXX-C` (ou inscrire un homonyme : l’inscription avertit sans bloquer).
+2. Panneau **Doublons** : identifiant à conserver, identifiant doublon, motif. **Demander la fusion**.
+3. **Attendu :** statut Demandée. Le titulaire ne peut pas envoyer cette demande.
+4. Se déconnecter. Connexion **Plateforme** (TOTP, pas de SMS).
+5. **Attendu :** la demande, noms et identifiants seulement — pas de notes, pas de bulletin.
+6. **Fusionner**.
+7. **Attendu :** les deux identifiants restent valides. **Défaire** rétablit le doublon.
+
+---
+
+## 22. Réauthentification certificat (Vague G)
+
+1. Direction → **Classes** → une classe → **Documents**. Émettre un certificat de scolarité.
+2. **Révoquer**.
+3. **Attendu :** fenêtre TOTP (pas de SMS). En local, un code de démo est proposé.
+4. Valider.
+5. **Attendu :** statut révoqué. Le lien public affiche REVOKED.
+
+---
+
+## 23. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -278,3 +303,6 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 - Pas de cantine, pas d’infirmerie, pas de photo d’élève sur les compositions.
 - Le TOTP ne passe jamais par SMS.
 - La caisse n’écrit rien hors ligne.
+- La direction ne fusionne pas elle-même deux identités.
+- La plateforme ne lit pas les dossiers scolaires.
+- L’export famille et la révocation d’un certificat exigent une confirmation d’identité.

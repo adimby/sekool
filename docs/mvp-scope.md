@@ -181,6 +181,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague F — TOTP et appel hors ligne.** TOTP obligatoire pour direction / caisse (`school_owner`, `school_admin`, `accountant`), pas de SMS. Le titulaire peut saisir l’appel hors ligne (file IndexedDB, `client_reference`, rejeu `offline_sync`) ; aucune écriture financière différée.
 
+**Vague G — Fusion d’identité et réauthentification.** La direction signale un doublon (avertissement non bloquant à la création, demande motivée). Seul `platform_admin` fusionne, refuse ou défait ; les deux identifiants publics restent résolvables (`I-15`). Réauthentification (mot de passe parent, TOTP direction) avant l’export famille et la révocation d’un certificat. Pas de SMS, pas de lecture de dossier scolaire par la plateforme.
+
 ---
 
 ## 7. Définition de terminé
@@ -239,6 +241,7 @@ Brief §8. Le seeder est **déterministe** (graine fixe) : un jeu aléatoire ren
 50 familles       dont 12 avec plusieurs enfants, 4 multi-écoles
                   parents, tuteurs, responsables financiers distincts
 rôles             chaque rôle applicatif représenté au moins une fois
+                  (`plateforme@fanabe.test` : `platform_admin`, sans école)
 paiements         ~180 paiements, dont partiels et à temps
 retards           ~25 échéances en retard, réparties sur les 4 paliers
 alertes           quelques alertes d'absence et de retard de paiement

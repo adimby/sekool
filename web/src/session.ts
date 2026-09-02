@@ -18,10 +18,11 @@ export type Session = {
   schools: School[]
   is_parent: boolean
   is_student?: boolean
+  is_platform_admin?: boolean
   schoolId?: string
 }
 
-export type Workspace = 'direction' | 'teacher' | 'parent' | 'student'
+export type Workspace = 'platform' | 'direction' | 'teacher' | 'parent' | 'student'
 
 const KEY = 'fanabe.session'
 
@@ -52,6 +53,9 @@ export function schoolRoles(school: School): string[] {
 export function workspacesOf(session: Session): Workspace[] {
   const roles = session.schools.flatMap(schoolRoles)
   const list: Workspace[] = []
+  if (session.is_platform_admin) {
+    list.push('platform')
+  }
   if (roles.some((role) => ['school_owner', 'school_admin', 'principal'].includes(role))) {
     list.push('direction')
   }

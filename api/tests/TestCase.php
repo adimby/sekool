@@ -10,10 +10,13 @@ use App\Domain\Family\Models\Family;
 use App\Domain\Finance\Enums\FeeCategory;
 use App\Domain\Finance\Models\FeeItem;
 use App\Domain\Finance\Models\FeeSchedule;
+use App\Domain\Identity\Actions\AcquirePersonRole;
 use App\Domain\Identity\Actions\CreateFamilyWithStudent;
+use App\Domain\Identity\Enums\PersonRoleType;
 use App\Domain\Identity\Enums\RelationshipType;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Identity\Models\UserAccount;
+use App\Domain\Identity\Support\SensitiveReauth;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
 use App\Domain\School\Models\School;
@@ -21,6 +24,7 @@ use App\Domain\School\Models\SchoolRoleAssignment;
 use App\Domain\School\Models\SchoolYear;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Testing\TestResponse;
 
 abstract class TestCase extends BaseTestCase
@@ -210,5 +214,20 @@ abstract class TestCase extends BaseTestCase
         TenantContext::clear();
 
         return compact('account');
+    }
+
+    protected function provisionPlatformAdmin(): UserAccount
+    {
+        TenantContext::activate(TenantContext::migrationBypass());
+        $account = UserAccount::factory()->create();
+        app(AcquirePersonRole::class)->execute($account->person_id, PersonRoleType::PlatformAdmin);
+        TenantContext::clear();
+
+        return $account;
+    }
+
+    protected function confirmSensitive(UserAccount $account): void
+    {
+        Cache::put(SensitiveReauth::key($account->id), true, SensitiveReauth::TTL_SECONDS);
     }
 }

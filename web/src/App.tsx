@@ -50,6 +50,25 @@ type TransferRow = {
   parent_approved_at?: string | null
 }
 
+type IdentityPersonRow = {
+  id: string
+  public_id: string
+  first_name: string
+  last_name: string
+  hint?: string
+}
+
+type IdentityMergeRow = {
+  id: string
+  status: string
+  reason: string
+  school_id: string
+  requested_at?: string | null
+  decided_at?: string | null
+  surviving: IdentityPersonRow | null
+  duplicate: IdentityPersonRow | null
+}
+
 type AttendanceRow = {
   id: string
   date: string
@@ -463,6 +482,7 @@ const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
 ]
 
 const WORKSPACE_LABEL: Record<Workspace, string> = {
+  platform: 'Plateforme',
   direction: 'Direction',
   teacher: 'Classe',
   parent: 'Famille',
@@ -580,6 +600,8 @@ export default function App() {
         <TeacherScreen session={session} tab={teacherTab} />
       ) : workspace === 'student' ? (
         <StudentScreen session={session} />
+      ) : workspace === 'platform' ? (
+        <PlatformScreen session={session} />
       ) : (
         <ParentScreen session={session} tab={parentTab} />
       )}
@@ -914,6 +936,112 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+function mergeStatusLabel(status: string): string {
+  if (status === 'requested') return 'Demandée'
+  if (status === 'merged') return 'Fusionnée'
+  if (status === 'refused') return 'Refusée'
+  if (status === 'undone') return 'Défaite'
+  return status
+}
+
+function personPublicLabel(row: IdentityPersonRow | null): string {
+  if (row === null) return '—'
+  return `${row.first_name} ${row.last_name} · ${row.public_id}`
+}
+
+function ReauthDialog({
+  token,
+  title,
+  method,
+  extra,
+  onCancel,
+  onConfirmed,
+}: {
+  token: string
+  title: string
+  method: 'password' | 'totp'
+  extra?: ReactNode
+  onCancel: () => void
+  onConfirmed: () => Promise<void>
+}) {
+  const [secret, setSecret] = useState('')
+  const [demo, setDemo] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api<{ method: string; demo_code?: string }>('/api/v1/auth/reauth', { token })
+      .then((payload) => {
+        if (payload.demo_code) {
+          setDemo(payload.demo_code)
+          if (method === 'totp') setSecret(payload.demo_code)
+        }
+      })
+      .catch(() => undefined)
+  }, [token, method])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/api/v1/auth/reauth', {
+        token,
+        method: 'POST',
+        body: JSON.stringify(method === 'totp' ? { code: secret } : { password: secret }),
+      })
+      await onConfirmed()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Confirmation impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center" onClick={() => !busy && onCancel()}>
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reauth-title"
+        className="w-full max-w-sm rounded-lg bg-fanabe-paper p-4 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => void submit(event)}
+      >
+        <h2 id="reauth-title" className="text-sm font-semibold">
+          {title}
+        </h2>
+        <p className="mt-1 text-xs text-neutral-600">
+          {method === 'totp' ? 'Saisissez le code TOTP. Pas de SMS.' : 'Confirmez avec votre mot de passe.'}
+        </p>
+        {extra}
+        {demo && method === 'totp' ? <p className="mt-2 text-xs text-neutral-600">Code de démo (local) : {demo}</p> : null}
+        <Field label={method === 'totp' ? 'Code TOTP' : 'Mot de passe'}>
+          <input
+            className={inputClass}
+            type={method === 'totp' ? 'text' : 'password'}
+            inputMode={method === 'totp' ? 'numeric' : undefined}
+            autoComplete={method === 'totp' ? 'one-time-code' : 'current-password'}
+            value={secret}
+            onChange={(event) => setSecret(event.target.value)}
+            required
+            autoFocus
+          />
+        </Field>
+        {error ? <p className="mt-2 text-xs text-fanabe-clay">{error}</p> : null}
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" className={btnGhost} disabled={busy} onClick={onCancel}>
+            Annuler
+          </button>
+          <button type="submit" className={btnPrimary} disabled={busy || secret.trim() === ''}>
+            {busy ? 'Vérification…' : 'Confirmer'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-lg border border-black/8 bg-fanabe-paper ${className}`}>{children}</section>
 }
@@ -1017,6 +1145,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
   }
 
   const demos = [
+    { label: 'Plateforme', email: 'plateforme@fanabe.test' },
     { label: 'Direction', email: 'direction.antsahabe@fanabe.test' },
     { label: 'Professeur', email: 'teacher.antsahabe@fanabe.test' },
     { label: 'Parent', email: 'parent.andry@fanabe.test' },
@@ -1337,6 +1466,7 @@ function EnrollmentWizard({
   })
   const [invitation, setInvitation] = useState<string | null>(null)
   const [doneName, setDoneName] = useState('')
+  const [warnings, setWarnings] = useState<IdentityPersonRow[]>([])
 
   const matchedFamilies = families.filter((family) => matchesQuery(familySearchText(family), familyQuery))
   const chosenFamily = families.find((family) => family.id === familyId) ?? null
@@ -1385,13 +1515,14 @@ function EnrollmentWizard({
           }),
         })
         setInvitation(null)
+        setWarnings([])
         setDoneName(`${student.first_name} ${student.last_name}`)
         setStep('done')
         await onEnrolled({ familyId, invitation: null }).catch(() => undefined)
         return
       }
 
-      const created = await api<{ invitation_code: string; family_id: string }>(`/api/v1/schools/${schoolId}/families`, {
+      const created = await api<{ invitation_code: string; family_id: string; warnings?: IdentityPersonRow[] }>(`/api/v1/schools/${schoolId}/families`, {
         ...auth,
         method: 'POST',
         body: JSON.stringify({
@@ -1414,6 +1545,7 @@ function EnrollmentWizard({
           }),
         })
       setInvitation(created.invitation_code)
+      setWarnings(created.warnings ?? [])
       setDoneName(`${student.first_name} ${student.last_name}`)
       setStep('done')
       await onEnrolled({ familyId: created.family_id, invitation: created.invitation_code }).catch(() => undefined)
@@ -1637,6 +1769,18 @@ function EnrollmentWizard({
               ) : (
                 <p className="text-xs text-neutral-600">Les adultes déjà liés à ce foyer restent responsables.</p>
               )}
+              {warnings.length > 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                  <p className="font-medium">Possible doublon (la création n’est pas bloquée).</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {warnings.map((row) => (
+                      <li key={row.id}>
+                        {row.first_name} {row.last_name} · {row.public_id}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -2251,6 +2395,8 @@ function ClassFilePanel({
     }>
   >([])
   const [certTick, setCertTick] = useState(0)
+  const [revokeId, setRevokeId] = useState<string | null>(null)
+  const [revokeReason, setRevokeReason] = useState('')
   const [withdrawId, setWithdrawId] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
   const [posts, setPosts] = useState<ClassPostRow[]>([])
@@ -3162,7 +3308,22 @@ function ClassFilePanel({
                     {row.type_label} · {row.public_reference}
                   </span>
                 </span>
-                <span className="text-xs text-neutral-500">{certificateStatusLabel(row.status)}</span>
+                <span className="flex items-center gap-2 text-xs text-neutral-500">
+                  {certificateStatusLabel(row.status)}
+                  {!readOnly && row.status !== 'revoked' ? (
+                    <button
+                      type="button"
+                      className="underline"
+                      disabled={busy}
+                      onClick={() => {
+                        setRevokeId(row.id)
+                        setRevokeReason('')
+                      }}
+                    >
+                      Révoquer
+                    </button>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -3234,6 +3395,36 @@ function ClassFilePanel({
           </>
         )}
       </ClassSection>
+
+      {revokeId ? (
+        <ReauthDialog
+          token={auth.token}
+          title="Révoquer le certificat"
+          method="totp"
+          extra={
+            <Field label="Motif">
+              <input
+                className={inputClass}
+                value={revokeReason}
+                onChange={(event) => setRevokeReason(event.target.value)}
+                required
+              />
+            </Field>
+          }
+          onCancel={() => setRevokeId(null)}
+          onConfirmed={async () => {
+            await api(`/api/v1/schools/${schoolId}/certificates/${revokeId}/revoke`, {
+              ...auth,
+              method: 'POST',
+              body: JSON.stringify({ reason: revokeReason.trim() || 'Révocation' }),
+            })
+            setRevokeId(null)
+            setRevokeReason('')
+            setCertTick((n) => n + 1)
+            onMessage('Certificat révoqué.')
+          }}
+        />
+      ) : null}
 
       {stage === 'preschool' ? (
         <ClassSection title="Récupération">
@@ -4140,6 +4331,84 @@ function KitsPanel({
   )
 }
 
+function PlatformScreen({ session }: { session: Session }) {
+  const [rows, setRows] = useState<IdentityMergeRow[]>([])
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const auth = useMemo(() => ({ token: session.token }), [session.token])
+
+  async function load() {
+    const payload = await api<{ data: IdentityMergeRow[] }>('/api/v1/platform/identity-merges', auth)
+    setRows(payload.data)
+  }
+
+  useEffect(() => {
+    load().catch((error: Error) => setMessage(error.message))
+  }, [auth.token])
+
+  async function decide(id: string, action: 'approve' | 'refuse' | 'undo') {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/platform/identity-merges/${id}/${action}`, { ...auth, method: 'POST', body: JSON.stringify({}) })
+      setMessage(
+        action === 'approve' ? 'Identités fusionnées. Les deux identifiants restent résolvables.' : action === 'refuse' ? 'Demande refusée.' : 'Fusion défaite.',
+      )
+      await load()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Décision impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-3xl space-y-3 px-3 py-4">
+      {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
+      <Panel className="p-3">
+        <h1 className="text-sm font-semibold">Fusions d’identité</h1>
+        <p className="mt-1 text-xs text-neutral-600">
+          Réservé à la plateforme, sur demande motivée d’un établissement. Réversible. Les deux identifiants publics restent
+          valides. Aucun dossier scolaire n’est affiché ici.
+        </p>
+      </Panel>
+      <Panel>
+        {rows.length === 0 ? (
+          <p className="px-3 py-4 text-sm text-neutral-600">Aucune demande.</p>
+        ) : (
+          <ul className="divide-y divide-black/5">
+            {rows.map((row) => (
+              <li key={row.id} className="px-3 py-3 text-sm">
+                <p className="font-medium">{mergeStatusLabel(row.status)}</p>
+                <p className="mt-1 text-xs text-neutral-600">Conserver {personPublicLabel(row.surviving)}</p>
+                <p className="text-xs text-neutral-600">Alias {personPublicLabel(row.duplicate)}</p>
+                <p className="mt-1 text-xs text-neutral-500">{row.reason}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {row.status === 'requested' ? (
+                    <>
+                      <button type="button" className={btnPrimary} disabled={busy} onClick={() => void decide(row.id, 'approve')}>
+                        Fusionner
+                      </button>
+                      <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'refuse')}>
+                        Refuser
+                      </button>
+                    </>
+                  ) : null}
+                  {row.status === 'merged' ? (
+                    <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'undo')}>
+                      Défaire
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+    </main>
+  )
+}
+
 function DirectionScreen({
   session,
   tab,
@@ -4194,6 +4463,8 @@ function DirectionScreen({
   const [selectedPacks, setSelectedPacks] = useState<string[]>([])
   const [network, setNetwork] = useState<SchoolNetwork | null>(null)
   const [outbox, setOutbox] = useState<OutboxRow[]>([])
+  const [identityMerges, setIdentityMerges] = useState<IdentityMergeRow[]>([])
+  const [mergeForm, setMergeForm] = useState({ surviving: '', duplicate: '', reason: '' })
 
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const activeEnrollments = enrollments.filter((row) => row.status === 'active')
@@ -4283,6 +4554,35 @@ function DirectionScreen({
     setOutbox(payload.data)
   }
 
+  async function loadIdentityMerges() {
+    const payload = await api<{ data: IdentityMergeRow[] }>(`/api/v1/schools/${schoolId}/identity-merges`, auth)
+    setIdentityMerges(payload.data)
+  }
+
+  async function requestIdentityMerge(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api(`/api/v1/schools/${schoolId}/identity-merges`, {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          surviving_public_id: mergeForm.surviving.trim(),
+          duplicate_public_id: mergeForm.duplicate.trim(),
+          reason: mergeForm.reason.trim(),
+        }),
+      })
+      setMergeForm({ surviving: '', duplicate: '', reason: '' })
+      setMessage('Demande transmise à la plateforme. L’école ne fusionne pas elle-même.')
+      await loadIdentityMerges()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Demande impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function printLetter(row: OutboxRow) {
     const popup = window.open('', '_blank', 'width=640,height=720')
     if (!popup) return
@@ -4306,6 +4606,7 @@ function DirectionScreen({
         loadPeople(),
         loadFamilies(),
         tab === 'famille' ? loadTransfers() : Promise.resolve(),
+        tab === 'famille' ? loadIdentityMerges() : Promise.resolve(),
         tab === 'accueil' ? loadOutbox() : Promise.resolve(),
       ]).catch((error: Error) => setMessage(error.message))
     }
@@ -4930,6 +5231,57 @@ function DirectionScreen({
                   Demander le rattachement
                 </button>
               </form>
+            </Panel>
+            <Panel className="p-3">
+              <h2 className="text-sm font-semibold">Doublons</h2>
+              <p className="mt-1 text-xs text-neutral-500">
+                Demande motivée à la plateforme. Réversible. Les deux identifiants 7-XXXXXXXX-C restent valides.
+              </p>
+              <form onSubmit={requestIdentityMerge} className="mt-3 space-y-2">
+                <Field label="Identifiant à conserver">
+                  <input
+                    className={inputClass}
+                    value={mergeForm.surviving}
+                    onChange={(event) => setMergeForm({ ...mergeForm, surviving: event.target.value })}
+                    placeholder="7-XXXXXXXX-C"
+                    required
+                  />
+                </Field>
+                <Field label="Identifiant doublon">
+                  <input
+                    className={inputClass}
+                    value={mergeForm.duplicate}
+                    onChange={(event) => setMergeForm({ ...mergeForm, duplicate: event.target.value })}
+                    placeholder="7-XXXXXXXX-C"
+                    required
+                  />
+                </Field>
+                <Field label="Motif">
+                  <input
+                    className={inputClass}
+                    value={mergeForm.reason}
+                    onChange={(event) => setMergeForm({ ...mergeForm, reason: event.target.value })}
+                    placeholder="Même personne, deux dossiers"
+                    required
+                  />
+                </Field>
+                <button type="submit" className={btnBlock} disabled={busy}>
+                  Demander la fusion
+                </button>
+              </form>
+              <ul className="mt-3 space-y-2 text-xs">
+                {identityMerges.length === 0 ? (
+                  <li className="text-neutral-500">Aucune demande.</li>
+                ) : (
+                  identityMerges.map((row) => (
+                    <li key={row.id} className="rounded-md border border-black/8 p-2">
+                      <p className="font-medium">{mergeStatusLabel(row.status)}</p>
+                      <p className="text-neutral-600">{personPublicLabel(row.surviving)}</p>
+                      <p className="text-neutral-600">↔ {personPublicLabel(row.duplicate)}</p>
+                    </li>
+                  ))
+                )}
+              </ul>
             </Panel>
             {transfers.length > 0 ? (
               <Panel className="p-3">
@@ -6350,6 +6702,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   const [shareChildIds, setShareChildIds] = useState<string[]>([])
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [consentForm, setConsentForm] = useState({ childId: '', schoolId: '', scope: 'academic.records', purpose: 'Partage avec l’école' })
+  const [exportOpen, setExportOpen] = useState(false)
 
   async function loadFamily() {
     const payload = await api<{ data: PersonRow[] }>('/api/v1/parent/children', auth)
@@ -7173,7 +7526,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             <p className="mt-1 text-xs text-neutral-500">
               Archive JSON de vos enfants, messages, consentements et documents. Pas un LSU. FANABE n’encaisse pas.
             </p>
-            <button type="button" className={`${btnGhost} mt-2`} disabled={busy} onClick={() => void downloadExport()}>
+            <button type="button" className={`${btnGhost} mt-2`} disabled={busy} onClick={() => setExportOpen(true)}>
               Télécharger mes données
             </button>
           </Panel>
@@ -7193,6 +7546,18 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             )}
           </Panel>
         </div>
+      ) : null}
+      {exportOpen ? (
+        <ReauthDialog
+          token={session.token}
+          title="Télécharger mes données"
+          method="password"
+          onCancel={() => setExportOpen(false)}
+          onConfirmed={async () => {
+            await downloadExport()
+            setExportOpen(false)
+          }}
+        />
       ) : null}
     </main>
   )

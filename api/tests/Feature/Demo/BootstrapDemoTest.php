@@ -41,6 +41,14 @@ it('lets the Antsahabe direction account log in after bootstrap', function () {
         ->assertJsonPath('is_student', false);
 });
 
+it('lets the platform admin account log in after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->loginJson('plateforme@fanabe.test')
+        ->assertJsonPath('is_platform_admin', true)
+        ->assertJsonCount(0, 'schools');
+});
+
 it('lets the Antsahabe teacher take attendance and forbids the direction from doing so', function () {
     $this->artisan('demo:bootstrap')->assertSuccessful();
 

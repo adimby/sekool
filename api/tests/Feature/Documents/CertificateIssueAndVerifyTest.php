@@ -68,6 +68,8 @@ it('issues an enrollment certificate whose public verify masks the name', functi
         ->assertSee('Fanja R.', false)
         ->assertSee(CertificateCopy::DISCLAIMER, false);
 
+    $this->confirmSensitive($school['account']);
+
     $this->actingAs($school['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/certificates/{$issued['id']}/revoke", [
             'reason' => 'Erreur de classe',

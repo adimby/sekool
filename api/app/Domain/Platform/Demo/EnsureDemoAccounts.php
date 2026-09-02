@@ -23,6 +23,12 @@ final class EnsureDemoAccounts
      */
     private const ACCOUNTS = [
         [
+            'email' => 'plateforme@fanabe.test',
+            'first_name' => 'Fanabe',
+            'last_name' => 'Plateforme',
+            'kind' => 'platform',
+        ],
+        [
             'email' => 'direction.antsahabe@fanabe.test',
             'first_name' => 'Direction',
             'last_name' => 'Antsahabe',
@@ -94,6 +100,12 @@ final class EnsureDemoAccounts
 
         if (($row['kind'] ?? null) === 'student') {
             $this->ensureStudent($row, $password);
+
+            return;
+        }
+
+        if (($row['kind'] ?? null) === 'platform') {
+            $this->ensurePlatform($row, $password);
 
             return;
         }
@@ -170,6 +182,34 @@ final class EnsureDemoAccounts
                 false,
             );
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function ensurePlatform(array $row, string $password): void
+    {
+        $account = UserAccount::query()->whereRaw('lower(email) = ?', [strtolower($row['email'])])->first();
+
+        if ($account === null) {
+            $person = Person::query()->whereRaw('lower(email) = ?', [strtolower($row['email'])])->first()
+                ?? Person::createWithUniquePublicId([
+                    'first_name' => $row['first_name'],
+                    'last_name' => $row['last_name'],
+                    'email' => $row['email'],
+                ]);
+
+            $account = UserAccount::query()->create([
+                'person_id' => $person->id,
+                'email' => $row['email'],
+                'password' => $password,
+                'must_change_password' => false,
+            ]);
+        } else {
+            $account->forceFill(['password' => $password])->save();
+        }
+
+        app(AcquirePersonRole::class)->execute($account->person_id, PersonRoleType::PlatformAdmin);
     }
 
     /**

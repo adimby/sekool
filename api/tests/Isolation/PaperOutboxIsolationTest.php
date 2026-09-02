@@ -59,6 +59,8 @@ it('never lets school A read school B print letters or a parent export another f
         ->postJson("/api/v1/schools/{$a['school']->id}/messages/{$letterId}/printed")
         ->assertNotFound();
 
+    $this->confirmSensitive($other['parentAccount']);
+
     $archive = $this->actingAs($other['parentAccount'], 'sanctum')
         ->getJson('/api/v1/parent/export')
         ->assertOk()

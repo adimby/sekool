@@ -3,6 +3,7 @@
 use App\Http\Api\V1\Auth\ClaimInvitationController;
 use App\Http\Api\V1\Auth\LoginController;
 use App\Http\Api\V1\Auth\MeController;
+use App\Http\Api\V1\Auth\ReauthController;
 use App\Http\Api\V1\Auth\TotpChallengeController;
 use App\Http\Api\V1\ParentPortal\AccessLogController;
 use App\Http\Api\V1\ParentPortal\ChildAttendanceController;
@@ -17,6 +18,7 @@ use App\Http\Api\V1\ParentPortal\ParentKitController;
 use App\Http\Api\V1\ParentPortal\ParentMessageController;
 use App\Http\Api\V1\ParentPortal\ShareTokenController;
 use App\Http\Api\V1\ParentPortal\TransferController as ParentTransferController;
+use App\Http\Api\V1\Platform\PlatformIdentityMergeController;
 use App\Http\Api\V1\PublicVerify\PublicCertificateVerifyController;
 use App\Http\Api\V1\School\AcademicHistoryController;
 use App\Http\Api\V1\School\AssignClassroomController;
@@ -38,6 +40,7 @@ use App\Http\Api\V1\School\FamilyReliabilityController;
 use App\Http\Api\V1\School\FeeScheduleController;
 use App\Http\Api\V1\School\GradeController;
 use App\Http\Api\V1\School\GradeLevelController;
+use App\Http\Api\V1\School\IdentityMergeController;
 use App\Http\Api\V1\School\InvoiceController;
 use App\Http\Api\V1\School\OutboxController;
 use App\Http\Api\V1\School\PaymentController;
@@ -67,6 +70,8 @@ Route::get('/verify/certificates/{token}', PublicCertificateVerifyController::cl
     ->middleware('throttle:certificate-verify');
 
 Route::middleware('auth:sanctum')->get('/me', MeController::class);
+Route::middleware('auth:sanctum')->get('/auth/reauth', [ReauthController::class, 'show']);
+Route::middleware('auth:sanctum')->post('/auth/reauth', [ReauthController::class, 'store']);
 
 Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function (): void {
     Route::middleware('school.role:staff')->group(function (): void {
@@ -133,6 +138,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/families/{family}/invite', [FamilyController::class, 'invite']);
         Route::patch('/schools/{school}/families/{family}/members/{person}', [FamilyController::class, 'updateMember']);
         Route::get('/schools/{school}/people', [PeopleController::class, 'index']);
+        Route::get('/schools/{school}/people/duplicates', [IdentityMergeController::class, 'duplicates']);
         Route::get('/schools/{school}/people/{person}', [PeopleController::class, 'show']);
         Route::patch('/schools/{school}/people/{person}', [PeopleController::class, 'update']);
         Route::get('/schools/{school}/people/{person}/academic-history', AcademicHistoryController::class);
@@ -181,6 +187,8 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/fee-schedules/{schedule}/confirm', [FeeScheduleController::class, 'confirm']);
         Route::post('/schools/{school}/fee-schedules/{schedule}/reopen', [FeeScheduleController::class, 'reopen']);
         Route::post('/schools/{school}/fee-schedules/{schedule}/request-unlock', [FeeScheduleController::class, 'requestUnlock']);
+        Route::get('/schools/{school}/identity-merges', [IdentityMergeController::class, 'index']);
+        Route::post('/schools/{school}/identity-merges', [IdentityMergeController::class, 'store']);
     });
 
     Route::middleware('school.role:finance')->group(function (): void {
@@ -232,4 +240,11 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
 
 Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('student')->group(function (): void {
     Route::get('/me', StudentOverviewController::class);
+});
+
+Route::middleware(['auth:sanctum', 'platform.admin'])->prefix('platform')->group(function (): void {
+    Route::get('/identity-merges', [PlatformIdentityMergeController::class, 'index']);
+    Route::post('/identity-merges/{merge}/approve', [PlatformIdentityMergeController::class, 'approve']);
+    Route::post('/identity-merges/{merge}/refuse', [PlatformIdentityMergeController::class, 'refuse']);
+    Route::post('/identity-merges/{merge}/undo', [PlatformIdentityMergeController::class, 'undo']);
 });

@@ -8,6 +8,7 @@ use App\Domain\Family\Support\FamilyHasSchoolEnrollment;
 use App\Domain\Identity\Actions\AddAdultToFamily;
 use App\Domain\Identity\Actions\AddChildToFamily;
 use App\Domain\Identity\Actions\CreateFamilyWithStudent;
+use App\Domain\Identity\Actions\FindSimilarPersons;
 use App\Domain\Identity\Actions\ReissueParentInvitation;
 use App\Domain\Identity\Actions\UpdatePersonCivilData;
 use App\Domain\Identity\Enums\RelationshipType;
@@ -196,7 +197,7 @@ final class FamilyController extends Controller
         return response()->json(['data' => FamilyPayload::forSchool($familyModel)]);
     }
 
-    public function store(Request $request, CreateFamilyWithStudent $create): JsonResponse
+    public function store(Request $request, CreateFamilyWithStudent $create, FindSimilarPersons $find): JsonResponse
     {
         $data = $request->validate([
             'school_year_id' => ['required', 'uuid'],
@@ -241,6 +242,15 @@ final class FamilyController extends Controller
             ->where('kind', 'student')
             ->firstOrFail();
 
+        $except = [$result['parent']->id, $result['student']->id];
+        $warnings = [];
+        foreach (array_merge(
+            $find->inSchool(TenantContext::requireSchoolId(), $data['parent'], $except),
+            $find->inSchool(TenantContext::requireSchoolId(), $data['student'], $except),
+        ) as $row) {
+            $warnings[$row['id']] = $row;
+        }
+
         return response()->json([
             'family_id' => $result['family']->id,
             'family_label' => $result['family']->label,
@@ -249,6 +259,7 @@ final class FamilyController extends Controller
             'student' => PersonPayload::forSchool($result['student'], $studentLink),
             'enrollment_id' => $result['enrollment']->id,
             'classroom_id' => $result['enrollment']->classroom_id,
+            'warnings' => array_values($warnings),
         ], 201);
     }
 
