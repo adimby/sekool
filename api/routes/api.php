@@ -3,6 +3,7 @@
 use App\Http\Api\V1\Auth\ClaimInvitationController;
 use App\Http\Api\V1\Auth\LoginController;
 use App\Http\Api\V1\Auth\MeController;
+use App\Http\Api\V1\Auth\TotpChallengeController;
 use App\Http\Api\V1\ParentPortal\AccessLogController;
 use App\Http\Api\V1\ParentPortal\ChildAttendanceController;
 use App\Http\Api\V1\ParentPortal\ChildFinanceController;
@@ -60,6 +61,7 @@ use App\Http\Middleware\SetTenantContext;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', LoginController::class);
+Route::post('/auth/totp', TotpChallengeController::class)->middleware('throttle:20,1');
 Route::post('/auth/invitations/claim', ClaimInvitationController::class)->middleware('throttle:10,1');
 Route::get('/verify/certificates/{token}', PublicCertificateVerifyController::class)
     ->middleware('throttle:certificate-verify');

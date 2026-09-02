@@ -34,10 +34,7 @@ it('seeds demo users when schools already exist without accounts', function () {
 it('lets the Antsahabe direction account log in after bootstrap', function () {
     $this->artisan('demo:bootstrap')->assertSuccessful();
 
-    $this->postJson('/api/v1/auth/login', [
-        'email' => 'direction.antsahabe@fanabe.test',
-        'password' => 'password',
-    ])->assertOk()
+    $this->loginJson('direction.antsahabe@fanabe.test')
         ->assertJsonStructure(['token', 'person_id', 'person', 'schools', 'is_parent', 'is_student'])
         ->assertJsonPath('schools.0.code', 'antsahabe')
         ->assertJsonPath('schools.0.role', 'school_admin')
@@ -145,10 +142,7 @@ it('seeds classrooms and fee schedules for demo schools', function () {
 it('fills the Antsahabe cockpit with three priority actions after bootstrap', function () {
     $this->artisan('demo:bootstrap')->assertSuccessful();
 
-    $login = $this->postJson('/api/v1/auth/login', [
-        'email' => 'direction.antsahabe@fanabe.test',
-        'password' => 'password',
-    ])->assertOk();
+    $login = $this->loginJson('direction.antsahabe@fanabe.test');
 
     $schoolId = $login->json('schools.0.id');
 
