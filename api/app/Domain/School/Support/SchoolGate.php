@@ -3,6 +3,9 @@
 namespace App\Domain\School\Support;
 
 use App\Domain\Academic\Models\Classroom;
+use App\Domain\Academic\Models\TimetableSlot;
+use App\Domain\Academic\Support\ClassroomCycle;
+use App\Domain\Academic\Support\TimetableDuty;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
 use App\Domain\School\Models\SchoolRoleAssignment;
@@ -121,7 +124,7 @@ final class SchoolGate
             return true;
         }
 
-        return self::visibleClassrooms($request)
+        return self::titulaireClassrooms($request)
             ->where('grade_level_id', $gradeLevelId)
             ->exists();
     }
@@ -135,7 +138,7 @@ final class SchoolGate
             return null;
         }
 
-        return self::visibleClassrooms($request)
+        return self::titulaireClassrooms($request)
             ->pluck('grade_level_id')
             ->filter()
             ->unique()
@@ -152,19 +155,94 @@ final class SchoolGate
         return self::teaches($request, $classroom);
     }
 
-    public static function canTakeAttendance(Request $request, Classroom $classroom): bool
-    {
-        return self::teaches($request, $classroom);
+    public static function canTakeAttendance(
+        Request $request,
+        Classroom $classroom,
+        ?TimetableSlot $slot = null,
+        ?string $date = null,
+    ): bool {
+        if (! self::isTeacher($request)) {
+            return false;
+        }
+
+        if ($slot !== null && $date !== null) {
+            $personId = $request->user()?->person_id;
+            if (! is_string($personId) || $personId === '') {
+                return false;
+            }
+
+            if ((string) $slot->classroom_id !== (string) $classroom->id) {
+                return false;
+            }
+
+            $effective = TimetableDuty::effectiveTeacherPersonId($slot, $date);
+
+            return is_string($effective) && $effective === $personId;
+        }
+
+        if (ClassroomCycle::requiresCourseForAttendance($classroom)) {
+            return false;
+        }
+
+        return self::isAssignedToClass($request, $classroom);
     }
 
+    /**
+     * Titulaire, enseignant de matière, ou professeur d’un créneau (y compris remplaçant).
+     */
     public static function teaches(Request $request, Classroom $classroom): bool
     {
         $personId = $request->user()?->person_id;
 
-        return self::isTeacher($request)
-            && is_string($personId)
-            && $personId !== ''
-            && $classroom->main_teacher_person_id === $personId;
+        if (! self::isTeacher($request) || ! is_string($personId) || $personId === '') {
+            return false;
+        }
+
+        if ($classroom->main_teacher_person_id === $personId) {
+            return true;
+        }
+
+        if ($classroom->teachers()->where('person_id', $personId)->exists()) {
+            return true;
+        }
+
+        if ($classroom->timetableSlots()->where('teacher_person_id', $personId)->exists()) {
+            return true;
+        }
+
+        return $classroom->timetableSlots()
+            ->whereHas('substitutions', fn (Builder $query) => $query->where('substitute_person_id', $personId))
+            ->exists();
+    }
+
+    public static function isAssignedToClass(Request $request, Classroom $classroom): bool
+    {
+        $personId = $request->user()?->person_id;
+
+        if (! self::isTeacher($request) || ! is_string($personId) || $personId === '') {
+            return false;
+        }
+
+        if ($classroom->main_teacher_person_id === $personId) {
+            return true;
+        }
+
+        return $classroom->teachers()->where('person_id', $personId)->exists();
+    }
+
+    /**
+     * @return Builder<Classroom>
+     */
+    public static function titulaireClassrooms(Request $request): Builder
+    {
+        $query = Classroom::query()->with('gradeLevel')->orderBy('name');
+        $personId = $request->user()?->person_id;
+
+        if (self::isTeacher($request) && is_string($personId) && $personId !== '') {
+            return $query->where('main_teacher_person_id', $personId);
+        }
+
+        return $query->whereRaw('false');
     }
 
     /**
@@ -180,7 +258,15 @@ final class SchoolGate
 
         $personId = $request->user()?->person_id;
         if (self::isTeacher($request) && is_string($personId) && $personId !== '') {
-            return $query->where('main_teacher_person_id', $personId);
+            return $query->where(function (Builder $inner) use ($personId): void {
+                $inner->where('main_teacher_person_id', $personId)
+                    ->orWhereHas('teachers', fn (Builder $teachers) => $teachers->where('person_id', $personId))
+                    ->orWhereHas('timetableSlots', fn (Builder $slots) => $slots->where('teacher_person_id', $personId))
+                    ->orWhereHas(
+                        'timetableSlots.substitutions',
+                        fn (Builder $subs) => $subs->where('substitute_person_id', $personId),
+                    );
+            });
         }
 
         return $query->whereRaw('false');

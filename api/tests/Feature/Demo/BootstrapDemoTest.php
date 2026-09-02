@@ -67,24 +67,84 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ->assertOk()
         ->json('data');
 
-    expect($classrooms)->not->toBeEmpty();
+    $sixieme = collect($classrooms)->firstWhere('name', '6ème A');
+    expect($sixieme)->not->toBeNull();
 
-    $classroomId = $classrooms[0]['id'];
+    $classroomId = $sixieme['id'];
     $roster = $this->withToken($token)
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}/roster")
         ->assertOk()
         ->json('data.students');
 
-    expect($roster)->not->toBeEmpty();
+    expect($roster)->not->toBeEmpty()
+        ->and($roster[0])->toHaveKey('student_number');
 
     $this->withToken($token)
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
-            'date' => '2026-09-15',
+            'date' => '2026-09-14',
             'session' => 'full_day',
             'records' => [[
                 'enrollment_id' => $roster[0]['enrollment_id'],
                 'status' => 'present',
                 'client_reference' => '33333333-3333-4333-8333-333333333333',
+            ]],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Choisissez le cours.');
+
+    $courses = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
+            'classroom_id' => $classroomId,
+            'date' => '2026-09-14',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('requires_course', true)
+        ->json('courses');
+
+    $malagasy = collect($courses)->firstWhere('subject', 'Malagasy');
+    expect($malagasy)->not->toBeNull();
+
+    $this->withToken($token)
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'session' => 'period',
+            'timetable_slot_id' => $malagasy['id'],
+            'records' => [[
+                'enrollment_id' => $roster[0]['enrollment_id'],
+                'status' => 'present',
+                'client_reference' => '33333333-3333-4333-8333-333333333333',
+            ]],
+        ])
+        ->assertCreated();
+
+    $mathsLogin = $this->postJson('/api/v1/auth/login', [
+        'email' => 'teacher.maths.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk();
+
+    $mathsToken = $mathsLogin->json('token');
+    $maths = collect($courses)->firstWhere('subject', 'Mathématiques');
+    expect($maths)->not->toBeNull();
+
+    $this->withToken($mathsToken)
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'timetable_slot_id' => $malagasy['id'],
+            'records' => [[
+                'enrollment_id' => $roster[0]['enrollment_id'],
+                'status' => 'absent',
+                'reason' => 'Maladie',
+            ]],
+        ])
+        ->assertForbidden();
+
+    $this->withToken($mathsToken)
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'timetable_slot_id' => $maths['id'],
+            'records' => [[
+                'enrollment_id' => $roster[0]['enrollment_id'],
+                'status' => 'present',
             ]],
         ])
         ->assertCreated();

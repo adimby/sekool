@@ -7,6 +7,7 @@ use App\Domain\Platform\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TimetableSlot extends Model
 {
@@ -38,5 +39,10 @@ class TimetableSlot extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Person::class, 'teacher_person_id');
+    }
+
+    public function substitutions(): HasMany
+    {
+        return $this->hasMany(TimetableSubstitution::class);
     }
 }

@@ -38,7 +38,8 @@ final class DetectStudentAlerts
                 ->where('enrollment_id', $enrollment->id)
                 ->where('status', AttendanceStatus::Absent)
                 ->where('date', '>=', $windowStart)
-                ->count();
+                ->distinct()
+                ->count('date');
             $gradesDrop = $this->gradesDrop($enrollment);
             $homeworkCount = $this->homeworkCount($enrollment, $windowStart);
             $gradesSignal = $gradesDrop !== null;

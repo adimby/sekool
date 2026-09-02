@@ -306,10 +306,11 @@ Volontairement dans le plan plateforme : cette période n'appartient à aucun é
 
 ### `attendance_records`
 
-`school_id`, `enrollment_id`, `date`, `session` (`morning` / `afternoon` / `full_day`), `status` (`present` / `absent` / `late` / `excused`), `minutes_late`, `reason`, `recorded_by_person_id`, `recorded_via` (`web` / `offline_sync`), `client_reference` (idempotence de la file hors ligne, `Q-07`).
+`school_id`, `enrollment_id`, `date`, `session` (`morning` / `afternoon` / `full_day` / `period`), `timetable_slot_id` (nullable — collège / lycée), `status` (`present` / `absent` / `late` / `excused`), `minutes_late`, `reason`, `recorded_by_person_id`, `recorded_via` (`web` / `offline_sync`), `client_reference` (idempotence de la file hors ligne, `Q-07`).
 
 ```sql
-UNIQUE (school_id, enrollment_id, date, session)
+UNIQUE (school_id, enrollment_id, date, session) WHERE timetable_slot_id IS NULL
+UNIQUE (school_id, enrollment_id, date, timetable_slot_id) WHERE timetable_slot_id IS NOT NULL
 UNIQUE (school_id, client_reference) WHERE client_reference IS NOT NULL
 INDEX  (school_id, date, status)     -- compteurs du cockpit
 ```

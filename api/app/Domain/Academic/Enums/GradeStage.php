@@ -38,4 +38,13 @@ enum GradeStage: string
     {
         return $this === self::Preschool || $this === self::Primary;
     }
+
+    /**
+     * Collège / lycée : les élèves restent en salle, les professeurs tournent, l’appel est par créneau.
+     * Maternelle / primaire : le même enseignant suit le groupe, l’appel est au jour.
+     */
+    public function takesAttendanceByPeriod(): bool
+    {
+        return $this === self::Middle || $this === self::High;
+    }
 }

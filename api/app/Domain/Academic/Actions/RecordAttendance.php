@@ -26,6 +26,7 @@ final class RecordAttendance
         ?int $minutesLate = null,
         ?string $reason = null,
         ?string $justification = null,
+        ?string $timetableSlotId = null,
     ): AttendanceRecord {
         $enrollment = Enrollment::query()->find($enrollmentId);
         if ($enrollment === null || (string) $enrollment->school_id !== $schoolId) {
@@ -34,6 +35,10 @@ final class RecordAttendance
 
         if ($enrollment->status !== EnrollmentStatus::Active) {
             throw new DomainException('La présence ne peut être saisie que pour une inscription active.');
+        }
+
+        if ($timetableSlotId !== null) {
+            $session = AttendanceSession::Period;
         }
 
         if ($clientReference !== null) {
@@ -56,24 +61,22 @@ final class RecordAttendance
                 $minutesLate,
                 $reason,
                 $justification,
+                $timetableSlotId,
             ): AttendanceRecord {
-                $current = AttendanceRecord::query()
-                    ->where('enrollment_id', $enrollment->id)
-                    ->where('date', $date)
-                    ->where('session', $session->value)
-                    ->lockForUpdate()
-                    ->first();
+                $current = $this->lockExisting($enrollment->id, $date, $session, $timetableSlotId);
 
                 $previous = $current?->status;
 
                 if ($current !== null) {
                     $current->fill([
+                        'session' => $session,
                         'status' => $status,
                         'minutes_late' => $minutesLate,
                         'reason' => $reason,
                         'justification' => $justification,
                         'recorded_by_person_id' => $recordedByPersonId,
                         'recorded_via' => $recordedVia,
+                        'timetable_slot_id' => $timetableSlotId,
                     ]);
                     $current->save();
                     $record = $current;
@@ -90,6 +93,7 @@ final class RecordAttendance
                         'recorded_by_person_id' => $recordedByPersonId,
                         'recorded_via' => $recordedVia,
                         'client_reference' => $clientReference,
+                        'timetable_slot_id' => $timetableSlotId,
                     ]);
 
                     Auditor::record(
@@ -97,7 +101,11 @@ final class RecordAttendance
                         'attendance_record',
                         $record->id,
                         $enrollment->person_id,
-                        ['date' => $date, 'status' => $status->value],
+                        [
+                            'date' => $date,
+                            'status' => $status->value,
+                            'timetable_slot_id' => $timetableSlotId,
+                        ],
                     );
                 }
 
@@ -105,7 +113,7 @@ final class RecordAttendance
                     && $previous !== AttendanceStatus::Absent
                     && $recordedVia !== 'seed';
                 if ($becameAbsent) {
-                    app(NotifyAbsenceToFamily::class)->execute($enrollment, $date, $session->value);
+                    app(NotifyAbsenceToFamily::class)->execute($enrollment, $date);
                 }
 
                 return $record;
@@ -118,11 +126,7 @@ final class RecordAttendance
                 }
             }
 
-            $current = AttendanceRecord::query()
-                ->where('enrollment_id', $enrollment->id)
-                ->where('date', $date)
-                ->where('session', $session->value)
-                ->first();
+            $current = $this->findExisting($enrollment->id, $date, $session, $timetableSlotId);
 
             if ($current !== null) {
                 return $current;
@@ -130,5 +134,43 @@ final class RecordAttendance
 
             throw $e;
         }
+    }
+
+    private function lockExisting(
+        string $enrollmentId,
+        string $date,
+        AttendanceSession $session,
+        ?string $timetableSlotId,
+    ): ?AttendanceRecord {
+        $query = AttendanceRecord::query()
+            ->where('enrollment_id', $enrollmentId)
+            ->where('date', $date);
+
+        if ($timetableSlotId !== null) {
+            $query->where('timetable_slot_id', $timetableSlotId);
+        } else {
+            $query->whereNull('timetable_slot_id')->where('session', $session->value);
+        }
+
+        return $query->lockForUpdate()->first();
+    }
+
+    private function findExisting(
+        string $enrollmentId,
+        string $date,
+        AttendanceSession $session,
+        ?string $timetableSlotId,
+    ): ?AttendanceRecord {
+        $query = AttendanceRecord::query()
+            ->where('enrollment_id', $enrollmentId)
+            ->where('date', $date);
+
+        if ($timetableSlotId !== null) {
+            $query->where('timetable_slot_id', $timetableSlotId);
+        } else {
+            $query->whereNull('timetable_slot_id')->where('session', $session->value);
+        }
+
+        return $query->first();
     }
 }

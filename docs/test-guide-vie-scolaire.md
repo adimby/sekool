@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–G et socle)
+# Guide de test — FANABE (Vagues A–H et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -6,7 +6,8 @@ Comptes démo (mot de passe `password`) :
 |---|---|---|
 | Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
-| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Classe, Kits |
+| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Classe, Kits — Malagasy 6ème A |
+| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel, Classe — Mathématiques 6ème A (pas titulaire) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
 Ouvrir l’interface (Vite `http://127.0.0.1:5173` en local). Après une action, un **bandeau vert** confirme ; un **bandeau rouge** signale une erreur.
@@ -42,15 +43,21 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ## 3. Appel avec motif et justificatif
 
-1. Professeur → **Appel**, classe **6ème A**, date du jour.
-2. Pour **Hery** : pastille **A** (absent).
-3. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
-4. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
-5. **Enregistrer**.
-6. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
-7. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
-8. **Attendu :** message d’erreur demandant un motif.
-9. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
+En collège, les élèves restent en salle ; le professeur change. Nivo (titulaire) fait l’appel de **Malagasy**, pas des Maths.
+
+1. Titulaire → **Appel**, classe **6ème A**, date un **jour de semaine**.
+2. **Attendu :** un menu **Cours** (Malagasy 07:30). Colonne **N°** devant les noms.
+3. Pour **Hery** : pastille **A** (absent).
+4. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
+5. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
+6. **Enregistrer**.
+7. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
+8. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
+9. **Attendu :** message d’erreur demandant un motif.
+10. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
+11. Se déconnecter. Connexion **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+12. **Attendu :** 6ème A, cours **Mathématiques** 08:30. Pas le créneau Malagasy. Hery a son n°.
+13. Enregistrer l’appel Maths (tous présents). **Attendu :** OK. Le titulaire n’a pas pointé ce cours.
 
 ---
 
@@ -256,7 +263,7 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ## 20. Appel hors ligne (Vague F)
 
-1. Professeur → **Appel** → 6ème A, effectif chargé.
+1. Professeur → **Appel** → 6ème A, cours Malagasy, effectif chargé (n° visibles).
 2. Couper le réseau (hors ligne du navigateur).
 3. Marquer Hery **A** + motif **Maladie** → **Enregistrer**.
 4. **Attendu :** bandeau « Hors ligne. L’appel est enregistré sur cet appareil… ». File en attente. **Pas** d’écriture caisse possible.
@@ -287,12 +294,21 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ---
 
-## 23. Ce qui ne doit pas arriver
+## 23. Appel par cours collège (Vague H)
+
+1. Titulaire Nivo → **Appel** → 6ème A. Choisir un jour de semaine.
+2. **Attendu :** cours Malagasy (pas Maths). Colonne N°. Les élèves restent en salle.
+3. Connexion **Maths** (Haja). **Attendu :** seulement le créneau Mathématiques. Pas titulaire.
+4. Un samedi sans cours : « Pas de cours à cette date dans cette classe. »
+
+---
+
+## 24. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
 - Le parent ne voit jamais un *score*, un *palier de risque* ou « élève en difficulté ».
-- Le titulaire ne peut pas faire l’appel d’une classe dont il n’est pas titulaire.
+- Un professeur ne peut pas faire l’appel d’un cours qui n’est pas le sien (autre classe, ou créneau d’un autre prof).
 - Une école ne voit pas les dossiers d’une autre école.
 - Le titulaire ne peut pas radier un élève.
 - La discipline n’est pas une note qui punit.

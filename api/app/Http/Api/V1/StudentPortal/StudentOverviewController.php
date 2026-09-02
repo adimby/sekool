@@ -78,9 +78,11 @@ final class StudentOverviewController extends Controller
                 ? collect()
                 : AttendanceRecord::query()
                     ->withoutGlobalScopes()
+                    ->with('timetableSlot')
                     ->where('enrollment_id', $enrollment->id)
                     ->whereBetween('date', [$from, $to])
                     ->orderByDesc('date')
+                    ->orderBy('id')
                     ->get();
 
             return response()->json([
@@ -105,6 +107,10 @@ final class StudentOverviewController extends Controller
                     'status' => $row->status->value,
                     'reason' => $row->reason,
                     'justification' => $row->justification,
+                    'subject' => $row->timetableSlot?->subject,
+                    'starts_at' => $row->timetableSlot === null
+                        ? null
+                        : substr((string) $row->timetableSlot->starts_at, 0, 5),
                 ])->values(),
                 'finance' => [
                     'remaining_amount' => $invoice?->remainingAmount() ?? 0,

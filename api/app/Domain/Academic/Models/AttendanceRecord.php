@@ -27,6 +27,7 @@ class AttendanceRecord extends Model
         'recorded_by_person_id',
         'recorded_via',
         'client_reference',
+        'timetable_slot_id',
     ];
 
     protected function casts(): array
@@ -47,5 +48,10 @@ class AttendanceRecord extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(Person::class, 'recorded_by_person_id');
+    }
+
+    public function timetableSlot(): BelongsTo
+    {
+        return $this->belongsTo(TimetableSlot::class, 'timetable_slot_id');
     }
 }

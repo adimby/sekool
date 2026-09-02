@@ -61,11 +61,12 @@ final class EnsureSchoolCore
         $sixieme = $this->ensureGrade($school->id, '6ème', GradeStage::Middle, 6);
         $cinquieme = $this->ensureGrade($school->id, '5ème', GradeStage::Middle, 5);
         $teacherId = $this->mainTeacherPersonId($school);
+        $mathsTeacherId = $this->mathsTeacherPersonId($school);
         $class6 = $this->ensureClassroom($year, $sixieme, '6ème A', $teacherId);
         $class5 = $this->ensureClassroom($year, $cinquieme, '5ème A', $teacherId);
         $this->ensureFeeSchedule($year);
         $this->assignEnrollments($year, $class6, $class5);
-        $this->ensureClassLife($year, $class6, $teacherId);
+        $this->ensureClassLife($year, $class6, $teacherId, $mathsTeacherId);
         $this->ensurePreschoolDemo($school, $year, $teacherId);
         $this->ensureHighDemo($school, $year, $teacherId);
         $this->ensureExpense($year);
@@ -79,6 +80,17 @@ final class EnsureSchoolCore
 
         return UserAccount::query()
             ->whereRaw('lower(email) = ?', ['teacher.antsahabe@fanabe.test'])
+            ->value('person_id');
+    }
+
+    private function mathsTeacherPersonId(School $school): ?string
+    {
+        if ($school->code !== 'antsahabe') {
+            return null;
+        }
+
+        return UserAccount::query()
+            ->whereRaw('lower(email) = ?', ['teacher.maths.antsahabe@fanabe.test'])
             ->value('person_id');
     }
 
@@ -167,7 +179,7 @@ final class EnsureSchoolCore
         return $classroom;
     }
 
-    private function ensureClassLife(SchoolYear $year, Classroom $classroom, ?string $teacherPersonId): void
+    private function ensureClassLife(SchoolYear $year, Classroom $classroom, ?string $teacherPersonId, ?string $mathsTeacherPersonId = null): void
     {
         $term = AcademicTerm::query()
             ->where('school_year_id', $year->id)
@@ -185,33 +197,76 @@ final class EnsureSchoolCore
         }
 
         if ($teacherPersonId !== null) {
-            TimetableSlot::query()->firstOrCreate(
+            foreach ([1, 2, 3, 4, 5] as $weekday) {
+                $malagasy = TimetableSlot::query()->firstOrCreate(
+                    [
+                        'school_id' => $year->school_id,
+                        'classroom_id' => $classroom->id,
+                        'weekday' => $weekday,
+                        'starts_at' => '07:30:00',
+                    ],
+                    [
+                        'ends_at' => '08:25:00',
+                        'subject' => 'Malagasy',
+                        'teacher_person_id' => $teacherPersonId,
+                        'room' => 'A1',
+                    ],
+                );
+                if ($malagasy->teacher_person_id !== $teacherPersonId || $malagasy->subject !== 'Malagasy') {
+                    $malagasy->forceFill([
+                        'teacher_person_id' => $teacherPersonId,
+                        'subject' => 'Malagasy',
+                        'ends_at' => '08:25:00',
+                        'room' => 'A1',
+                    ])->save();
+                }
+
+                $mathsTeacher = $mathsTeacherPersonId ?? $teacherPersonId;
+                $maths = TimetableSlot::query()->firstOrCreate(
+                    [
+                        'school_id' => $year->school_id,
+                        'classroom_id' => $classroom->id,
+                        'weekday' => $weekday,
+                        'starts_at' => '08:30:00',
+                    ],
+                    [
+                        'ends_at' => '09:25:00',
+                        'subject' => 'Mathématiques',
+                        'teacher_person_id' => $mathsTeacher,
+                        'room' => 'A1',
+                    ],
+                );
+                if ($maths->teacher_person_id !== $mathsTeacher || $maths->subject !== 'Mathématiques') {
+                    $maths->forceFill([
+                        'teacher_person_id' => $mathsTeacher,
+                        'subject' => 'Mathématiques',
+                        'ends_at' => '09:25:00',
+                        'room' => 'A1',
+                    ])->save();
+                }
+            }
+
+            $nivo = ClassroomTeacher::query()->firstOrCreate(
                 [
                     'school_id' => $year->school_id,
                     'classroom_id' => $classroom->id,
-                    'weekday' => 1,
-                    'starts_at' => '07:30:00',
+                    'person_id' => $teacherPersonId,
                 ],
-                [
-                    'ends_at' => '08:25:00',
-                    'subject' => 'Malagasy',
-                    'teacher_person_id' => $teacherPersonId,
-                    'room' => 'A1',
-                ],
+                ['subject' => 'Malagasy'],
             );
-            TimetableSlot::query()->firstOrCreate(
+            if ($nivo->subject !== 'Malagasy') {
+                $nivo->forceFill(['subject' => 'Malagasy'])->save();
+            }
+        }
+
+        if ($mathsTeacherPersonId !== null) {
+            ClassroomTeacher::query()->firstOrCreate(
                 [
                     'school_id' => $year->school_id,
                     'classroom_id' => $classroom->id,
-                    'weekday' => 1,
-                    'starts_at' => '08:30:00',
+                    'person_id' => $mathsTeacherPersonId,
                 ],
-                [
-                    'ends_at' => '09:25:00',
-                    'subject' => 'Mathématiques',
-                    'teacher_person_id' => $teacherPersonId,
-                    'room' => 'A1',
-                ],
+                ['subject' => 'Mathématiques'],
             );
         }
 

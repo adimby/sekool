@@ -76,6 +76,9 @@ type AttendanceRow = {
   status: string
   reason?: string | null
   justification?: string | null
+  subject?: string | null
+  starts_at?: string | null
+  ends_at?: string | null
 }
 
 type AttendanceMark = { status: string; reason: string; justification: string }
@@ -330,7 +333,19 @@ type EnrollmentRow = {
 
 type RosterStudent = {
   enrollment_id: string
+  student_number?: string | null
   person: { id: string; public_id: string; first_name: string; last_name: string } | null
+}
+
+type AttendanceCourse = {
+  id: string
+  subject: string
+  starts_at: string
+  ends_at: string
+  room: string | null
+  teacher_person_id: string | null
+  scheduled_teacher_person_id?: string | null
+  cancelled: boolean
 }
 
 type InvoiceRow = {
@@ -412,7 +427,15 @@ type StudentOverview = {
     school: { name: string } | null
     classroom: { name: string } | null
   } | null
-  attendance: Array<{ id: string; date: string; status: string; reason?: string | null; justification?: string | null }>
+  attendance: Array<{
+    id: string
+    date: string
+    status: string
+    reason?: string | null
+    justification?: string | null
+    subject?: string | null
+    starts_at?: string | null
+  }>
   finance: {
     remaining_amount: number
     invoice: InvoiceRow | null
@@ -877,8 +900,17 @@ function attendanceLabel(status?: string): string {
   return status ?? ''
 }
 
-function attendanceDetail(row: { status: string; reason?: string | null; justification?: string | null }): string {
+function attendanceDetail(row: {
+  status: string
+  reason?: string | null
+  justification?: string | null
+  subject?: string | null
+  starts_at?: string | null
+}): string {
   const parts = [attendanceLabel(row.status)]
+  if (row.subject) {
+    parts.push(row.starts_at ? `${row.subject} ${row.starts_at}` : row.subject)
+  }
   if (row.reason) parts.push(row.reason)
   if (row.justification) parts.push(row.justification)
   return parts.join(' · ')
@@ -1147,7 +1179,8 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
   const demos = [
     { label: 'Plateforme', email: 'plateforme@fanabe.test' },
     { label: 'Direction', email: 'direction.antsahabe@fanabe.test' },
-    { label: 'Professeur', email: 'teacher.antsahabe@fanabe.test' },
+    { label: 'Titulaire', email: 'teacher.antsahabe@fanabe.test' },
+    { label: 'Maths', email: 'teacher.maths.antsahabe@fanabe.test' },
     { label: 'Parent', email: 'parent.andry@fanabe.test' },
     { label: 'Élève', email: 'eleve.fanja@fanabe.test' },
   ]
@@ -5928,6 +5961,9 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [query, setQuery] = useState('')
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [marks, setMarks] = useState<Record<string, AttendanceMark>>({})
+  const [courses, setCourses] = useState<AttendanceCourse[]>([])
+  const [requiresCourse, setRequiresCourse] = useState(false)
+  const [selectedSlot, setSelectedSlot] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [years, setYears] = useState<YearRow[]>([])
@@ -5935,8 +5971,14 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [queued, setQueued] = useState(0)
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const currentClass = classrooms.find((row) => row.id === selectedClassroom)
+  const personId = session.person_id
+  const myCourses = courses.filter((row) => !row.cancelled && row.teacher_person_id === personId)
+  const selectedCourse = myCourses.find((row) => row.id === selectedSlot) ?? null
   const visibleStudents = students.filter((row) =>
-    matchesQuery(`${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`, query),
+    matchesQuery(
+      `${row.student_number ?? ''} ${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`,
+      query,
+    ),
   )
 
   async function refresh() {
@@ -5964,13 +6006,29 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
     setClassFile(payload.data)
   }
 
-  async function loadAttendance(classroomId: string, date: string) {
+  async function loadAttendance(classroomId: string, date: string, slotId: string) {
+    const params = new URLSearchParams({ classroom_id: classroomId, date })
+    if (slotId) params.set('timetable_slot_id', slotId)
     const payload = await api<{
+      requires_course?: boolean
+      courses?: AttendanceCourse[]
       data: Array<{
         enrollment_id: string
+        student_number?: string | null
         attendance: { status: string; reason?: string | null; justification?: string | null } | null
       }>
-    }>(`/api/v1/schools/${schoolId}/attendance?classroom_id=${classroomId}&date=${date}&session=full_day`, auth)
+    }>(`/api/v1/schools/${schoolId}/attendance?${params.toString()}`, auth)
+    setRequiresCourse(Boolean(payload.requires_course))
+    const nextCourses = payload.courses ?? []
+    setCourses(nextCourses)
+    const mine = nextCourses.filter((row) => !row.cancelled && row.teacher_person_id === personId)
+    if (mine.length > 0 && (!slotId || !mine.some((row) => row.id === slotId))) {
+      setSelectedSlot(mine[0].id)
+      return
+    }
+    if (slotId && !mine.some((row) => row.id === slotId)) {
+      setSelectedSlot('')
+    }
     const next: Record<string, AttendanceMark> = {}
     for (const row of payload.data) {
       next[row.enrollment_id] = {
@@ -5998,12 +6056,12 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   useEffect(() => {
     if (!selectedClassroom || tab !== 'appel') return
-    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => {
+    loadAttendance(selectedClassroom, attendanceDate, selectedSlot).catch((error: Error) => {
       if (!isNetworkError(error) && navigator.onLine) {
         setMessage(error.message)
       }
     })
-  }, [selectedClassroom, attendanceDate, tab, schoolId, session.token])
+  }, [selectedClassroom, attendanceDate, selectedSlot, tab, schoolId, session.token, personId])
 
   useEffect(() => {
     let cancelled = false
@@ -6022,6 +6080,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             body: JSON.stringify({
               date: item.date,
               session: item.session,
+              timetable_slot_id: item.timetable_slot_id ?? undefined,
               recorded_via: 'offline_sync',
               records: item.records,
             }),
@@ -6073,7 +6132,20 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         client_reference: crypto.randomUUID(),
       }
     })
-    const payload = { date: attendanceDate, session: 'full_day', records }
+    if (requiresCourse && !selectedCourse) {
+      setMessage(
+        myCourses.length === 0
+          ? 'Pas de cours à cette date dans cette classe.'
+          : 'Choisissez le cours.',
+      )
+      return
+    }
+    const payload = {
+      date: attendanceDate,
+      session: requiresCourse ? 'period' : 'full_day',
+      ...(selectedCourse ? { timetable_slot_id: selectedCourse.id } : {}),
+      records,
+    }
     setBusy(true)
     setMessage(null)
     try {
@@ -6157,8 +6229,31 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
                 ))}
               </select>
               <input className={`${inputClass} w-auto`} type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} />
+              {requiresCourse ? (
+                <select
+                  className={`${inputClass} w-auto`}
+                  value={selectedSlot}
+                  onChange={(e) => setSelectedSlot(e.target.value)}
+                  aria-label="Cours"
+                >
+                  {myCourses.length === 0 ? (
+                    <option value="">Pas de cours à cette date</option>
+                  ) : (
+                    myCourses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.starts_at}–{course.ends_at} {course.subject}
+                        {course.room ? ` · ${course.room}` : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              ) : null}
               <input className={`${inputClass} max-w-[10rem]`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrer" />
-              <button type="submit" disabled={busy || students.length === 0} className={`${btnPrimary} ml-auto`}>
+              <button
+                type="submit"
+                disabled={busy || students.length === 0 || (requiresCourse && !selectedCourse)}
+                className={`${btnPrimary} ml-auto`}
+              >
                 {busy ? '…' : 'Enregistrer'}
               </button>
             </div>
@@ -6167,15 +6262,29 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
                 {queued} appel{queued > 1 ? 's' : ''} en attente sur cet appareil (hors ligne).
               </p>
             ) : null}
-            {visibleStudents.length === 0 ? (
+            {requiresCourse && myCourses.length === 0 ? (
+              <p className="px-3 py-6 text-sm text-neutral-600">
+                Pas de cours à cette date dans cette classe. Les élèves restent en salle ; le professeur change.
+              </p>
+            ) : visibleStudents.length === 0 ? (
               <p className="px-3 py-6 text-sm text-neutral-600">Aucun élève.</p>
             ) : (
               <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                    <th className="px-3 py-1.5 font-semibold">N°</th>
+                    <th className="px-3 py-1.5 font-semibold">Élève</th>
+                    <th className="px-3 py-1.5 text-right font-semibold">Présence</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {visibleStudents.map((row) => {
                     const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
                     return (
                       <tr key={row.enrollment_id} className="border-t border-black/5">
+                        <td className="w-12 px-3 py-1.5 align-top tabular-nums text-neutral-500">
+                          {row.student_number ?? '—'}
+                        </td>
                         <td className="px-3 py-1.5 align-top">
                           <p className="font-medium">
                             {row.person?.first_name} {row.person?.last_name}
@@ -6247,7 +6356,10 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             </select>
             {currentClass?.grade_level?.name ? (
               <p className="text-[11px] text-neutral-500">
-                Liste du niveau {currentClass.grade_level.name} — titulaire de {currentClass.name}.
+                Liste du niveau {currentClass.grade_level.name}
+                {currentClass.main_teacher_person_id === session.person_id
+                  ? ` — titulaire de ${currentClass.name}.`
+                  : ` — enseignant de ${currentClass.name}.`}
               </p>
             ) : null}
           </div>
@@ -6277,8 +6389,11 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
       {currentClass && tab === 'appel' ? (
         <p className="mt-2 text-[11px] text-neutral-500">
-          Appel de {currentClass.name} — P présent, A absent, R retard, E excusé. Motif obligatoire hors présent. Une
-          absence prévient la famille dans l’application.
+          {requiresCourse
+            ? `Appel du cours${selectedCourse ? ` ${selectedCourse.subject}` : ''} — les élèves restent en salle, le professeur change. `
+            : `Appel de ${currentClass.name} — `}
+          P présent, A absent, R retard, E excusé. Motif obligatoire hors présent. Une absence prévient la famille
+          une fois dans la journée (dans l’application, pas de SMS).
         </p>
       ) : null}
     </main>

@@ -65,6 +65,15 @@ final class EnsureDemoAccounts
             'role' => SchoolRole::Teacher,
         ],
         [
+            'email' => 'teacher.maths.antsahabe@fanabe.test',
+            'first_name' => 'Haja',
+            'last_name' => 'Randrianarisoa',
+            'school' => 'antsahabe',
+            'school_name' => 'École Antsahabe',
+            'plan' => 'plus',
+            'role' => SchoolRole::Teacher,
+        ],
+        [
             'email' => 'parent.andry@fanabe.test',
             'first_name' => 'Andry',
             'last_name' => 'Rasoanaivo',
