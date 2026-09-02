@@ -2177,7 +2177,7 @@ function ClassFilePanel({
   const [subReason, setSubReason] = useState('')
   const [examTitle, setExamTitle] = useState('')
   const [examSubject, setExamSubject] = useState('')
-  const [examDate, setExamDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [examDate, setExamDate] = useState(() => new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10))
   const [examStart, setExamStart] = useState('08:00')
   const [examEnd, setExamEnd] = useState('10:00')
   const [examRoom, setExamRoom] = useState('')
@@ -3336,7 +3336,14 @@ function ClassFilePanel({
                 </option>
               ))}
             </select>
-            <input className={inputClass} type="date" value={subDate} onChange={(e) => setSubDate(e.target.value)} required />
+            <input
+              className={inputClass}
+              type="date"
+              min={new Date().toISOString().slice(0, 10)}
+              value={subDate}
+              onChange={(e) => setSubDate(e.target.value)}
+              required
+            />
             <select className={inputClass} value={subTeacher} onChange={(e) => setSubTeacher(e.target.value)}>
               <option value="">Annulé / sans remplaçant</option>
               {staff.map((person) => (
@@ -3397,7 +3404,14 @@ function ClassFilePanel({
             <div className="grid gap-2 sm:grid-cols-2">
               <input className={inputClass} value={examTitle} onChange={(e) => setExamTitle(e.target.value)} placeholder="Titre" required />
               <input className={inputClass} value={examSubject} onChange={(e) => setExamSubject(e.target.value)} placeholder="Matière (optionnel)" />
-              <input className={inputClass} type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} required />
+              <input
+                className={inputClass}
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={examDate}
+                onChange={(e) => setExamDate(e.target.value)}
+                required
+              />
               <input className={inputClass} value={examRoom} onChange={(e) => setExamRoom(e.target.value)} placeholder="Salle" />
               <input className={inputClass} type="time" value={examStart} onChange={(e) => setExamStart(e.target.value)} required />
               <input className={inputClass} type="time" value={examEnd} onChange={(e) => setExamEnd(e.target.value)} required />

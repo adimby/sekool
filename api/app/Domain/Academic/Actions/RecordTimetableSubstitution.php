@@ -32,6 +32,9 @@ final class RecordTimetableSubstitution
         }
 
         $onDate = Carbon::parse($data['on_date'])->startOfDay();
+        if ($onDate->lt(now()->startOfDay())) {
+            throw new DomainException('Le remplacement doit être aujourd’hui ou plus tard.');
+        }
         if ((int) $onDate->isoWeekday() !== (int) $slot->weekday) {
             throw new DomainException('La date ne correspond pas au jour du créneau.');
         }

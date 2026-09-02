@@ -54,6 +54,11 @@ final class RecordExamSession
         $room = isset($data['room']) && trim((string) $data['room']) !== '' ? trim((string) $data['room']) : null;
         $subject = isset($data['subject']) && trim((string) $data['subject']) !== '' ? trim((string) $data['subject']) : null;
 
+        $heldOn = Carbon::parse($data['held_on'])->startOfDay();
+        if ($heldOn->lt(now()->startOfDay())) {
+            throw new DomainException('La composition doit être aujourd’hui ou plus tard.');
+        }
+
         $this->assertNoExamOverlap($classroomId, $data['held_on'], $starts, $ends);
         $this->assertNoRoomOverlap($room, $data['held_on'], $starts, $ends);
 

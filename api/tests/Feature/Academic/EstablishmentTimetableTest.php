@@ -127,6 +127,16 @@ it('blocks teacher and room clashes across classes and records a substitution an
 
     $this->actingAs($school['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$classA['id']}/exams", [
+            'title' => 'Composition trop tôt',
+            'held_on' => now()->subDay()->toDateString(),
+            'starts_at' => '08:00',
+            'ends_at' => '10:00',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'La composition doit être aujourd’hui ou plus tard.');
+
+    $this->actingAs($school['account'], 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$classA['id']}/exams", [
             'title' => 'Composition Français',
             'held_on' => now()->addDays(3)->toDateString(),
             'starts_at' => '08:30',
