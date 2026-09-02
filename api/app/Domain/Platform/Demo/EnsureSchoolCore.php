@@ -69,6 +69,7 @@ final class EnsureSchoolCore
         $this->ensureClassLife($year, $class6, $teacherId, $mathsTeacherId);
         $this->ensurePreschoolDemo($school, $year, $teacherId);
         $this->ensureHighDemo($school, $year, $teacherId);
+        $this->numberClassrooms($year);
         $this->ensureExpense($year);
     }
 
@@ -426,6 +427,38 @@ final class EnsureSchoolCore
 
             $enrollment->classroom_id = $fifth ? $class5->id : $class6->id;
             $enrollment->save();
+        }
+    }
+
+    private function numberClassrooms(SchoolYear $year): void
+    {
+        $classrooms = Classroom::query()
+            ->withoutGlobalScopes()
+            ->where('school_id', $year->school_id)
+            ->where('school_year_id', $year->id)
+            ->orderBy('name')
+            ->get();
+
+        foreach ($classrooms as $classroom) {
+            $enrollments = Enrollment::query()
+                ->withoutGlobalScopes()
+                ->with('person')
+                ->where('classroom_id', $classroom->id)
+                ->where('status', EnrollmentStatus::Active)
+                ->get()
+                ->sortBy(fn (Enrollment $row): string => mb_strtolower(
+                    trim(($row->person?->last_name ?? '').' '.($row->person?->first_name ?? '')),
+                ))
+                ->values();
+
+            $n = 1;
+            foreach ($enrollments as $enrollment) {
+                $number = (string) $n;
+                if ($enrollment->student_number !== $number) {
+                    $enrollment->forceFill(['student_number' => $number])->save();
+                }
+                $n++;
+            }
         }
     }
 }

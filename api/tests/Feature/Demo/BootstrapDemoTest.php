@@ -77,7 +77,8 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ->json('data.students');
 
     expect($roster)->not->toBeEmpty()
-        ->and($roster[0])->toHaveKey('student_number');
+        ->and($roster[0])->toHaveKey('student_number')
+        ->and($roster[0]['student_number'])->not->toBeNull();
 
     $this->withToken($token)
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
