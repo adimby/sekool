@@ -15,7 +15,6 @@ final class PaperOutboxPayload
     {
         $message->loadMissing('deliveries');
         $student = Person::query()->find($message->subject_person_id);
-        $latest = $message->deliveries->sortByDesc('occurred_at')->first();
 
         return [
             'id' => $message->id,
@@ -24,8 +23,18 @@ final class PaperOutboxPayload
             'subject' => $message->payload['subject'] ?? '',
             'body' => $message->payload['body'] ?? '',
             'queued_at' => $message->queued_at?->toIso8601String(),
-            'delivery_status' => $latest?->status ?? 'queued',
+            'delivery_status' => self::deliveryStatus($message),
             'student' => PersonMini::make($student),
         ];
+    }
+
+    public static function deliveryStatus(Message $message): string
+    {
+        $deliveries = $message->deliveries;
+        if ($deliveries->contains(fn ($row): bool => $row->status === 'printed')) {
+            return 'printed';
+        }
+
+        return $deliveries->sortByDesc('occurred_at')->first()?->status ?? 'queued';
     }
 }

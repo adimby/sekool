@@ -16,8 +16,7 @@ final class MarkPrintHanded
             throw new DomainException('Courrier introuvable.', 404);
         }
 
-        $latest = $message->deliveries->sortByDesc('occurred_at')->first();
-        if ($latest !== null && $latest->status === 'printed') {
+        if ($message->deliveries->contains(fn ($row): bool => $row->status === 'printed')) {
             return $message;
         }
 
