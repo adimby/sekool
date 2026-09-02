@@ -10,6 +10,7 @@ use App\Http\Api\V1\ParentPortal\ChildrenController;
 use App\Http\Api\V1\ParentPortal\ConsentController;
 use App\Http\Api\V1\ParentPortal\LinkRequestController;
 use App\Http\Api\V1\ParentPortal\ParentAcademicController;
+use App\Http\Api\V1\ParentPortal\ParentClassLifeController;
 use App\Http\Api\V1\ParentPortal\ParentKitController;
 use App\Http\Api\V1\ParentPortal\ParentMessageController;
 use App\Http\Api\V1\ParentPortal\ShareTokenController;
@@ -19,8 +20,10 @@ use App\Http\Api\V1\School\AcademicHistoryController;
 use App\Http\Api\V1\School\AssignClassroomController;
 use App\Http\Api\V1\School\AttendanceController;
 use App\Http\Api\V1\School\CertificateController;
+use App\Http\Api\V1\School\ClassPostController;
 use App\Http\Api\V1\School\ClassroomController;
 use App\Http\Api\V1\School\ClassroomLifeController;
+use App\Http\Api\V1\School\DisciplinaryCaseController;
 use App\Http\Api\V1\School\CockpitController;
 use App\Http\Api\V1\School\CollectionController;
 use App\Http\Api\V1\School\DocumentAttestController;
@@ -38,6 +41,7 @@ use App\Http\Api\V1\School\PeopleController;
 use App\Http\Api\V1\School\PersonLinkRequestController;
 use App\Http\Api\V1\School\ReliabilityController;
 use App\Http\Api\V1\School\RiskAssessmentController;
+use App\Http\Api\V1\School\SchoolEventController;
 use App\Http\Api\V1\School\SchoolExpenseController;
 use App\Http\Api\V1\School\SchoolKitController;
 use App\Http\Api\V1\School\SchoolNetworkController;
@@ -79,6 +83,11 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
         Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
         Route::post('/schools/{school}/kit-definitions/copy-year', [SchoolKitController::class, 'copyYear']);
+        Route::get('/schools/{school}/classrooms/{classroom}/posts', [ClassPostController::class, 'index']);
+        Route::post('/schools/{school}/classrooms/{classroom}/posts', [ClassPostController::class, 'store']);
+        Route::get('/schools/{school}/classrooms/{classroom}/discipline', [DisciplinaryCaseController::class, 'index']);
+        Route::post('/schools/{school}/classrooms/{classroom}/discipline', [DisciplinaryCaseController::class, 'store']);
+        Route::get('/schools/{school}/events', [SchoolEventController::class, 'index']);
     });
 
     Route::middleware('school.role:teacher')->group(function (): void {
@@ -141,6 +150,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/reliability/school', [ReliabilityController::class, 'school']);
         Route::get('/schools/{school}/reliability/school/compare', [ReliabilityController::class, 'schoolCompare']);
         Route::post('/schools/{school}/enrollments/{enrollment}/certificates', [CertificateController::class, 'store']);
+        Route::post('/schools/{school}/events', [SchoolEventController::class, 'store']);
         Route::post('/schools/{school}/enrollments/{enrollment}/withdraw', EnrollmentWithdrawController::class);
         Route::post('/schools/{school}/certificates/{certificate}/revoke', [CertificateController::class, 'revoke']);
         Route::post('/schools/{school}/documents/{document}/attest', DocumentAttestController::class);
@@ -178,6 +188,9 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('parent')->
     Route::get('/children/{person}/attendance', ChildAttendanceController::class);
     Route::get('/children/{person}/bulletin', [ParentAcademicController::class, 'bulletin']);
     Route::get('/children/{person}/certificates', [ParentAcademicController::class, 'certificates']);
+    Route::get('/children/{person}/posts', [ParentClassLifeController::class, 'posts']);
+    Route::get('/children/{person}/discipline', [ParentClassLifeController::class, 'discipline']);
+    Route::get('/children/{person}/events', [ParentClassLifeController::class, 'events']);
     Route::get('/kits', [ParentKitController::class, 'index']);
     Route::post('/kit-orders', [ParentKitController::class, 'store']);
     Route::get('/messages', ParentMessageController::class);

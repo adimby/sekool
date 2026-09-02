@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vague A et socle)
+# Guide de test — FANABE (Vagues A–B et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -105,7 +105,48 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ---
 
-## 9. Ce qui ne doit pas arriver
+## 9. Devoirs et cahier journal (Vague B)
+
+Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
+
+1. Professeur → **Classe** → **6ème A**.
+2. Section **Devoirs** : titre `Exercices Malagasy`, date dans quelques jours, consigne `Faire les exercices 1 à 4 page 12`. **Publier le devoir**.
+3. **Attendu :** bandeau « Devoir publié… » (pas de SMS). Le devoir apparaît dans la liste.
+4. Section **Cahier journal** : titre `Journée calme`, date du jour, résumé `La classe a travaillé le poème`. **Publier le journal**.
+5. **Attendu :** le mot apparaît. Pas de bouton Radier (lecture seule sur titulaire / EDT / radiation).
+6. Se déconnecter, parent Andry → **Enfants** → carte Hery.
+7. **Attendu :** section **Devoirs** avec `Exercices Malagasy` ; section **Cahier journal** avec `Journée calme`.
+8. Parent → **Messages**.
+9. **Attendu :** un message « Devoir pour Hery » et un « Mot de classe pour Hery ». Aucun mot *score*, *risque*, *élève en difficulté*.
+
+---
+
+## 10. Discipline sans score (Vague B)
+
+1. Professeur → **Classe** → **6ème A** → section **Discipline**.
+2. Élève **Hery**, constat `Bavardage répété pendant le cours`, mesure **Retenue**, **Enregistrer la mesure**.
+3. **Attendu :** bandeau « Mesure enregistrée… ». Ligne Hery · Retenue. Pas de note, pas de palier.
+4. Parent Andry → **Enfants** → Hery → **Discipline**.
+5. **Attendu :** `Retenue` et la date. Le constat détaillé n’est pas affiché à la famille.
+6. Parent → **Messages**.
+7. **Attendu :** « Mesure enregistrée pour Hery », invitation à contacter l’école, pas de SMS, pas de jugement de score.
+
+---
+
+## 11. Événement d’école (Vague B)
+
+1. Direction → **Classes** → **6ème A** → section **Événements**.
+2. Type **Portes ouvertes**, titre `Portes ouvertes 6ème A`, destinataires **Cette classe**, lieu `Salle A1`. **Publier l’événement**.
+3. **Attendu :** l’événement apparaît sur la fiche 6ème A.
+4. Parent Andry (Hery en 6ème A) → **Enfants** → **Événements**.
+5. **Attendu :** `Portes ouvertes 6ème A`.
+6. Un parent d’une autre classe (si disponible) ne voit pas cet événement.
+
+Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire de publication (réservé à la direction).
+
+---
+
+## 12. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -113,3 +154,5 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 - Le titulaire ne peut pas faire l’appel d’une classe dont il n’est pas titulaire.
 - Une école ne voit pas les dossiers d’une autre école.
 - Le titulaire ne peut pas radier un élève.
+- La discipline n’est pas une note qui punit.
+- Pas de chat élèves ni de fil de discussion interne.

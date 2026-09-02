@@ -57,6 +57,45 @@ type AttendanceRow = {
 
 type AttendanceMark = { status: string; reason: string; justification: string }
 
+type ClassPostRow = {
+  id: string
+  kind: string
+  kind_label?: string
+  title: string
+  body: string
+  due_on: string | null
+  held_on: string | null
+  attachment_name: string | null
+  attachment_body?: string | null
+}
+
+type DisciplineRow = {
+  id: string
+  enrollment_id: string
+  occurred_on: string
+  fact: string
+  measure_type: string
+  measure_label: string
+  measure_on: string | null
+  status: string
+  status_label?: string
+  follow_up: string | null
+  student?: { id: string; first_name: string; last_name: string } | null
+}
+
+type SchoolEventRow = {
+  id: string
+  type: string
+  type_label?: string
+  title: string
+  body: string | null
+  starts_on: string
+  ends_on: string | null
+  audience: string
+  audience_label?: string
+  location: string | null
+}
+
 const ATTENDANCE_REASONS = [
   { id: 'Maladie', label: 'Maladie' },
   { id: 'Raison familiale', label: 'Raison familiale' },
@@ -945,6 +984,26 @@ function activityTypeLabel(type?: string): string {
   if (type === 'outing') return 'Sortie'
   if (type === 'celebration') return 'Fête'
   return 'Autre'
+}
+
+function measureTypeLabel(type?: string): string {
+  if (type === 'warning') return 'Avertissement'
+  if (type === 'detention') return 'Retenue'
+  if (type === 'meeting') return 'Convocation'
+  return 'Autre'
+}
+
+function schoolEventTypeLabel(type?: string): string {
+  if (type === 'meeting') return 'Réunion'
+  if (type === 'open_day') return 'Portes ouvertes'
+  if (type === 'tournament') return 'Tournoi'
+  return 'Autre'
+}
+
+function schoolEventAudienceLabel(audience?: string): string {
+  if (audience === 'grade') return 'Ce niveau'
+  if (audience === 'classroom') return 'Cette classe'
+  return 'Toute l’école'
 }
 
 function councilStatusLabel(status?: string): string {
@@ -1937,6 +1996,7 @@ function ClassFilePanel({
   busy,
   readOnly = false,
   canWriteGrades,
+  canWriteVieScolaire,
   onBusy,
   onMessage,
   onReload,
@@ -1951,6 +2011,7 @@ function ClassFilePanel({
   busy: boolean
   readOnly?: boolean
   canWriteGrades?: boolean
+  canWriteVieScolaire?: boolean
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
   onReload: () => Promise<void>
@@ -2002,6 +2063,33 @@ function ClassFilePanel({
   const [certTick, setCertTick] = useState(0)
   const [withdrawId, setWithdrawId] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
+  const [posts, setPosts] = useState<ClassPostRow[]>([])
+  const [discipline, setDiscipline] = useState<DisciplineRow[]>([])
+  const [events, setEvents] = useState<SchoolEventRow[]>([])
+  const [lifeTick, setLifeTick] = useState(0)
+  const [hwTitle, setHwTitle] = useState('')
+  const [hwBody, setHwBody] = useState('')
+  const [hwDue, setHwDue] = useState(() => new Date().toISOString().slice(0, 10))
+  const [hwFileName, setHwFileName] = useState('')
+  const [hwFileBody, setHwFileBody] = useState('')
+  const [journalTitle, setJournalTitle] = useState('')
+  const [journalBody, setJournalBody] = useState('')
+  const [journalDate, setJournalDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [journalFileName, setJournalFileName] = useState('')
+  const [journalFileBody, setJournalFileBody] = useState('')
+  const [discStudent, setDiscStudent] = useState('')
+  const [discDate, setDiscDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [discFact, setDiscFact] = useState('')
+  const [discType, setDiscType] = useState('detention')
+  const [discLabel, setDiscLabel] = useState('Retenue')
+  const [discMeasureOn, setDiscMeasureOn] = useState('')
+  const [eventType, setEventType] = useState('open_day')
+  const [eventTitle, setEventTitle] = useState('')
+  const [eventBody, setEventBody] = useState('')
+  const [eventStart, setEventStart] = useState(() => new Date().toISOString().slice(0, 10))
+  const [eventEnd, setEventEnd] = useState('')
+  const [eventAudience, setEventAudience] = useState('classroom')
+  const [eventLocation, setEventLocation] = useState('')
 
   useEffect(() => {
     setCapacity(classroom.capacity ? String(classroom.capacity) : '')
@@ -2045,6 +2133,7 @@ function ClassFilePanel({
   const canCouncil = showsCouncil(stage)
   const canGrades = showsGrades(stage)
   const writeGrades = canWriteGrades ?? !readOnly
+  const writeVie = canWriteVieScolaire ?? !readOnly
   const canSeries = stage === 'high'
   const pickup = file.pickup ?? []
 
@@ -2093,6 +2182,21 @@ function ClassFilePanel({
       })
       .catch(() => setCertificates([]))
   }, [classroomId, schoolId, auth.token, file.students.length, certTick])
+
+  useEffect(() => {
+    Promise.all([
+      api<{ data: ClassPostRow[] }>(lifeUrl('/posts'), auth),
+      api<{ data: DisciplineRow[] }>(lifeUrl('/discipline'), auth),
+      api<{ data: SchoolEventRow[] }>(`/api/v1/schools/${schoolId}/events?classroom_id=${classroomId}`, auth),
+    ])
+      .then(([postList, discList, eventList]) => {
+        setPosts(postList.data)
+        setDiscipline(discList.data)
+        setEvents(eventList.data)
+        setDiscStudent((prev) => prev || file.students[0]?.enrollment_id || '')
+      })
+      .catch((error: Error) => onMessage(error.message))
+  }, [classroomId, schoolId, auth.token, file.students.length, lifeTick])
 
   return (
     <div>
@@ -2362,6 +2466,307 @@ function ClassFilePanel({
           ) : null}
         </ClassSection>
       ) : null}
+
+      <ClassSection title="Devoirs">
+        <p className="text-xs text-neutral-500">Texte, date et fichier. Visible des familles. Pas un chat élèves.</p>
+        {posts.filter((row) => row.kind === 'homework').length === 0 ? (
+          <p className="mt-2 text-xs text-neutral-500">Aucun devoir pour cette classe.</p>
+        ) : (
+          <ul className="mt-2 space-y-2 text-sm">
+            {posts
+              .filter((row) => row.kind === 'homework')
+              .map((row) => (
+                <li key={row.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                  <p className="font-medium">
+                    {row.title}
+                    <span className="ml-2 text-xs font-normal text-neutral-500">
+                      pour le {row.due_on ? formatDate(row.due_on) : '—'}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-neutral-600">{row.body}</p>
+                  {row.attachment_name ? (
+                    <p className="mt-0.5 text-[11px] text-neutral-500">Fichier : {row.attachment_name}</p>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+        )}
+        {writeVie ? (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/posts'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    kind: 'homework',
+                    title: hwTitle,
+                    body: hwBody,
+                    due_on: hwDue,
+                    attachment_name: hwFileName.trim() || null,
+                    attachment_body: hwFileBody.trim() || null,
+                  }),
+                })
+                setHwTitle('')
+                setHwBody('')
+                setHwFileName('')
+                setHwFileBody('')
+                setLifeTick((n) => n + 1)
+              }, 'Devoir publié. Les familles sont prévenues dans l’application (pas de SMS).')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input className={inputClass} value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} placeholder="Titre" required />
+              <input className={inputClass} type="date" value={hwDue} onChange={(e) => setHwDue(e.target.value)} required />
+            </div>
+            <textarea
+              className={`${inputClass} h-16 py-1.5`}
+              value={hwBody}
+              onChange={(e) => setHwBody(e.target.value)}
+              placeholder="Consigne"
+              required
+            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input className={inputClass} value={hwFileName} onChange={(e) => setHwFileName(e.target.value)} placeholder="Nom du fichier (optionnel)" />
+              <input className={inputClass} value={hwFileBody} onChange={(e) => setHwFileBody(e.target.value)} placeholder="Contenu du fichier (texte)" />
+            </div>
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Publier le devoir
+            </button>
+          </form>
+        ) : null}
+      </ClassSection>
+
+      <ClassSection title="Cahier journal">
+        <p className="text-xs text-neutral-500">Résumé du jour, visible des familles. Pas un fil de discussion.</p>
+        {posts.filter((row) => row.kind === 'journal').length === 0 ? (
+          <p className="mt-2 text-xs text-neutral-500">Aucun mot de classe.</p>
+        ) : (
+          <ul className="mt-2 space-y-2 text-sm">
+            {posts
+              .filter((row) => row.kind === 'journal')
+              .map((row) => (
+                <li key={row.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                  <p className="font-medium">
+                    {row.title}
+                    <span className="ml-2 text-xs font-normal text-neutral-500">
+                      {row.held_on ? formatDate(row.held_on) : ''}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-neutral-600">{row.body}</p>
+                  {row.attachment_name ? (
+                    <p className="mt-0.5 text-[11px] text-neutral-500">Fichier : {row.attachment_name}</p>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+        )}
+        {writeVie ? (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/posts'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    kind: 'journal',
+                    title: journalTitle,
+                    body: journalBody,
+                    held_on: journalDate,
+                    attachment_name: journalFileName.trim() || null,
+                    attachment_body: journalFileBody.trim() || null,
+                  }),
+                })
+                setJournalTitle('')
+                setJournalBody('')
+                setJournalFileName('')
+                setJournalFileBody('')
+                setLifeTick((n) => n + 1)
+              }, 'Cahier journal publié. Les familles le voient dans l’application.')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input className={inputClass} value={journalTitle} onChange={(e) => setJournalTitle(e.target.value)} placeholder="Titre" required />
+              <input className={inputClass} type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} required />
+            </div>
+            <textarea
+              className={`${inputClass} h-16 py-1.5`}
+              value={journalBody}
+              onChange={(e) => setJournalBody(e.target.value)}
+              placeholder="Résumé du jour"
+              required
+            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input className={inputClass} value={journalFileName} onChange={(e) => setJournalFileName(e.target.value)} placeholder="Nom du fichier (optionnel)" />
+              <input className={inputClass} value={journalFileBody} onChange={(e) => setJournalFileBody(e.target.value)} placeholder="Contenu du fichier (texte)" />
+            </div>
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Publier le journal
+            </button>
+          </form>
+        ) : null}
+      </ClassSection>
+
+      <ClassSection title="Discipline">
+        <p className="text-xs text-neutral-500">
+          Constat, mesure, suivi. Sanctions personnalisables, sans score. Les familles reçoivent un avis factuel.
+        </p>
+        {discipline.length === 0 ? (
+          <p className="mt-2 text-xs text-neutral-500">Aucune mesure enregistrée.</p>
+        ) : (
+          <ul className="mt-2 space-y-2 text-sm">
+            {discipline.map((row) => (
+              <li key={row.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                <p className="font-medium">
+                  {row.student ? `${row.student.first_name} ${row.student.last_name}` : 'Élève'}
+                  <span className="ml-2 text-xs font-normal text-neutral-500">
+                    {row.measure_label} · {formatDate(row.occurred_on)}
+                    {row.status_label ? ` · ${row.status_label}` : ''}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-neutral-600">{row.fact}</p>
+                {row.follow_up ? <p className="mt-0.5 text-xs text-neutral-500">Suivi : {row.follow_up}</p> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {writeVie ? (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(lifeUrl('/discipline'), {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    enrollment_id: discStudent,
+                    occurred_on: discDate,
+                    fact: discFact,
+                    measure_type: discType,
+                    measure_label: discLabel.trim() || measureTypeLabel(discType),
+                    measure_on: discMeasureOn || null,
+                  }),
+                })
+                setDiscFact('')
+                setDiscMeasureOn('')
+                setLifeTick((n) => n + 1)
+              }, 'Mesure enregistrée. La famille est prévenue (application et papier, pas de SMS).')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <select className={inputClass} value={discStudent} onChange={(e) => setDiscStudent(e.target.value)} required>
+                <option value="">Élève</option>
+                {file.students.map((row) => (
+                  <option key={row.enrollment_id} value={row.enrollment_id}>
+                    {row.person ? personLabel(row.person) : row.enrollment_id}
+                  </option>
+                ))}
+              </select>
+              <input className={inputClass} type="date" value={discDate} onChange={(e) => setDiscDate(e.target.value)} required />
+              <select
+                className={inputClass}
+                value={discType}
+                onChange={(e) => {
+                  setDiscType(e.target.value)
+                  setDiscLabel(measureTypeLabel(e.target.value))
+                }}
+              >
+                <option value="warning">Avertissement</option>
+                <option value="detention">Retenue</option>
+                <option value="meeting">Convocation</option>
+                <option value="other">Autre</option>
+              </select>
+              <input className={inputClass} value={discLabel} onChange={(e) => setDiscLabel(e.target.value)} placeholder="Libellé de la mesure" required />
+            </div>
+            <input className={inputClass} value={discFact} onChange={(e) => setDiscFact(e.target.value)} placeholder="Constat (faits, sans jugement de score)" required />
+            <input className={inputClass} type="date" value={discMeasureOn} onChange={(e) => setDiscMeasureOn(e.target.value)} placeholder="Date de la mesure" />
+            <button type="submit" className={btnGhost} disabled={busy || !discStudent}>
+              Enregistrer la mesure
+            </button>
+          </form>
+        ) : null}
+      </ClassSection>
+
+      <ClassSection title="Événements">
+        <p className="text-xs text-neutral-500">Réunion, portes ouvertes, tournoi. Destinataires : école, niveau ou classe.</p>
+        {events.length === 0 ? (
+          <p className="mt-2 text-xs text-neutral-500">Aucun événement pour cette classe.</p>
+        ) : (
+          <ul className="mt-2 space-y-2 text-sm">
+            {events.map((row) => (
+              <li key={row.id} className="border-t border-black/5 pt-2 first:border-t-0 first:pt-0">
+                <p className="font-medium">
+                  {row.title}
+                  <span className="ml-2 text-xs font-normal text-neutral-500">
+                    {row.type_label ?? schoolEventTypeLabel(row.type)} · {formatDate(row.starts_on)}
+                    {row.location ? ` · ${row.location}` : ''}
+                    {` · ${row.audience_label ?? schoolEventAudienceLabel(row.audience)}`}
+                  </span>
+                </p>
+                {row.body ? <p className="mt-0.5 text-xs text-neutral-600">{row.body}</p> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {readOnly ? null : (
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(`/api/v1/schools/${schoolId}/events`, {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({
+                    type: eventType,
+                    title: eventTitle,
+                    body: eventBody || null,
+                    starts_on: eventStart,
+                    ends_on: eventEnd || null,
+                    audience: eventAudience,
+                    classroom_id: eventAudience === 'classroom' ? classroomId : null,
+                    grade_level_id: eventAudience === 'grade' ? classroom.grade_level_id : null,
+                    location: eventLocation || null,
+                  }),
+                })
+                setEventTitle('')
+                setEventBody('')
+                setEventLocation('')
+                setLifeTick((n) => n + 1)
+              }, 'Événement publié. Les familles concernées sont prévenues.')
+            }}
+          >
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <select className={inputClass} value={eventType} onChange={(e) => setEventType(e.target.value)}>
+                <option value="meeting">Réunion</option>
+                <option value="open_day">Portes ouvertes</option>
+                <option value="tournament">Tournoi</option>
+                <option value="other">Autre</option>
+              </select>
+              <input className={inputClass} value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} placeholder="Titre" required />
+              <input className={inputClass} type="date" value={eventStart} onChange={(e) => setEventStart(e.target.value)} required />
+              <input className={inputClass} type="date" value={eventEnd} onChange={(e) => setEventEnd(e.target.value)} />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <select className={inputClass} value={eventAudience} onChange={(e) => setEventAudience(e.target.value)}>
+                <option value="classroom">Cette classe</option>
+                <option value="grade">Ce niveau</option>
+                <option value="school">Toute l’école</option>
+              </select>
+              <input className={inputClass} value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} placeholder="Lieu" />
+            </div>
+            <input className={inputClass} value={eventBody} onChange={(e) => setEventBody(e.target.value)} placeholder="Précisions (optionnel)" />
+            <button type="submit" className={btnGhost} disabled={busy}>
+              Publier l’événement
+            </button>
+          </form>
+        )}
+      </ClassSection>
 
       <ClassSection title="Documents">
         <p className="text-xs text-neutral-500">
@@ -4683,6 +5088,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
               busy={busy}
               readOnly
               canWriteGrades
+              canWriteVieScolaire
               onBusy={setBusy}
               onMessage={setMessage}
               onReload={async () => {
@@ -5229,6 +5635,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
   }>({ children: [], catalog: [], orders: [] })
   const [bulletins, setBulletins] = useState<Record<string, BulletinRow>>({})
   const [certificates, setCertificates] = useState<Record<string, Array<{ id: string; type_label: string; public_reference: string; status: string }>>>({})
+  const [childPosts, setChildPosts] = useState<Record<string, ClassPostRow[]>>({})
+  const [childDiscipline, setChildDiscipline] = useState<Record<string, DisciplineRow[]>>({})
+  const [childEvents, setChildEvents] = useState<Record<string, SchoolEventRow[]>>({})
   const [consents, setConsents] = useState<ConsentRow[]>([])
   const [linkRequests, setLinkRequests] = useState<LinkRequestRow[]>([])
   const [transfers, setTransfers] = useState<TransferRow[]>([])
@@ -5254,7 +5663,7 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
       childId: prev.childId || firstGuardian?.id || payload.data[0]?.id || '',
       schoolId: prev.schoolId || schoolId,
     }))
-    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries] = await Promise.all([
+    const [entries, presence, notes, kitPayload, bulletinEntries, certEntries, postEntries, discEntries, eventEntries] = await Promise.all([
       Promise.all(
         payload.data.map(async (child) => {
           const finance = await api<ChildFinance>(`/api/v1/parent/children/${child.id}/finance`, auth)
@@ -5301,6 +5710,30 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
             return [child.id, row.data] as const
           }),
       ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: ClassPostRow[] }>(`/api/v1/parent/children/${child.id}/posts`, auth)
+            return [child.id, row.data] as const
+          }),
+      ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: DisciplineRow[] }>(`/api/v1/parent/children/${child.id}/discipline`, auth)
+            return [child.id, row.data] as const
+          }),
+      ),
+      Promise.all(
+        payload.data
+          .filter((child) => child.access === 'guardian')
+          .map(async (child) => {
+            const row = await api<{ data: SchoolEventRow[] }>(`/api/v1/parent/children/${child.id}/events`, auth)
+            return [child.id, row.data] as const
+          }),
+      ),
     ])
     setFinances(Object.fromEntries(entries))
     setAttendance(Object.fromEntries(presence))
@@ -5308,6 +5741,9 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
     setKits(kitPayload)
     setBulletins(Object.fromEntries(bulletinEntries))
     setCertificates(Object.fromEntries(certEntries))
+    setChildPosts(Object.fromEntries(postEntries))
+    setChildDiscipline(Object.fromEntries(discEntries))
+    setChildEvents(Object.fromEntries(eventEntries))
   }
 
   async function loadAccount() {
@@ -5523,6 +5959,63 @@ function ParentScreen({ session, tab }: { session: Session; tab: ParentTab }) {
                               <li key={row.id} className="flex justify-between gap-2">
                                 <span>{formatDate(row.date)}</span>
                                 <span className="text-right">{attendanceDetail(row)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Devoirs</h3>
+                        {(childPosts[child.id] ?? []).filter((row) => row.kind === 'homework').length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Aucun devoir pour le moment.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                            {(childPosts[child.id] ?? [])
+                              .filter((row) => row.kind === 'homework')
+                              .map((row) => (
+                                <li key={row.id}>
+                                  <span className="font-medium">{row.title}</span>
+                                  {row.due_on ? ` · pour le ${formatDate(row.due_on)}` : ''}
+                                  <span className="block text-neutral-500">{row.body}</span>
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Cahier journal</h3>
+                        {(childPosts[child.id] ?? []).filter((row) => row.kind === 'journal').length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Aucun mot de classe.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                            {(childPosts[child.id] ?? [])
+                              .filter((row) => row.kind === 'journal')
+                              .map((row) => (
+                                <li key={row.id}>
+                                  <span className="font-medium">{row.title}</span>
+                                  {row.held_on ? ` · ${formatDate(row.held_on)}` : ''}
+                                  <span className="block text-neutral-500">{row.body}</span>
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Discipline</h3>
+                        {(childDiscipline[child.id] ?? []).length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Aucune mesure enregistrée.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                            {(childDiscipline[child.id] ?? []).map((row) => (
+                              <li key={row.id}>
+                                {row.measure_label} · {formatDate(row.occurred_on)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <h3 className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Événements</h3>
+                        {(childEvents[child.id] ?? []).length === 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">Aucun événement prévu.</p>
+                        ) : (
+                          <ul className="mt-1 space-y-1 text-xs text-neutral-600">
+                            {(childEvents[child.id] ?? []).map((row) => (
+                              <li key={row.id}>
+                                {row.title} · {formatDate(row.starts_on)}
+                                {row.location ? ` · ${row.location}` : ''}
                               </li>
                             ))}
                           </ul>

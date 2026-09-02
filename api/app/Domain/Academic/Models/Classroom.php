@@ -89,4 +89,14 @@ class Classroom extends Model
     {
         return $this->hasMany(Enrollment::class);
     }
+
+    public function posts(): HasMany
+    {
+        return $this->hasMany(ClassPost::class);
+    }
+
+    public function disciplinaryCases(): HasMany
+    {
+        return $this->hasMany(DisciplinaryCase::class);
+    }
 }
