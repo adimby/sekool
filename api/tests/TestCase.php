@@ -21,6 +21,7 @@ use App\Domain\School\Models\SchoolRoleAssignment;
 use App\Domain\School\Models\SchoolYear;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Testing\TestResponse;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -30,6 +31,23 @@ abstract class TestCase extends BaseTestCase
     {
         TenantContext::clear();
         parent::tearDown();
+    }
+
+    protected function loginJson(string $email, string $password = 'password'): TestResponse
+    {
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => $password,
+        ])->assertOk();
+
+        if ($response->json('challenge')) {
+            return $this->postJson('/api/v1/auth/totp', [
+                'challenge_id' => $response->json('challenge_id'),
+                'code' => $response->json('demo_code'),
+            ])->assertOk();
+        }
+
+        return $response;
     }
 
     /**
