@@ -86,7 +86,7 @@ it('blocks teacher and room clashes across classes and records a substitution an
             'on_date' => $monday->toDateString(),
             'substitute_person_id' => $substitute['account']->person_id,
         ])
-        ->assertNotFound();
+        ->assertForbidden();
 
     $sub = $this->actingAs($school['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/timetable/{$slot['id']}/substitutions", [
@@ -106,7 +106,7 @@ it('blocks teacher and room clashes across classes and records a substitution an
             'ends_at' => '10:00',
             'room' => 'A1',
         ])
-        ->assertNotFound();
+        ->assertForbidden();
 
     $exam = $this->actingAs($school['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/classrooms/{$classA['id']}/exams", [
