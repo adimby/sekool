@@ -480,7 +480,7 @@ type ReliabilityOverview = {
 }
 
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
-type TeacherTab = 'appel' | 'kits'
+type TeacherTab = 'appel' | 'vie' | 'kits'
 type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
 
 const PAGE_SIZE = 40
@@ -497,6 +497,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
 
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
+  { id: 'vie', label: 'Vie scolaire' },
   { id: 'kits', label: 'Kits' },
 ]
 
@@ -5959,6 +5960,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const schoolId = session.schoolId ?? session.schools[0].id
   const [classrooms, setClassrooms] = useState<ClassroomRow[]>([])
   const [selectedClassroom, setSelectedClassroom] = useState('')
+  const [classFile, setClassFile] = useState<ClassFile | null>(null)
   const [students, setStudents] = useState<RosterStudent[]>([])
   const [query, setQuery] = useState('')
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -5972,6 +5974,8 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [queued, setQueued] = useState(0)
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const currentClass = classrooms.find((row) => row.id === selectedClassroom)
+  const titulaireClasses = classrooms.filter((row) => row.main_teacher_person_id === session.person_id)
+  const yearLabel = years.find((year) => year.id === yearId)?.label ?? years.find((year) => year.is_current)?.label ?? ''
   const visibleStudents = students.filter((row) =>
     matchesQuery(
       `${row.student_number ?? ''} ${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`,
@@ -5985,7 +5989,8 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth),
     ])
     setClassrooms(classList.data)
-    setSelectedClassroom((prev) => prev || classList.data[0]?.id || '')
+    const mine = classList.data.filter((row) => row.main_teacher_person_id === session.person_id)
+    setSelectedClassroom((prev) => prev || mine[0]?.id || classList.data[0]?.id || '')
     const current = yearsPayload.data.find((year) => year.is_current) ?? yearsPayload.data[0]
     setYears(yearsPayload.data)
     setYearId(current?.id ?? classList.data[0]?.school_year_id ?? '')
@@ -6000,6 +6005,11 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       auth,
     )
     setDuties(payload.data)
+  }
+
+  async function loadClassFile(classroomId: string) {
+    const payload = await api<{ data: ClassFile }>(`/api/v1/schools/${schoolId}/classrooms/${classroomId}`, auth)
+    setClassFile(payload.data)
   }
 
   async function startCourse(course: AttendanceCourse) {
@@ -6054,6 +6064,22 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       }
     })
   }, [attendanceDate, tab, schoolId, session.token])
+
+  useEffect(() => {
+    if (tab !== 'vie') return
+    const id = titulaireClasses.some((row) => row.id === selectedClassroom)
+      ? selectedClassroom
+      : titulaireClasses[0]?.id
+    if (!id) {
+      setClassFile(null)
+      return
+    }
+    if (id !== selectedClassroom) {
+      setSelectedClassroom(id)
+      return
+    }
+    loadClassFile(id).catch((error: Error) => setMessage(error.message))
+  }, [tab, selectedClassroom, schoolId, session.token, titulaireClasses.map((row) => row.id).join(',')])
 
   useEffect(() => {
     let cancelled = false
@@ -6327,6 +6353,78 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             )}
           </form>
         </Panel>
+      ) : null}
+
+      {tab === 'vie' && titulaireClasses.length === 0 ? (
+        <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">
+          Le tableau de bord vie scolaire est réservé au titulaire de la classe.
+        </p>
+      ) : null}
+
+      {tab === 'vie' && titulaireClasses.length > 0 ? (
+        <div className="space-y-3">
+          <Panel>
+            <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
+              <select
+                className={`${inputClass} w-auto`}
+                value={titulaireClasses.some((row) => row.id === selectedClassroom) ? selectedClassroom : titulaireClasses[0].id}
+                onChange={(e) => setSelectedClassroom(e.target.value)}
+              >
+                {titulaireClasses.map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>
+                    {unitLabel(classroom.grade_level?.stage) === 'Groupe' ? 'Groupe ' : ''}
+                    {classroom.name}
+                  </option>
+                ))}
+              </select>
+              {yearLabel ? <p className="text-xs text-neutral-500">{yearLabel}</p> : null}
+            </div>
+            {classFile ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-4">
+                  <Kpi label="Effectif" value={String(classFile.headcount)} hint="élèves inscrits" />
+                  <Kpi label="Enseignants" value={String(classFile.teachers.length)} hint="de l’année" />
+                  <Kpi
+                    label="Emploi du temps"
+                    value={String(classFile.timetable.length)}
+                    hint="créneaux"
+                  />
+                  <Kpi
+                    label="Vie de classe"
+                    value={String(classFile.activities.length + classFile.councils.length)}
+                    hint="activités et conseils"
+                  />
+                </div>
+                <p className="border-t border-black/5 px-3 py-2 text-[11px] text-neutral-500">
+                  Tableau de bord du titulaire pour l’année. Pas de radiation, pas d’écolage. Les familles sont
+                  prévenues dans l’application, pas par SMS.
+                </p>
+                <ClassFilePanel
+                  schoolId={schoolId}
+                  auth={auth}
+                  file={classFile}
+                  staff={[]}
+                  terms={[]}
+                  classrooms={titulaireClasses}
+                  busy={busy}
+                  readOnly
+                  canWriteGrades
+                  canWriteVieScolaire
+                  onBusy={setBusy}
+                  onMessage={setMessage}
+                  onReload={async () => {
+                    const id = titulaireClasses.some((row) => row.id === selectedClassroom)
+                      ? selectedClassroom
+                      : titulaireClasses[0]?.id
+                    if (id) await loadClassFile(id)
+                  }}
+                />
+              </>
+            ) : (
+              <p className="px-3 py-6 text-sm text-neutral-600">Chargement du tableau de bord…</p>
+            )}
+          </Panel>
+        </div>
       ) : null}
 
       {tab === 'kits' && classrooms.length === 0 ? (

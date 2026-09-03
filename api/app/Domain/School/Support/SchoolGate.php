@@ -148,12 +148,26 @@ final class SchoolGate
     }
 
     /**
-     * Dossier complet (effectif, EDT, conseil, notes). Direction only.
-     * A subject teacher must not open the whole class.
+     * Dossier complet (effectif, EDT, conseil, notes, historique de l’année).
+     * Direction, or the titulaire of that class — not a subject teacher.
      */
     public static function canViewClassFile(Request $request, Classroom $classroom): bool
     {
-        return self::isDirection($request);
+        if (self::isDirection($request)) {
+            return true;
+        }
+
+        return self::isTitulaireOf($request, $classroom);
+    }
+
+    public static function isTitulaireOf(Request $request, Classroom $classroom): bool
+    {
+        $personId = $request->user()?->person_id;
+
+        return self::isTeacher($request)
+            && is_string($personId)
+            && $personId !== ''
+            && $classroom->main_teacher_person_id === $personId;
     }
 
     /**
@@ -175,6 +189,10 @@ final class SchoolGate
         ?string $date = null,
     ): bool {
         if (self::isDirection($request)) {
+            return true;
+        }
+
+        if (self::isTitulaireOf($request, $classroom)) {
             return true;
         }
 

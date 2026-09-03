@@ -145,6 +145,13 @@ it('lets a subject teacher record attendance on their slot, not the titulaire’
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
         ->assertNotFound();
 
+    $this->actingAs($titulaire['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
+        ->assertOk()
+        ->assertJsonPath('data.classroom.name', '6ème A')
+        ->assertJsonPath('data.headcount', 1)
+        ->assertJsonPath('data.timetable.0.subject', 'Malagasy');
+
     $this->actingAs($maths['account'], 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
             'classroom_id' => $classroom['id'],

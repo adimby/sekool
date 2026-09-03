@@ -6,7 +6,7 @@ Comptes démo (mot de passe `password`) :
 |---|---|---|
 | Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
-| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Kits — Malagasy 6ème A (pas le dossier de classe) |
+| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Vie scolaire, Kits — titulaire (dossier de l’année) + Malagasy |
 | Maths | `teacher.maths.antsahabe@fanabe.test` | Appel — Mathématiques 6ème A (pas titulaire, pas le dossier) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
@@ -21,9 +21,11 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 1. Se connecter en **direction**.
 2. **Attendu :** onglets Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices. Pas d’onglet Appel.
 3. Se déconnecter, se connecter en **professeur**.
-4. **Attendu :** onglets Appel, Kits. Pas d’onglet Classe (le dossier est à la direction).
-5. Se déconnecter, se connecter en **parent**.
-6. **Attendu :** onglets Enfants, Kits, Messages, Compte.
+4. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction).
+5. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+6. **Attendu :** Appel (et Kits). Vie scolaire indique que le tableau de bord est réservé au titulaire. Pas le dossier 6ème A.
+7. Se déconnecter, se connecter en **parent**.
+8. **Attendu :** onglets Enfants, Kits, Messages, Compte.
 
 ---
 
@@ -108,9 +110,9 @@ En collège, les élèves restent en salle ; le professeur change. Nivo (titulai
 
 ## 8. Notes (déjà en place)
 
-Le dossier de classe est à la **direction** (plus d’onglet Classe côté professeur).
+Le titulaire saisit depuis **Vie scolaire**. La direction peut aussi depuis **Classes**.
 
-1. Direction → **Classes** → 6ème A → section **Notes**.
+1. Titulaire → **Vie scolaire** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
 3. Parent → **Enfants** → section **Notes**.
 4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
@@ -119,9 +121,9 @@ Le dossier de classe est à la **direction** (plus d’onglet Classe côté prof
 
 ## 9. Devoirs et cahier journal (Vague B)
 
-Sur **Hery** (6ème A). La direction (ou l’API professeur s’il enseigne) écrit ; le parent lit. L’écran professeur n’ouvre plus le dossier.
+Sur **Hery** (6ème A). Le titulaire écrit depuis **Vie scolaire** ; le parent lit.
 
-1. Direction → **Classes** → **6ème A**.
+1. Titulaire → **Vie scolaire** → **6ème A**.
 2. Section **Devoirs** : titre `Exercices Malagasy`, date dans quelques jours, consigne `Faire les exercices 1 à 4 page 12`. **Publier le devoir**.
 3. **Attendu :** bandeau « Devoir publié… » (pas de SMS). Le devoir apparaît dans la liste.
 4. Section **Cahier journal** : titre `Journée calme`, date du jour, résumé `La classe a travaillé le poème`. **Publier le journal**.
@@ -135,7 +137,7 @@ Sur **Hery** (6ème A). La direction (ou l’API professeur s’il enseigne) éc
 
 ## 10. Discipline sans score (Vague B)
 
-1. Direction → **Classes** → **6ème A** → section **Discipline**.
+1. Titulaire → **Vie scolaire** → **6ème A** → section **Discipline**.
 2. Élève **Hery**, constat `Bavardage répété pendant le cours`, mesure **Retenue**, **Enregistrer la mesure**.
 3. **Attendu :** bandeau « Mesure enregistrée… ». Ligne Hery · Retenue. Pas de note, pas de palier.
 4. Parent Andry → **Enfants** → Hery → **Discipline**.
@@ -154,7 +156,7 @@ Sur **Hery** (6ème A). La direction (ou l’API professeur s’il enseigne) éc
 5. **Attendu :** `Portes ouvertes 6ème A`.
 6. Un parent d’une autre classe (si disponible) ne voit pas cet événement.
 
-Le titulaire n’a plus le dossier de classe ; les événements se consultent côté direction / famille.
+Le titulaire voit les événements de sa classe dans **Vie scolaire** mais **n’a pas** le formulaire de publication (réservé à la direction).
 
 ---
 
@@ -162,7 +164,7 @@ Le titulaire n’a plus le dossier de classe ; les événements se consultent c�
 
 Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le catalogue (Langage, Vivre ensemble…) s’affiche quand même. Pour un élève réel, inscrire un enfant en GS ou s’appuyer sur les tests Pest `CompetencyLivretTest`.
 
-1. Direction → **Classes** → **GS A**.
+1. Titulaire → **Vie scolaire** → **GS A** (ou Direction → **Classes** → **GS A**).
 2. **Attendu :** section **Livret**, pas de section Notes. Aucun champ photo.
 3. S’il y a un élève : choisir l’élève, commentaire optionnel, bouton **Acquis** sur « S’exprimer à l’oral ».
 4. **Attendu :** bandeau de confirmation ; le niveau **Acquis** s’affiche. Pas une note chiffrée.
@@ -175,7 +177,7 @@ Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le ca
 
 Sur **Hery** (6ème A). Ce n’est pas un LSU.
 
-1. Direction → **Classes** → **6ème A** → section **Notes**.
+1. Titulaire → **Vie scolaire** → **6ème A** → section **Notes**.
 2. Choisir Hery dans le sélecteur de notes (le relevé se charge en dessous).
 3. **Attendu :** mention « Ce relevé est un document FANABE. Ce n’est pas un LSU. » et le compte d’absences sur 30 jours.
 4. Appréciation `Travail régulier. Continuer ainsi.` → **Enregistrer l’appréciation**.
@@ -300,10 +302,11 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ## 23. Appel par cours collège (Vague H)
 
-1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**. Pas d’onglet Classe.
+1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**.
 2. **Démarrer** Malagasy. **Attendu :** N° + noms. Pas Maths.
-3. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. Pas titulaire. **Démarrer** puis appel.
-4. Un samedi sans cours : « Pas de cours à cette date. »
+3. Nivo → **Vie scolaire** → 6ème A. **Attendu :** tableau de bord (effectif, enseignants, EDT, devoirs, discipline). Pas de bouton Radier.
+4. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. **Vie scolaire** : réservé au titulaire. **Démarrer** puis appel.
+5. Un samedi sans cours : « Pas de cours à cette date. »
 
 ---
 

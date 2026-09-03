@@ -72,13 +72,19 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
 
     $classroomId = $sixieme['id'];
 
-    $this->withToken($token)
+    $file = $this->withToken($token)
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}")
-        ->assertNotFound();
+        ->assertOk()
+        ->assertJsonPath('data.classroom.name', '6ème A')
+        ->json('data');
+
+    expect($file['headcount'])->toBeGreaterThan(0)
+        ->and($file['students'])->not->toBeEmpty();
 
     $this->withToken($token)
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}/roster")
-        ->assertNotFound();
+        ->assertOk()
+        ->assertJsonMissingPath('data.students.0.invoice');
 
     $this->withToken($token)
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
