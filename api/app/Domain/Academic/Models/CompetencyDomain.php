@@ -4,13 +4,14 @@ namespace App\Domain\Academic\Models;
 
 use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Platform\Tenancy\BelongsToTenant;
+use App\Domain\Platform\Tenancy\HasReadyTable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CompetencyDomain extends Model
 {
-    use BelongsToTenant, HasUuids;
+    use BelongsToTenant, HasReadyTable, HasUuids;
 
     protected $fillable = [
         'school_id',

@@ -23,6 +23,10 @@ final class SchoolEventController extends Controller
             'classroom_id' => ['nullable', 'uuid'],
         ]);
 
+        if (! SchoolEvent::tableReady()) {
+            return response()->json(['data' => []]);
+        }
+
         $query = SchoolEvent::query()->orderByDesc('starts_on')->orderByDesc('created_at');
 
         if (isset($data['classroom_id'])) {

@@ -24,7 +24,7 @@ final class SchoolTimetableController extends Controller
             $personId = $request->user()?->person_id;
             if (! is_string($personId) || $personId === '') {
                 $query->whereRaw('false');
-            } else {
+            } elseif (TimetableSubstitution::tableReady()) {
                 $query->where(function ($inner) use ($personId): void {
                     $inner->where('teacher_person_id', $personId)
                         ->orWhereHas(
@@ -32,6 +32,8 @@ final class SchoolTimetableController extends Controller
                             fn ($subs) => $subs->where('substitute_person_id', $personId),
                         );
                 });
+            } else {
+                $query->where('teacher_person_id', $personId);
             }
         } else {
             $ids = SchoolGate::visibleClassrooms($request)->pluck('id');
@@ -46,12 +48,14 @@ final class SchoolTimetableController extends Controller
 
         $from = now()->toDateString();
         $until = now()->addDays(14)->toDateString();
-        $substitutions = TimetableSubstitution::query()
-            ->with(['substitute', 'slot'])
-            ->whereIn('timetable_slot_id', $slots->pluck('id'))
-            ->whereBetween('on_date', [$from, $until])
-            ->orderBy('on_date')
-            ->get();
+        $substitutions = TimetableSubstitution::tableReady()
+            ? TimetableSubstitution::query()
+                ->with(['substitute', 'slot'])
+                ->whereIn('timetable_slot_id', $slots->pluck('id'))
+                ->whereBetween('on_date', [$from, $until])
+                ->orderBy('on_date')
+                ->get()
+            : collect();
 
         return response()->json([
             'data' => $slots->map(fn (TimetableSlot $slot): array => EstablishmentTimetablePayload::slot($slot))->values(),
@@ -64,6 +68,10 @@ final class SchoolTimetableController extends Controller
     public function substitutions(Request $request, string $school, string $classroom): JsonResponse
     {
         $model = $this->guardView($request, $classroom);
+
+        if (! TimetableSubstitution::tableReady()) {
+            return response()->json(['data' => []]);
+        }
 
         $from = now()->toDateString();
         $rows = TimetableSubstitution::query()

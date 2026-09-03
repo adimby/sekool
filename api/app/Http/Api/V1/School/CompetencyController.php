@@ -27,6 +27,10 @@ final class CompetencyController extends Controller
             return response()->json(CompetencyPayload::livret([], [], false));
         }
 
+        if (! CompetencyDomain::tableReady()) {
+            return response()->json(CompetencyPayload::livret([], [], true));
+        }
+
         $catalog->forSchool($school, $stage);
 
         $domains = CompetencyDomain::query()

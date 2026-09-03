@@ -5,6 +5,7 @@ namespace App\Domain\School\Support;
 use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\TimetableSlot;
+use App\Domain\Academic\Models\TimetableSubstitution;
 use App\Domain\Academic\Support\ClassroomCycle;
 use App\Domain\Academic\Support\TimetableDuty;
 use App\Domain\Platform\Tenancy\TenantContext;
@@ -252,6 +253,10 @@ final class SchoolGate
 
         if ($classroom->timetableSlots()->where('teacher_person_id', $personId)->exists()) {
             return true;
+        }
+
+        if (! TimetableSubstitution::tableReady()) {
+            return false;
         }
 
         return $classroom->timetableSlots()

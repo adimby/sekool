@@ -18,6 +18,9 @@ final class DisciplinaryCaseController extends Controller
     public function index(Request $request, string $school, string $classroom): JsonResponse
     {
         $model = $this->guard($request, $classroom);
+        if (! DisciplinaryCase::tableReady()) {
+            return response()->json(['data' => []]);
+        }
 
         $rows = DisciplinaryCase::query()
             ->with('enrollment.person')

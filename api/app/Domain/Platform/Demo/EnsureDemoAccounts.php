@@ -15,6 +15,7 @@ use App\Domain\School\Models\School;
 use App\Domain\School\Models\SchoolRoleAssignment;
 use App\Domain\School\Models\SchoolYear;
 use Illuminate\Support\Facades\Hash;
+use Throwable;
 
 final class EnsureDemoAccounts
 {
@@ -95,7 +96,11 @@ final class EnsureDemoAccounts
     {
         TenantContext::runWithRlsBypass(function (): void {
             foreach (self::ACCOUNTS as $row) {
-                $this->ensure($row);
+                try {
+                    $this->ensure($row);
+                } catch (Throwable $e) {
+                    report($e);
+                }
             }
         });
     }

@@ -4,6 +4,7 @@ namespace App\Domain\Academic\Support;
 
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\TimetableSlot;
+use App\Domain\Academic\Models\TimetableSubstitution;
 use App\Domain\School\Support\SchoolGate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -24,17 +25,24 @@ final class TeacherDutyCourses
         }
 
         $weekday = TimetableDuty::weekdayOf($date);
-        $slots = TimetableSlot::query()
+        $slotsQuery = TimetableSlot::query()
             ->with('classroom.gradeLevel')
-            ->where('weekday', $weekday)
-            ->where(function (Builder $query) use ($personId, $date): void {
+            ->where('weekday', $weekday);
+
+        if (TimetableSubstitution::tableReady()) {
+            $slotsQuery->where(function (Builder $query) use ($personId, $date): void {
                 $query->where('teacher_person_id', $personId)
                     ->orWhereHas(
                         'substitutions',
                         fn (Builder $subs) => $subs->whereDate('on_date', $date)
                             ->where('substitute_person_id', $personId),
                     );
-            })
+            });
+        } else {
+            $slotsQuery->where('teacher_person_id', $personId);
+        }
+
+        $slots = $slotsQuery
             ->orderBy('starts_at')
             ->orderBy('classroom_id')
             ->get();

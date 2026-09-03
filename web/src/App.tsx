@@ -921,7 +921,7 @@ function attendanceDetail(row: {
 }
 
 function Banner({ message, onClear }: { message: string; onClear: () => void }) {
-  const error = /impossible|invalide|erreur|appartient pas/i.test(message)
+  const error = /impossible|invalide|erreur|appartient pas|server error/i.test(message)
   return (
     <p
       role="status"

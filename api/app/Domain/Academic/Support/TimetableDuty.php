@@ -19,6 +19,10 @@ final class TimetableDuty
      */
     public static function effectiveTeacherPersonId(TimetableSlot $slot, string $date): ?string
     {
+        if (! TimetableSubstitution::tableReady()) {
+            return $slot->teacher_person_id;
+        }
+
         $substitution = TimetableSubstitution::query()
             ->where('timetable_slot_id', $slot->id)
             ->whereDate('on_date', $date)
@@ -33,6 +37,10 @@ final class TimetableDuty
 
     public static function isCancelled(TimetableSlot $slot, string $date): bool
     {
+        if (! TimetableSubstitution::tableReady()) {
+            return false;
+        }
+
         return TimetableSubstitution::query()
             ->where('timetable_slot_id', $slot->id)
             ->whereDate('on_date', $date)

@@ -18,6 +18,9 @@ final class ClassPostController extends Controller
     public function index(Request $request, string $school, string $classroom): JsonResponse
     {
         $model = $this->guard($request, $classroom);
+        if (! ClassPost::tableReady()) {
+            return response()->json(['data' => []]);
+        }
 
         $rows = ClassPost::query()
             ->where('classroom_id', $model->id)

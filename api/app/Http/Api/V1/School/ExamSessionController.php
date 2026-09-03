@@ -16,6 +16,9 @@ final class ExamSessionController extends Controller
     public function index(Request $request, string $school, string $classroom): JsonResponse
     {
         $model = $this->guardView($request, $classroom);
+        if (! ExamSession::tableReady()) {
+            return response()->json(['data' => []]);
+        }
 
         $rows = ExamSession::query()
             ->where('classroom_id', $model->id)

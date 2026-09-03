@@ -5,6 +5,7 @@ use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
+use Illuminate\Support\Facades\Schema;
 
 it('serves a placeholder when the built UI is absent', function () {
     $this->get('/')->assertStatus(503);
@@ -39,6 +40,21 @@ it('lets the Antsahabe direction account log in after bootstrap', function () {
         ->assertJsonPath('schools.0.code', 'antsahabe')
         ->assertJsonPath('schools.0.role', 'school_admin')
         ->assertJsonPath('is_student', false);
+});
+
+it('lets the Antsahabe maths teacher log in after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'teacher.maths.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk()
+        ->assertJsonPath('schools.0.role', 'teacher')
+        ->assertJsonPath('person.first_name', 'Haja');
+
+    expect(Schema::hasTable('timetable_substitutions'))->toBeTrue()
+        ->and(Schema::hasTable('class_posts'))->toBeTrue()
+        ->and(Schema::hasTable('exam_sessions'))->toBeTrue();
 });
 
 it('lets the platform admin account log in after bootstrap', function () {
