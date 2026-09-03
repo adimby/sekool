@@ -84,6 +84,7 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/classrooms', [ClassroomController::class, 'index']);
         Route::get('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'show']);
         Route::get('/schools/{school}/classrooms/{classroom}/roster', [ClassroomController::class, 'roster']);
+        Route::get('/schools/{school}/attendance/mine', [AttendanceController::class, 'mine']);
         Route::get('/schools/{school}/attendance', [AttendanceController::class, 'index']);
         Route::get('/schools/{school}/subjects', [GradeController::class, 'subjects']);
         Route::post('/schools/{school}/subjects', [GradeController::class, 'storeSubject']);

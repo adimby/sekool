@@ -76,6 +76,9 @@ type AttendanceRow = {
   status: string
   reason?: string | null
   justification?: string | null
+  subject?: string | null
+  starts_at?: string | null
+  ends_at?: string | null
 }
 
 type AttendanceMark = { status: string; reason: string; justification: string }
@@ -330,7 +333,23 @@ type EnrollmentRow = {
 
 type RosterStudent = {
   enrollment_id: string
+  student_number?: string | null
   person: { id: string; public_id: string; first_name: string; last_name: string } | null
+}
+
+type AttendanceCourse = {
+  kind?: 'period' | 'full_day'
+  id: string
+  classroom_id?: string
+  classroom_name?: string
+  timetable_slot_id?: string | null
+  subject: string
+  starts_at: string | null
+  ends_at: string | null
+  room: string | null
+  teacher_person_id: string | null
+  scheduled_teacher_person_id?: string | null
+  cancelled: boolean
 }
 
 type InvoiceRow = {
@@ -412,7 +431,15 @@ type StudentOverview = {
     school: { name: string } | null
     classroom: { name: string } | null
   } | null
-  attendance: Array<{ id: string; date: string; status: string; reason?: string | null; justification?: string | null }>
+  attendance: Array<{
+    id: string
+    date: string
+    status: string
+    reason?: string | null
+    justification?: string | null
+    subject?: string | null
+    starts_at?: string | null
+  }>
   finance: {
     remaining_amount: number
     invoice: InvoiceRow | null
@@ -453,7 +480,7 @@ type ReliabilityOverview = {
 }
 
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
-type TeacherTab = 'classe' | 'appel' | 'kits'
+type TeacherTab = 'appel' | 'vie' | 'kits'
 type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
 
 const PAGE_SIZE = 40
@@ -470,7 +497,7 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
 
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
-  { id: 'classe', label: 'Classe' },
+  { id: 'vie', label: 'Vie scolaire' },
   { id: 'kits', label: 'Kits' },
 ]
 
@@ -484,7 +511,7 @@ const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
 const WORKSPACE_LABEL: Record<Workspace, string> = {
   platform: 'Plateforme',
   direction: 'Direction',
-  teacher: 'Classe',
+  teacher: 'Cours',
   parent: 'Famille',
   student: 'Élève',
 }
@@ -576,7 +603,7 @@ export default function App() {
           </nav>
         ) : null}
         {workspace === 'teacher' ? (
-          <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Classe">
+          <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Cours">
             {TEACHER_NAV.map((item) => (
               <button key={item.id} type="button" className={chromeTab(teacherTab === item.id)} onClick={() => setTeacherTab(item.id)}>
                 {item.label}
@@ -877,15 +904,24 @@ function attendanceLabel(status?: string): string {
   return status ?? ''
 }
 
-function attendanceDetail(row: { status: string; reason?: string | null; justification?: string | null }): string {
+function attendanceDetail(row: {
+  status: string
+  reason?: string | null
+  justification?: string | null
+  subject?: string | null
+  starts_at?: string | null
+}): string {
   const parts = [attendanceLabel(row.status)]
+  if (row.subject) {
+    parts.push(row.starts_at ? `${row.subject} ${row.starts_at}` : row.subject)
+  }
   if (row.reason) parts.push(row.reason)
   if (row.justification) parts.push(row.justification)
   return parts.join(' · ')
 }
 
 function Banner({ message, onClear }: { message: string; onClear: () => void }) {
-  const error = /impossible|invalide|erreur|appartient pas/i.test(message)
+  const error = /impossible|invalide|erreur|appartient pas|server error/i.test(message)
   return (
     <p
       role="status"
@@ -1147,7 +1183,8 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
   const demos = [
     { label: 'Plateforme', email: 'plateforme@fanabe.test' },
     { label: 'Direction', email: 'direction.antsahabe@fanabe.test' },
-    { label: 'Professeur', email: 'teacher.antsahabe@fanabe.test' },
+    { label: 'Titulaire', email: 'teacher.antsahabe@fanabe.test' },
+    { label: 'Maths', email: 'teacher.maths.antsahabe@fanabe.test' },
     { label: 'Parent', email: 'parent.andry@fanabe.test' },
     { label: 'Élève', email: 'eleve.fanja@fanabe.test' },
   ]
@@ -5928,6 +5965,8 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [query, setQuery] = useState('')
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [marks, setMarks] = useState<Record<string, AttendanceMark>>({})
+  const [duties, setDuties] = useState<AttendanceCourse[]>([])
+  const [started, setStarted] = useState<AttendanceCourse | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [years, setYears] = useState<YearRow[]>([])
@@ -5935,8 +5974,13 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   const [queued, setQueued] = useState(0)
   const auth = useMemo(() => ({ token: session.token }), [session.token])
   const currentClass = classrooms.find((row) => row.id === selectedClassroom)
+  const titulaireClasses = classrooms.filter((row) => row.main_teacher_person_id === session.person_id)
+  const yearLabel = years.find((year) => year.id === yearId)?.label ?? years.find((year) => year.is_current)?.label ?? ''
   const visibleStudents = students.filter((row) =>
-    matchesQuery(`${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`, query),
+    matchesQuery(
+      `${row.student_number ?? ''} ${row.person?.first_name ?? ''} ${row.person?.last_name ?? ''} ${row.person?.public_id ?? ''}`,
+      query,
+    ),
   )
 
   async function refresh() {
@@ -5945,18 +5989,22 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
       api<{ data: YearRow[] }>(`/api/v1/schools/${schoolId}/years`, auth),
     ])
     setClassrooms(classList.data)
-    setSelectedClassroom((prev) => prev || classList.data[0]?.id || '')
+    const mine = classList.data.filter((row) => row.main_teacher_person_id === session.person_id)
+    setSelectedClassroom((prev) => prev || mine[0]?.id || classList.data[0]?.id || '')
     const current = yearsPayload.data.find((year) => year.is_current) ?? yearsPayload.data[0]
     setYears(yearsPayload.data)
     setYearId(current?.id ?? classList.data[0]?.school_year_id ?? '')
   }
 
-  async function loadRoster(classroomId: string) {
-    const payload = await api<{ data: { students: RosterStudent[] } }>(
-      `/api/v1/schools/${schoolId}/classrooms/${classroomId}/roster`,
+  async function loadDuties(date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return
+    }
+    const payload = await api<{ data: AttendanceCourse[] }>(
+      `/api/v1/schools/${schoolId}/attendance/mine?${new URLSearchParams({ date }).toString()}`,
       auth,
     )
-    setStudents(payload.data.students)
+    setDuties(payload.data)
   }
 
   async function loadClassFile(classroomId: string) {
@@ -5964,13 +6012,28 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
     setClassFile(payload.data)
   }
 
-  async function loadAttendance(classroomId: string, date: string) {
+  async function startCourse(course: AttendanceCourse) {
+    if (course.cancelled) return
+    const params = new URLSearchParams({
+      classroom_id: course.classroom_id ?? course.id,
+      date: attendanceDate,
+    })
+    if (course.kind !== 'full_day' && (course.timetable_slot_id || course.id)) {
+      params.set('timetable_slot_id', course.timetable_slot_id ?? course.id)
+    }
     const payload = await api<{
       data: Array<{
         enrollment_id: string
+        student_number?: string | null
+        person: RosterStudent['person']
         attendance: { status: string; reason?: string | null; justification?: string | null } | null
       }>
-    }>(`/api/v1/schools/${schoolId}/attendance?classroom_id=${classroomId}&date=${date}&session=full_day`, auth)
+    }>(`/api/v1/schools/${schoolId}/attendance?${params.toString()}`, auth)
+    const nextStudents: RosterStudent[] = payload.data.map((row) => ({
+      enrollment_id: row.enrollment_id,
+      student_number: row.student_number,
+      person: row.person,
+    }))
     const next: Record<string, AttendanceMark> = {}
     for (const row of payload.data) {
       next[row.enrollment_id] = {
@@ -5979,7 +6042,10 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         justification: row.attendance?.justification ?? '',
       }
     }
+    setStudents(nextStudents)
     setMarks(next)
+    setStarted(course)
+    setQuery('')
   }
 
   useEffect(() => {
@@ -5987,23 +6053,33 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   }, [schoolId, session.token])
 
   useEffect(() => {
-    if (!selectedClassroom) return
-    loadRoster(selectedClassroom).catch((error: Error) => setMessage(error.message))
-  }, [selectedClassroom, schoolId, session.token])
-
-  useEffect(() => {
-    if (!selectedClassroom || tab !== 'classe') return
-    loadClassFile(selectedClassroom).catch((error: Error) => setMessage(error.message))
-  }, [selectedClassroom, tab, schoolId, session.token])
-
-  useEffect(() => {
-    if (!selectedClassroom || tab !== 'appel') return
-    loadAttendance(selectedClassroom, attendanceDate).catch((error: Error) => {
+    if (tab !== 'appel') return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) return
+    setStarted(null)
+    setStudents([])
+    setMarks({})
+    loadDuties(attendanceDate).catch((error: Error) => {
       if (!isNetworkError(error) && navigator.onLine) {
         setMessage(error.message)
       }
     })
-  }, [selectedClassroom, attendanceDate, tab, schoolId, session.token])
+  }, [attendanceDate, tab, schoolId, session.token])
+
+  useEffect(() => {
+    if (tab !== 'vie') return
+    const id = titulaireClasses.some((row) => row.id === selectedClassroom)
+      ? selectedClassroom
+      : titulaireClasses[0]?.id
+    if (!id) {
+      setClassFile(null)
+      return
+    }
+    if (id !== selectedClassroom) {
+      setSelectedClassroom(id)
+      return
+    }
+    loadClassFile(id).catch((error: Error) => setMessage(error.message))
+  }, [tab, selectedClassroom, schoolId, session.token, titulaireClasses.map((row) => row.id).join(',')])
 
   useEffect(() => {
     let cancelled = false
@@ -6022,6 +6098,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             body: JSON.stringify({
               date: item.date,
               session: item.session,
+              timetable_slot_id: item.timetable_slot_id ?? undefined,
               recorded_via: 'offline_sync',
               records: item.records,
             }),
@@ -6054,6 +6131,10 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   async function saveAttendance(event: FormEvent) {
     event.preventDefault()
+    if (!started) {
+      setMessage('Démarrez le cours pour faire l’appel.')
+      return
+    }
     const missing = students.filter((row) => {
       const mark = marks[row.enrollment_id]
       const status = mark?.status ?? 'present'
@@ -6073,7 +6154,13 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         client_reference: crypto.randomUUID(),
       }
     })
-    const payload = { date: attendanceDate, session: 'full_day', records }
+    const slotId = started.kind === 'full_day' ? null : (started.timetable_slot_id ?? started.id)
+    const payload = {
+      date: attendanceDate,
+      session: started.kind === 'full_day' ? 'full_day' : 'period',
+      ...(slotId ? { timetable_slot_id: slotId } : {}),
+      records,
+    }
     setBusy(true)
     setMessage(null)
     try {
@@ -6102,80 +6189,113 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
     }
   }
 
+  function courseLabel(course: AttendanceCourse): string {
+    const when = course.starts_at && course.ends_at ? `${course.starts_at}–${course.ends_at} ` : ''
+    const room = course.room ? ` · ${course.room}` : ''
+    const place = course.classroom_name ?? ''
+    return `${when}${course.subject}${place ? ` · ${place}` : ''}${room}`
+  }
+
   return (
     <main className="px-3 py-3 sm:px-4">
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
-      {classrooms.length === 0 ? (
-        <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">Aucune classe attribuée.</p>
-      ) : null}
 
-      {tab === 'classe' && classrooms.length > 0 ? (
-        <Panel className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
-            <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
-              {classrooms.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>
-                  {unitLabel(classroom.grade_level?.stage) === 'Groupe' ? 'Groupe ' : ''}
-                  {classroom.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {classFile ? (
-            <ClassFilePanel
-              schoolId={schoolId}
-              auth={auth}
-              file={classFile}
-              staff={[]}
-              terms={[]}
-              classrooms={classrooms}
-              busy={busy}
-              readOnly
-              canWriteGrades
-              canWriteVieScolaire
-              onBusy={setBusy}
-              onMessage={setMessage}
-              onReload={async () => {
-                if (selectedClassroom) await loadClassFile(selectedClassroom)
-              }}
-            />
-          ) : (
-            <p className="px-3 py-6 text-sm text-neutral-600">Chargement du dossier…</p>
-          )}
-        </Panel>
-      ) : null}
-
-      {tab === 'appel' && classrooms.length > 0 ? (
+      {tab === 'appel' ? (
         <Panel>
           <form onSubmit={saveAttendance}>
             <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
-              <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
-                {classrooms.map((classroom) => (
-                  <option key={classroom.id} value={classroom.id}>
-                    {classroom.name}
-                  </option>
-                ))}
-              </select>
-              <input className={`${inputClass} w-auto`} type="date" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} />
-              <input className={`${inputClass} max-w-[10rem]`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrer" />
-              <button type="submit" disabled={busy || students.length === 0} className={`${btnPrimary} ml-auto`}>
-                {busy ? '…' : 'Enregistrer'}
-              </button>
+              <input
+                className={`${inputClass} w-auto`}
+                type="date"
+                value={attendanceDate}
+                onChange={(e) => setAttendanceDate(e.target.value)}
+                aria-label="Date"
+              />
+              {started ? (
+                <>
+                  <p className="text-sm font-medium">
+                    {courseLabel(started)}
+                  </p>
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    onClick={() => {
+                      setStarted(null)
+                      setStudents([])
+                      setMarks({})
+                    }}
+                  >
+                    Mes cours
+                  </button>
+                  <input className={`${inputClass} max-w-[10rem]`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrer" />
+                  <button type="submit" disabled={busy || students.length === 0} className={`${btnPrimary} ml-auto`}>
+                    {busy ? '…' : 'Enregistrer'}
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-neutral-600">Mes cours — démarrez un créneau pour faire l’appel.</p>
+              )}
             </div>
             {queued > 0 ? (
               <p className="border-b border-black/5 px-3 py-1.5 text-xs text-neutral-600">
                 {queued} appel{queued > 1 ? 's' : ''} en attente sur cet appareil (hors ligne).
               </p>
             ) : null}
-            {visibleStudents.length === 0 ? (
+            {!started ? (
+              duties.length === 0 ? (
+                <p className="px-3 py-6 text-sm text-neutral-600">
+                  Pas de cours à cette date. Les élèves restent en salle ; le professeur change.
+                </p>
+              ) : (
+                <ul className="divide-y divide-black/5">
+                  {duties.map((course) => (
+                    <li key={`${course.kind}-${course.id}`} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{course.subject}</p>
+                        <p className="text-xs text-neutral-500">
+                          {course.classroom_name}
+                          {course.starts_at && course.ends_at ? ` · ${course.starts_at}–${course.ends_at}` : ''}
+                          {course.room ? ` · ${course.room}` : ''}
+                          {course.cancelled ? ' · annulé' : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={btnPrimary}
+                        disabled={course.cancelled || busy}
+                        onClick={() => {
+                          setBusy(true)
+                          setMessage(null)
+                          startCourse(course)
+                            .catch((error: Error) => setMessage(error.message))
+                            .finally(() => setBusy(false))
+                        }}
+                      >
+                        {course.cancelled ? 'Annulé' : 'Démarrer'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : visibleStudents.length === 0 ? (
               <p className="px-3 py-6 text-sm text-neutral-600">Aucun élève.</p>
             ) : (
               <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                    <th className="px-3 py-1.5 font-semibold">N°</th>
+                    <th className="px-3 py-1.5 font-semibold">Élève</th>
+                    <th className="px-3 py-1.5 text-right font-semibold">Présence</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {visibleStudents.map((row) => {
                     const mark = marks[row.enrollment_id] ?? { status: 'present', reason: '', justification: '' }
                     return (
                       <tr key={row.enrollment_id} className="border-t border-black/5">
+                        <td className="w-12 px-3 py-1.5 align-top tabular-nums text-neutral-500">
+                          {row.student_number ?? '—'}
+                        </td>
                         <td className="px-3 py-1.5 align-top">
                           <p className="font-medium">
                             {row.person?.first_name} {row.person?.last_name}
@@ -6235,6 +6355,84 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         </Panel>
       ) : null}
 
+      {tab === 'vie' && titulaireClasses.length === 0 ? (
+        <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">
+          Le tableau de bord vie scolaire est réservé au titulaire de la classe.
+        </p>
+      ) : null}
+
+      {tab === 'vie' && titulaireClasses.length > 0 ? (
+        <div className="space-y-3">
+          <Panel>
+            <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
+              <select
+                className={`${inputClass} w-auto`}
+                value={titulaireClasses.some((row) => row.id === selectedClassroom) ? selectedClassroom : titulaireClasses[0].id}
+                onChange={(e) => setSelectedClassroom(e.target.value)}
+              >
+                {titulaireClasses.map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>
+                    {unitLabel(classroom.grade_level?.stage) === 'Groupe' ? 'Groupe ' : ''}
+                    {classroom.name}
+                  </option>
+                ))}
+              </select>
+              {yearLabel ? <p className="text-xs text-neutral-500">{yearLabel}</p> : null}
+            </div>
+            {classFile ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-4">
+                  <Kpi label="Effectif" value={String(classFile.headcount)} hint="élèves inscrits" />
+                  <Kpi label="Enseignants" value={String(classFile.teachers.length)} hint="de l’année" />
+                  <Kpi
+                    label="Emploi du temps"
+                    value={String(classFile.timetable.length)}
+                    hint="créneaux"
+                  />
+                  <Kpi
+                    label="Vie de classe"
+                    value={String(classFile.activities.length + classFile.councils.length)}
+                    hint="activités et conseils"
+                  />
+                </div>
+                <p className="border-t border-black/5 px-3 py-2 text-[11px] text-neutral-500">
+                  Tableau de bord du titulaire pour l’année. Pas de radiation, pas d’écolage. Les familles sont
+                  prévenues dans l’application, pas par SMS.
+                </p>
+                <ClassFilePanel
+                  schoolId={schoolId}
+                  auth={auth}
+                  file={classFile}
+                  staff={[]}
+                  terms={[]}
+                  classrooms={titulaireClasses}
+                  busy={busy}
+                  readOnly
+                  canWriteGrades
+                  canWriteVieScolaire
+                  onBusy={setBusy}
+                  onMessage={setMessage}
+                  onReload={async () => {
+                    const id = titulaireClasses.some((row) => row.id === selectedClassroom)
+                      ? selectedClassroom
+                      : titulaireClasses[0]?.id
+                    if (id) await loadClassFile(id)
+                  }}
+                />
+              </>
+            ) : (
+              <p className="px-3 py-6 text-sm text-neutral-600">Chargement du tableau de bord…</p>
+            )}
+          </Panel>
+        </div>
+      ) : null}
+
+      {tab === 'kits' && classrooms.length === 0 ? (
+        <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">
+          Les kits se gèrent pour les classes dont vous êtes titulaire.
+        </p>
+      ) : null}
+
       {tab === 'kits' && classrooms.length > 0 ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -6247,7 +6445,10 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
             </select>
             {currentClass?.grade_level?.name ? (
               <p className="text-[11px] text-neutral-500">
-                Liste du niveau {currentClass.grade_level.name} — titulaire de {currentClass.name}.
+                Liste du niveau {currentClass.grade_level.name}
+                {currentClass.main_teacher_person_id === session.person_id
+                  ? ` — titulaire de ${currentClass.name}.`
+                  : ` — enseignant de ${currentClass.name}.`}
               </p>
             ) : null}
           </div>
@@ -6275,10 +6476,15 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         </div>
       ) : null}
 
-      {currentClass && tab === 'appel' ? (
+      {tab === 'appel' ? (
         <p className="mt-2 text-[11px] text-neutral-500">
-          Appel de {currentClass.name} — P présent, A absent, R retard, E excusé. Motif obligatoire hors présent. Une
-          absence prévient la famille dans l’application.
+          {started && started.kind !== 'full_day'
+            ? `Appel du cours ${started.subject} — les élèves restent en salle, le professeur change. `
+            : started
+              ? `Appel de ${started.classroom_name ?? ''} — `
+              : 'L’effectif n’apparaît qu’après Démarrer, pour le cours du jour seulement. '}
+          P présent, A absent, R retard, E excusé. Motif obligatoire hors présent. Une absence prévient la famille
+          une fois dans la journée (dans l’application, pas de SMS).
         </p>
       ) : null}
     </main>

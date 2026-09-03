@@ -130,4 +130,21 @@ Sur la fiche **preschool** uniquement, section **Récupération** à partir des 
 
 ## 8. Invariant
 
-`D-23` — **Le cycle ne crée pas de tenant, pas de rôle, pas de politique d’autorisation.** Un professeur de GS et un professeur de 2nde passent par le même `SchoolGate`. Seul l’affichage de la fiche classe (et, en C-1b, quelques validations métier) lit `stage`.
+`D-23` — **Le cycle ne crée pas de tenant, pas de rôle distinct.** Un professeur de GS et un professeur de 2nde passent par le même `SchoolGate`. L’affichage de la fiche classe lit `stage`. L’appel aussi : jour en maternelle / primaire, créneau en collège / lycée (les élèves restent en salle, les professeurs tournent). Ce n’est pas un produit séparé.
+
+## 9. Appel selon le cycle (Vague H)
+
+À Madagascar, au collège et au lycée, **les élèves restent dans la même salle**. Les professeurs se relaient. Le titulaire est un responsable désigné ; il n’appelle pas toutes les heures.
+
+| Cycle | Qui fait l’appel | Unité |
+|---|---|---|
+| Maternelle / primaire | Titulaire (ou enseignant du groupe) | Jour (`full_day` / matin / après-midi) |
+| Collège / lycée | Professeur du créneau, ou remplaçant du jour | Cours (`timetable_slot_id`) |
+
+- Effectif numéroté (`enrollments.student_number`) : la colonne **N°** apparaît sur l’appel.
+- L’espace professeur d’un **enseignant de matière** n’ouvre **pas** le dossier de classe.
+- Le **titulaire** a un tableau de bord **Vie scolaire** : effectif, EDT, notes, devoirs, discipline, historique de l’année. Pas de radiation, pas d’écolage.
+- L’appel commence par **Mes cours** du jour, puis **Démarrer** : l’effectif n’est chargé que pour ce créneau (ou l’appel du jour en maternelle / primaire).
+- Une classe collège / lycée **sans EDT** encore : appel du jour, pour ne pas bloquer la mise en place.
+- Une absence le même jour, plusieurs cours : **un seul** avis famille (pas de SMS).
+- Le titulaire ne pointe pas le cours d’un autre professeur. Un enseignant de maths ne pointe pas le Malagasy.

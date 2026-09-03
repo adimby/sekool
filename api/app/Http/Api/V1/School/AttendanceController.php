@@ -7,6 +7,10 @@ use App\Domain\Academic\Enums\AttendanceSession;
 use App\Domain\Academic\Enums\AttendanceStatus;
 use App\Domain\Academic\Models\AttendanceRecord;
 use App\Domain\Academic\Models\Classroom;
+use App\Domain\Academic\Models\TimetableSlot;
+use App\Domain\Academic\Support\ClassroomCycle;
+use App\Domain\Academic\Support\TeacherDutyCourses;
+use App\Domain\Academic\Support\TimetableDuty;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\School\Support\SchoolGate;
@@ -17,41 +21,103 @@ use Illuminate\Support\Facades\DB;
 
 final class AttendanceController extends Controller
 {
+    public function mine(Request $request): JsonResponse
+    {
+        if (! SchoolGate::isTeacher($request)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+        ]);
+
+        return response()->json([
+            'data' => TeacherDutyCourses::forDate($request, $data['date']),
+        ]);
+    }
+
     public function index(Request $request, string $school): JsonResponse
     {
         $data = $request->validate([
             'classroom_id' => ['required', 'uuid'],
             'date' => ['required', 'date'],
             'session' => ['nullable', 'string'],
+            'timetable_slot_id' => ['nullable', 'uuid'],
         ]);
 
-        $classroom = Classroom::query()->find($data['classroom_id']);
-        if ($classroom === null || ! SchoolGate::canViewClassroom($request, $classroom)) {
+        $classroom = Classroom::query()->with('gradeLevel')->find($data['classroom_id']);
+        if ($classroom === null) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
         $session = AttendanceSession::tryFrom($data['session'] ?? AttendanceSession::FullDay->value)
             ?? AttendanceSession::FullDay;
+        $slotId = $data['timetable_slot_id'] ?? null;
+        $slot = null;
+        if ($slotId !== null) {
+            $slot = TimetableSlot::query()->find($slotId);
+            if ($slot === null || (string) $slot->classroom_id !== (string) $classroom->id) {
+                return response()->json(['message' => 'Cours introuvable.'], 404);
+            }
+            $session = AttendanceSession::Period;
+        }
+
+        $courses = TeacherDutyCourses::forClassroom($classroom, $data['date'], $request);
+        $requiresCourse = ClassroomCycle::requiresCourseForAttendance($classroom);
+
+        if (SchoolGate::isDirection($request)) {
+            // Direction may consult the roll; it cannot POST attendance.
+        } elseif (SchoolGate::isTeacher($request)) {
+            if ($slot !== null) {
+                if (TimetableDuty::isCancelled($slot, $data['date'])) {
+                    return response()->json(['message' => 'Ce cours est annulé.'], 403);
+                }
+                if (! SchoolGate::canTakeAttendance($request, $classroom, $slot, $data['date'])) {
+                    return response()->json(['message' => 'L’appel se fait par le professeur du cours.'], 403);
+                }
+            } elseif ($requiresCourse) {
+                return response()->json([
+                    'message' => 'Choisissez le cours.',
+                    'requires_course' => true,
+                    'courses' => $courses,
+                    'data' => [],
+                ], 422);
+            } elseif (! SchoolGate::canTakeAttendance($request, $classroom, null, $data['date'])) {
+                return response()->json(['message' => 'Not found.'], 404);
+            }
+        } else {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
 
         $enrollments = Enrollment::query()
             ->with('person')
             ->where('classroom_id', $data['classroom_id'])
             ->where('status', EnrollmentStatus::Active)
+            ->orderBy('student_number')
+            ->orderBy('id')
             ->get();
 
-        $records = AttendanceRecord::query()
+        $recordsQuery = AttendanceRecord::query()
             ->whereIn('enrollment_id', $enrollments->pluck('id'))
-            ->where('date', $data['date'])
-            ->where('session', $session)
-            ->get()
-            ->keyBy('enrollment_id');
+            ->where('date', $data['date']);
+
+        if ($slotId !== null) {
+            $recordsQuery->where('timetable_slot_id', $slotId);
+        } else {
+            $recordsQuery->whereNull('timetable_slot_id')->where('session', $session);
+        }
+
+        $records = $recordsQuery->get()->keyBy('enrollment_id');
 
         return response()->json([
+            'requires_course' => $requiresCourse,
+            'courses' => $courses,
             'data' => $enrollments->map(function (Enrollment $enrollment) use ($records): array {
                 $record = $records->get($enrollment->id);
 
                 return [
                     'enrollment_id' => $enrollment->id,
+                    'student_number' => $enrollment->student_number,
                     'person' => $enrollment->person === null ? null : [
                         'id' => $enrollment->person->id,
                         'public_id' => $enrollment->person->public_id,
@@ -64,6 +130,7 @@ final class AttendanceController extends Controller
                         'minutes_late' => $record->minutes_late,
                         'reason' => $record->reason,
                         'justification' => $record->justification,
+                        'timetable_slot_id' => $record->timetable_slot_id,
                     ],
                 ];
             })->values(),
@@ -75,6 +142,7 @@ final class AttendanceController extends Controller
         $data = $request->validate([
             'date' => ['required', 'date'],
             'session' => ['nullable', 'string'],
+            'timetable_slot_id' => ['nullable', 'uuid'],
             'recorded_via' => ['nullable', 'string', 'in:web,offline_sync'],
             'records' => ['required', 'array', 'min:1'],
             'records.*.enrollment_id' => ['required', 'uuid'],
@@ -93,6 +161,16 @@ final class AttendanceController extends Controller
         $schoolId = (string) $request->route('school');
         $actorId = $request->user()->person_id;
         $via = $data['recorded_via'] ?? 'web';
+        $slotId = $data['timetable_slot_id'] ?? null;
+        $slot = null;
+
+        if ($slotId !== null) {
+            $slot = TimetableSlot::query()->find($slotId);
+            if ($slot === null) {
+                return response()->json(['message' => 'Cours introuvable.'], 404);
+            }
+            $session = AttendanceSession::Period;
+        }
 
         $enrollmentIds = collect($data['records'])->pluck('enrollment_id')->unique()->all();
         $enrollments = Enrollment::query()->whereIn('id', $enrollmentIds)->get();
@@ -100,14 +178,43 @@ final class AttendanceController extends Controller
             return response()->json(['message' => 'Inscription introuvable.'], 404);
         }
 
-        $classrooms = Classroom::query()->whereIn('id', $enrollments->pluck('classroom_id')->unique())->get();
+        $classrooms = Classroom::query()
+            ->with('gradeLevel')
+            ->whereIn('id', $enrollments->pluck('classroom_id')->unique())
+            ->get();
+
+        if ($classrooms->isEmpty()) {
+            return response()->json(['message' => 'Inscription introuvable.'], 404);
+        }
+
         foreach ($classrooms as $classroom) {
-            if (! SchoolGate::canTakeAttendance($request, $classroom)) {
-                return response()->json(['message' => 'L’appel se fait par le professeur de la classe.'], 403);
+            if (! SchoolGate::isTeacher($request)) {
+                return response()->json(['message' => 'L’appel se fait par le professeur du cours.'], 403);
+            }
+            if ($slot !== null) {
+                if ((string) $slot->classroom_id !== (string) $classroom->id) {
+                    return response()->json(['message' => 'Ce cours n’appartient pas à cette classe.'], 422);
+                }
+                if ((int) $slot->weekday !== TimetableDuty::weekdayOf($data['date'])) {
+                    return response()->json(['message' => 'Ce cours n’a pas lieu à cette date.'], 422);
+                }
+                if (TimetableDuty::isCancelled($slot, $data['date'])) {
+                    return response()->json(['message' => 'Ce cours est annulé.'], 403);
+                }
+                if (! SchoolGate::canTakeAttendance($request, $classroom, $slot, $data['date'])) {
+                    return response()->json(['message' => 'L’appel se fait par le professeur du cours.'], 403);
+                }
+            } else {
+                if (ClassroomCycle::requiresCourseForAttendance($classroom)) {
+                    return response()->json(['message' => 'Choisissez le cours.'], 422);
+                }
+                if (! SchoolGate::canTakeAttendance($request, $classroom, null, $data['date'])) {
+                    return response()->json(['message' => 'L’appel se fait par le professeur de la classe.'], 403);
+                }
             }
         }
 
-        $saved = DB::transaction(function () use ($data, $session, $record, $schoolId, $actorId, $via) {
+        $saved = DB::transaction(function () use ($data, $session, $record, $schoolId, $actorId, $via, $slotId) {
             $rows = [];
             foreach ($data['records'] as $row) {
                 $status = AttendanceStatus::tryFrom($row['status']);
@@ -127,6 +234,7 @@ final class AttendanceController extends Controller
                     minutesLate: $row['minutes_late'] ?? null,
                     reason: $row['reason'] ?? null,
                     justification: $row['justification'] ?? null,
+                    timetableSlotId: $slotId,
                 );
             }
 
@@ -143,6 +251,7 @@ final class AttendanceController extends Controller
                 'reason' => $row->reason,
                 'justification' => $row->justification,
                 'client_reference' => $row->client_reference,
+                'timetable_slot_id' => $row->timetable_slot_id,
             ])->values(),
         ], 201);
     }

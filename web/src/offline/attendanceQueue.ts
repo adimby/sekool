@@ -7,6 +7,7 @@ export type QueuedAttendance = {
   schoolId: string
   date: string
   session: string
+  timetable_slot_id?: string
   records: Array<{
     enrollment_id: string
     status: string
@@ -100,5 +101,5 @@ export async function flushAttendanceQueue(
 
 function isFatalAttendanceError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : ''
-  return /introuvable|n’est pas|pas le professeur|403|404|422/i.test(message)
+  return /introuvable|n’est pas|pas le professeur|Choisissez le cours|annulé|403|404|422/i.test(message)
 }

@@ -27,14 +27,16 @@ Tu pourras un jour mettre **seulement** le frontend sur Vercel, avec l’API ail
 Oui : **toute l’application** (interface React + API Laravel) tient dans **un seul service** `app`. Le build Vite est copié dans Laravel (`public/app`) ; le navigateur parle au même domaine (`/api/v1/...`). Postgres (RLS) est le service `db`.
 
 1. Dans Dokploy : **Create Service → Compose** (pas Application, pas Stack).
-2. GitHub : dépôt `adimby/sekool`, branche `cursor/fanabe-architecture-docs-3345`.
+2. GitHub : dépôt `adimby/sekool`, branche **`cursor/appel-cours-college-3345`** (sommet de la pile : appel par cours + vie scolaire du titulaire). Un Redeploy de `cursor/fanabe-architecture-docs-3345` ne change rien : c’est l’ancienne interface.
 3. Compose file : **`compose.dokploy.yaml`**.
 4. Onglet **Environment** : coller [`.env.dokploy.example`](./.env.dokploy.example), puis :
    - `APP_URL=https://votre-domaine` (le même que l’étape 6)
    - `APP_KEY=base64:…` (`openssl rand -base64 32` puis préfixer `base64:`)
 5. Déployer une première fois (le build Docker prend quelques minutes).
 6. Onglet **Domains** : service **`app`**, **container port `3000`**, HTTPS. Après un Redeploy, revérifier ce port (Dokploy le remet parfois à 3000). DNS : enregistrement A vers l’IP du VPS.
-7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test`, `teacher.antsahabe@fanabe.test`, `parent.andry@fanabe.test`, `eleve.fanja@fanabe.test` / `password`.
+7. Ouvrir l’URL. Comptes : `direction.antsahabe@fanabe.test`, `teacher.antsahabe@fanabe.test`, `teacher.maths.antsahabe@fanabe.test`, `parent.andry@fanabe.test`, `eleve.fanja@fanabe.test` / `password`.
+
+**Ne passez pas Dokploy sur `main`.** `main` n’a que le commit initial. L’URL live (`https://sekool.ivonea.com/`) doit rester branchée sur `cursor/appel-cours-college-3345` : l’autodeploy suffit pour tester, sans fusionner la pile.
 
 Ne mappez **pas** le port 80 dans Compose : Traefik de Dokploy l’utilise déjà. Redis / MinIO / Mailpit ne sont pas dans ce fichier (inutiles pour la démo phase 2).
 
@@ -43,7 +45,7 @@ Si le déploiement échoue sur `network dokploy-network not found`, Dokploy n’
 ### Render (autre option de démo publique)
 
 1. Compte sur [render.com](https://render.com), GitHub connecté à `adimby/sekool`.
-2. **New → Blueprint** → ce dépôt, branche `cursor/fanabe-architecture-docs-3345` (`render.yaml`).
+2. **New → Blueprint** → ce dépôt, branche **`cursor/appel-cours-college-3345`** (`render.yaml`).
 3. Attendre le build Docker. L’URL ressemble à `https://fanabe-xxxx.onrender.com`.
 4. Comptes : `direction.antsahabe@fanabe.test`, `teacher.antsahabe@fanabe.test`, `parent.andry@fanabe.test`, `eleve.fanja@fanabe.test` / `password`.
 
@@ -70,7 +72,7 @@ Sans Blueprint : New → PostgreSQL, puis New → Web Service → Docker, Docker
 ```bash
 cd /opt/project/sekool   # ou le chemin du clone
 git fetch origin
-git checkout cursor/fanabe-architecture-docs-3345
+git checkout cursor/appel-cours-college-3345
 git pull
 
 # Arrêter les conteneurs déjà créés (Mailpit / MinIO ont pu démarrer)
@@ -96,12 +98,12 @@ docker compose --profile vps down -v
 make vps
 ```
 
-Prérequis local (sans `make vps`) : PHP 8.3+, Composer, PostgreSQL, Node 22+. Branche : `cursor/fanabe-architecture-docs-3345` (PR #1).
+Prérequis local (sans `make vps`) : PHP 8.3+, Composer, PostgreSQL, Node 22+. Branche : `cursor/appel-cours-college-3345` (PR #9).
 
 ```bash
 git clone https://github.com/adimby/sekool.git
 cd sekool
-git checkout cursor/fanabe-architecture-docs-3345
+git checkout cursor/appel-cours-college-3345
 
 # PostgreSQL / Redis / MinIO / Mailpit
 make up

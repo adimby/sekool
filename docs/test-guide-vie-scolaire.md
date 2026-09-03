@@ -1,4 +1,4 @@
-# Guide de test — FANABE (Vagues A–G et socle)
+# Guide de test — FANABE (Vagues A–H et socle)
 
 Comptes démo (mot de passe `password`) :
 
@@ -6,7 +6,8 @@ Comptes démo (mot de passe `password`) :
 |---|---|---|
 | Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
-| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Classe, Kits |
+| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Vie scolaire, Kits — titulaire (dossier de l’année) + Malagasy |
+| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel — Mathématiques 6ème A (pas titulaire, pas le dossier) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
 Ouvrir l’interface (Vite `http://127.0.0.1:5173` en local). Après une action, un **bandeau vert** confirme ; un **bandeau rouge** signale une erreur.
@@ -20,9 +21,11 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 1. Se connecter en **direction**.
 2. **Attendu :** onglets Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices. Pas d’onglet Appel.
 3. Se déconnecter, se connecter en **professeur**.
-4. **Attendu :** onglets Appel, Classe, Kits.
-5. Se déconnecter, se connecter en **parent**.
-6. **Attendu :** onglets Enfants, Kits, Messages, Compte.
+4. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction).
+5. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+6. **Attendu :** Appel (et Kits). Vie scolaire indique que le tableau de bord est réservé au titulaire. Pas le dossier 6ème A.
+7. Se déconnecter, se connecter en **parent**.
+8. **Attendu :** onglets Enfants, Kits, Messages, Compte.
 
 ---
 
@@ -42,15 +45,23 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ## 3. Appel avec motif et justificatif
 
-1. Professeur → **Appel**, classe **6ème A**, date du jour.
-2. Pour **Hery** : pastille **A** (absent).
-3. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
-4. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
-5. **Enregistrer**.
-6. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
-7. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
-8. **Attendu :** message d’erreur demandant un motif.
-9. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
+En collège, les élèves restent en salle ; le professeur change. Nivo (titulaire) fait l’appel de **Malagasy**, pas des Maths. L’effectif n’apparaît qu’après **Démarrer**.
+
+1. Titulaire → **Appel**, date un **jour de semaine**.
+2. **Attendu :** liste **Mes cours** (Malagasy 07:30 6ème A, éventuellement appel du jour sur GS / 5ème / Tle sans EDT). Pas de menu de toute la classe. Pas le créneau Maths.
+3. **Démarrer** sur Malagasy.
+4. **Attendu :** colonne **N°** devant les noms. Uniquement ce cours.
+5. Pour **Hery** : pastille **A** (absent).
+6. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
+7. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
+8. **Enregistrer**.
+9. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
+10. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
+11. **Attendu :** message d’erreur demandant un motif.
+12. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
+13. Se déconnecter. Connexion **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+14. **Attendu :** Mes cours = **Mathématiques** 08:30 seulement. Pas d’onglet Classe. **Démarrer** puis Hery a son n°.
+15. Enregistrer l’appel Maths (tous présents). **Attendu :** OK. Le titulaire n’a pas pointé ce cours.
 
 ---
 
@@ -99,7 +110,9 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ## 8. Notes (déjà en place)
 
-1. Professeur → **Classe** → 6ème A → section **Notes**.
+Le titulaire saisit depuis **Vie scolaire**. La direction peut aussi depuis **Classes**.
+
+1. Titulaire → **Vie scolaire** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
 3. Parent → **Enfants** → section **Notes**.
 4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
@@ -108,9 +121,9 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ## 9. Devoirs et cahier journal (Vague B)
 
-Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
+Sur **Hery** (6ème A). Le titulaire écrit depuis **Vie scolaire** ; le parent lit.
 
-1. Professeur → **Classe** → **6ème A**.
+1. Titulaire → **Vie scolaire** → **6ème A**.
 2. Section **Devoirs** : titre `Exercices Malagasy`, date dans quelques jours, consigne `Faire les exercices 1 à 4 page 12`. **Publier le devoir**.
 3. **Attendu :** bandeau « Devoir publié… » (pas de SMS). Le devoir apparaît dans la liste.
 4. Section **Cahier journal** : titre `Journée calme`, date du jour, résumé `La classe a travaillé le poème`. **Publier le journal**.
@@ -124,7 +137,7 @@ Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
 
 ## 10. Discipline sans score (Vague B)
 
-1. Professeur → **Classe** → **6ème A** → section **Discipline**.
+1. Titulaire → **Vie scolaire** → **6ème A** → section **Discipline**.
 2. Élève **Hery**, constat `Bavardage répété pendant le cours`, mesure **Retenue**, **Enregistrer la mesure**.
 3. **Attendu :** bandeau « Mesure enregistrée… ». Ligne Hery · Retenue. Pas de note, pas de palier.
 4. Parent Andry → **Enfants** → Hery → **Discipline**.
@@ -143,7 +156,7 @@ Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
 5. **Attendu :** `Portes ouvertes 6ème A`.
 6. Un parent d’une autre classe (si disponible) ne voit pas cet événement.
 
-Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire de publication (réservé à la direction).
+Le titulaire voit les événements de sa classe dans **Vie scolaire** mais **n’a pas** le formulaire de publication (réservé à la direction).
 
 ---
 
@@ -151,7 +164,7 @@ Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire
 
 Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le catalogue (Langage, Vivre ensemble…) s’affiche quand même. Pour un élève réel, inscrire un enfant en GS ou s’appuyer sur les tests Pest `CompetencyLivretTest`.
 
-1. Direction ou titulaire → **Classes** / **Classe** → **GS A**.
+1. Titulaire → **Vie scolaire** → **GS A** (ou Direction → **Classes** → **GS A**).
 2. **Attendu :** section **Livret**, pas de section Notes. Aucun champ photo.
 3. S’il y a un élève : choisir l’élève, commentaire optionnel, bouton **Acquis** sur « S’exprimer à l’oral ».
 4. **Attendu :** bandeau de confirmation ; le niveau **Acquis** s’affiche. Pas une note chiffrée.
@@ -164,7 +177,7 @@ Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le ca
 
 Sur **Hery** (6ème A). Ce n’est pas un LSU.
 
-1. Professeur → **Classe** → **6ème A** → section **Notes**.
+1. Titulaire → **Vie scolaire** → **6ème A** → section **Notes**.
 2. Choisir Hery dans le sélecteur de notes (le relevé se charge en dessous).
 3. **Attendu :** mention « Ce relevé est un document FANABE. Ce n’est pas un LSU. » et le compte d’absences sur 30 jours.
 4. Appréciation `Travail régulier. Continuer ainsi.` → **Enregistrer l’appréciation**.
@@ -256,7 +269,7 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ## 20. Appel hors ligne (Vague F)
 
-1. Professeur → **Appel** → 6ème A, effectif chargé.
+1. Professeur → **Appel** → 6ème A, cours Malagasy, effectif chargé (n° visibles).
 2. Couper le réseau (hors ligne du navigateur).
 3. Marquer Hery **A** + motif **Maladie** → **Enregistrer**.
 4. **Attendu :** bandeau « Hors ligne. L’appel est enregistré sur cet appareil… ». File en attente. **Pas** d’écriture caisse possible.
@@ -287,12 +300,22 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ---
 
-## 23. Ce qui ne doit pas arriver
+## 23. Appel par cours collège (Vague H)
+
+1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**.
+2. **Démarrer** Malagasy. **Attendu :** N° + noms. Pas Maths.
+3. Nivo → **Vie scolaire** → 6ème A. **Attendu :** tableau de bord (effectif, enseignants, EDT, devoirs, discipline). Pas de bouton Radier.
+4. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. **Vie scolaire** : réservé au titulaire. **Démarrer** puis appel.
+5. Un samedi sans cours : « Pas de cours à cette date. »
+
+---
+
+## 24. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
 - Le parent ne voit jamais un *score*, un *palier de risque* ou « élève en difficulté ».
-- Le titulaire ne peut pas faire l’appel d’une classe dont il n’est pas titulaire.
+- Un professeur ne peut pas faire l’appel d’un cours qui n’est pas le sien (autre classe, ou créneau d’un autre prof).
 - Une école ne voit pas les dossiers d’une autre école.
 - Le titulaire ne peut pas radier un élève.
 - La discipline n’est pas une note qui punit.

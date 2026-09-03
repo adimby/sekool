@@ -15,6 +15,7 @@ use App\Domain\School\Models\School;
 use App\Domain\School\Models\SchoolRoleAssignment;
 use App\Domain\School\Models\SchoolYear;
 use Illuminate\Support\Facades\Hash;
+use Throwable;
 
 final class EnsureDemoAccounts
 {
@@ -65,6 +66,15 @@ final class EnsureDemoAccounts
             'role' => SchoolRole::Teacher,
         ],
         [
+            'email' => 'teacher.maths.antsahabe@fanabe.test',
+            'first_name' => 'Haja',
+            'last_name' => 'Randrianarisoa',
+            'school' => 'antsahabe',
+            'school_name' => 'École Antsahabe',
+            'plan' => 'plus',
+            'role' => SchoolRole::Teacher,
+        ],
+        [
             'email' => 'parent.andry@fanabe.test',
             'first_name' => 'Andry',
             'last_name' => 'Rasoanaivo',
@@ -86,7 +96,11 @@ final class EnsureDemoAccounts
     {
         TenantContext::runWithRlsBypass(function (): void {
             foreach (self::ACCOUNTS as $row) {
-                $this->ensure($row);
+                try {
+                    $this->ensure($row);
+                } catch (Throwable $e) {
+                    report($e);
+                }
             }
         });
     }

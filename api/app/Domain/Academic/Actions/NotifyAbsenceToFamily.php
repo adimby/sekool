@@ -16,7 +16,7 @@ final class NotifyAbsenceToFamily
 
     public function __construct(private readonly DispatchFamilyMessage $messages) {}
 
-    public function execute(Enrollment $enrollment, string $date, string $session): void
+    public function execute(Enrollment $enrollment, string $date): void
     {
         $enrollment->loadMissing(['person', 'school']);
         $student = $enrollment->person;
@@ -47,7 +47,7 @@ final class NotifyAbsenceToFamily
                     subjectPersonId: (string) $student->id,
                     recipientPersonId: (string) $adult->id,
                     variables: $variables,
-                    idempotencyKey: self::TEMPLATE.':'.$channel.':'.$enrollment->id.':'.$date.':'.$session.':'.$adult->id,
+                    idempotencyKey: self::TEMPLATE.':'.$channel.':'.$enrollment->id.':'.$date.':'.$adult->id,
                     deliverNow: true,
                     priority: 'high',
                 );

@@ -5,6 +5,7 @@ use App\Domain\Platform\Demo\EnsureCollection;
 use App\Domain\Platform\Demo\EnsureDemoAccounts;
 use App\Domain\Platform\Demo\EnsurePhases567;
 use App\Domain\Platform\Demo\EnsureSchoolCore;
+use App\Domain\Platform\Demo\RunDemoMigrations;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
@@ -19,7 +20,10 @@ Artisan::command('demo:bootstrap', function (): int {
     }
 
     $this->info('Running migrations…');
-    $this->call('migrate', ['--force' => true]);
+    app(RunDemoMigrations::class)->execute(
+        fn (string $line) => $this->info($line),
+        fn (string $line) => $this->error($line),
+    );
 
     try {
         $this->info('Seeding demo data…');
@@ -28,17 +32,21 @@ Artisan::command('demo:bootstrap', function (): int {
         $this->warn('Seed incomplete: '.$e->getMessage());
     }
 
-    $this->info('Ensuring demo login accounts…');
-    app(EnsureDemoAccounts::class)->execute();
+    $steps = [
+        [EnsureDemoAccounts::class, 'Ensuring demo login accounts…'],
+        [EnsureSchoolCore::class, 'Ensuring school core (classes, barèmes)…'],
+        [EnsureCollection::class, 'Ensuring collection intelligence (risque, file, cockpit)…'],
+        [EnsurePhases567::class, 'Ensuring documents, kits et notes (phases 5–7)…'],
+    ];
 
-    $this->info('Ensuring school core (classes, barèmes)…');
-    app(EnsureSchoolCore::class)->execute();
-
-    $this->info('Ensuring collection intelligence (risque, file, cockpit)…');
-    app(EnsureCollection::class)->execute();
-
-    $this->info('Ensuring documents, kits et notes (phases 5–7)…');
-    app(EnsurePhases567::class)->execute();
+    foreach ($steps as [$class, $label]) {
+        $this->info($label);
+        try {
+            app($class)->execute();
+        } catch (Throwable $e) {
+            $this->error($label.' failed: '.$e->getMessage());
+        }
+    }
 
     return 0;
 })->purpose('Extensions Postgres, migrations, et comptes de démo');

@@ -7,13 +7,14 @@ use App\Domain\Academic\Enums\DisciplinaryMeasureType;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Identity\Models\Person;
 use App\Domain\Platform\Tenancy\BelongsToTenant;
+use App\Domain\Platform\Tenancy\HasReadyTable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DisciplinaryCase extends Model
 {
-    use BelongsToTenant, HasUuids;
+    use BelongsToTenant, HasReadyTable, HasUuids;
 
     protected $fillable = [
         'school_id',

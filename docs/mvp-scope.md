@@ -183,6 +183,8 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague G — Fusion d’identité et réauthentification.** La direction signale un doublon (avertissement non bloquant à la création, demande motivée). Seul `platform_admin` fusionne, refuse ou défait ; les deux identifiants publics restent résolvables (`I-15`). Réauthentification (mot de passe parent, TOTP direction) avant l’export famille et la révocation d’un certificat. Pas de SMS, pas de lecture de dossier scolaire par la plateforme.
 
+**Vague H — Appel par cours (collège / lycée).** Les élèves restent en salle, les professeurs tournent. L’appel d’une classe `middle` / `high` qui a un EDT se fait par créneau (`timetable_slot_id`), par le professeur du cours ou le remplaçant du jour. Un enseignant de matière ne voit pas le dossier : **Mes cours** + **Démarrer**. Le **titulaire** a un tableau de bord **Vie scolaire** (effectif, EDT, notes, devoirs, historique de l’année), sans radiation ni écolage. Maternelle / primaire : appel du jour. Numéro d’élève. Un avis famille par jour d’absence. Pas de SMS.
+
 ---
 
 ## 7. Définition de terminé

@@ -371,7 +371,7 @@ Trois expériences distinctes, une seule application (les rôles partagent la co
 | Expérience | Utilisateur | Écran d'entrée |
 |---|---|---|
 | **Cockpit** | Direction, administration | Le jour en cours, familles, organisation des classes, caisse — **pas l’appel** |
-| **Espace classe** | Professeur principal | Effectif de *sa* classe et appel du jour |
+| **Espace classe** | Professeur | **Appel** : mes cours du jour + **Démarrer**. **Vie scolaire** (titulaire seulement) : tableau de bord de la classe pour l’année. Un enseignant de matière n’ouvre pas le dossier. |
 | **Espace élève** | Élève (lecture seule) | Ma classe, mes présences, mon écolage |
 | **Espace famille** | Parent, tuteur | Mes enfants, mes échéances, mes documents |
 | **Vérification** | Tiers anonyme | Page unique de statut de certificat |

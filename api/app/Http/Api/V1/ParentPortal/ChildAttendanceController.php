@@ -30,9 +30,11 @@ final class ChildAttendanceController extends Controller
 
             $rows = AttendanceRecord::query()
                 ->withoutGlobalScopes()
+                ->with(['timetableSlot' => fn ($query) => $query->withoutGlobalScopes()])
                 ->whereIn('enrollment_id', $enrollmentIds)
                 ->whereBetween('date', [$from, $to])
                 ->orderByDesc('date')
+                ->orderBy('id')
                 ->get();
 
             return response()->json([
@@ -43,6 +45,14 @@ final class ChildAttendanceController extends Controller
                     'status' => $row->status->value,
                     'reason' => $row->reason,
                     'justification' => $row->justification,
+                    'timetable_slot_id' => $row->timetable_slot_id,
+                    'subject' => $row->timetableSlot?->subject,
+                    'starts_at' => $row->timetableSlot === null
+                        ? null
+                        : substr((string) $row->timetableSlot->starts_at, 0, 5),
+                    'ends_at' => $row->timetableSlot === null
+                        ? null
+                        : substr((string) $row->timetableSlot->ends_at, 0, 5),
                 ])->values(),
             ]);
         });

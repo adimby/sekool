@@ -95,7 +95,8 @@ it('lets direction run a class file: titulaire, enseignants, délégués, EDT, c
     $this->actingAs($teacher['account'], 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
         ->assertOk()
-        ->assertJsonPath('data.classroom.name', '6ème A');
+        ->assertJsonPath('data.classroom.name', '6ème A')
+        ->assertJsonPath('data.headcount', 1);
 
     $this->actingAs($teacher['account'], 'sanctum')
         ->patchJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}", [

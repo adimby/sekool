@@ -83,12 +83,14 @@ final class BulletinPayload
             ->where('enrollment_id', $enrollment->id)
             ->where('date', '>=', $windowStart)
             ->where('status', AttendanceStatus::Absent)
-            ->count();
+            ->distinct()
+            ->count('date');
         $late = AttendanceRecord::query()
             ->where('enrollment_id', $enrollment->id)
             ->where('date', '>=', $windowStart)
             ->where('status', AttendanceStatus::Late)
-            ->count();
+            ->distinct()
+            ->count('date');
 
         $stage = $enrollment->classroom !== null
             ? $enrollment->classroom->gradeLevel?->stage

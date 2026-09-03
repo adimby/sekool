@@ -5,6 +5,7 @@ use App\Domain\Finance\Models\FeeSchedule;
 use App\Domain\Identity\Models\UserAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Models\School;
+use Illuminate\Support\Facades\Schema;
 
 it('serves a placeholder when the built UI is absent', function () {
     $this->get('/')->assertStatus(503);
@@ -41,6 +42,21 @@ it('lets the Antsahabe direction account log in after bootstrap', function () {
         ->assertJsonPath('is_student', false);
 });
 
+it('lets the Antsahabe maths teacher log in after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->postJson('/api/v1/auth/login', [
+        'email' => 'teacher.maths.antsahabe@fanabe.test',
+        'password' => 'password',
+    ])->assertOk()
+        ->assertJsonPath('schools.0.role', 'teacher')
+        ->assertJsonPath('person.first_name', 'Haja');
+
+    expect(Schema::hasTable('timetable_substitutions'))->toBeTrue()
+        ->and(Schema::hasTable('class_posts'))->toBeTrue()
+        ->and(Schema::hasTable('exam_sessions'))->toBeTrue();
+});
+
 it('lets the platform admin account log in after bootstrap', function () {
     $this->artisan('demo:bootstrap')->assertSuccessful();
 
@@ -67,29 +83,134 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         ->assertOk()
         ->json('data');
 
-    expect($classrooms)->not->toBeEmpty();
+    $sixieme = collect($classrooms)->firstWhere('name', '6ème A');
+    expect($sixieme)->not->toBeNull();
 
-    $classroomId = $classrooms[0]['id'];
-    $roster = $this->withToken($token)
+    $classroomId = $sixieme['id'];
+
+    $file = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}")
+        ->assertOk()
+        ->assertJsonPath('data.classroom.name', '6ème A')
+        ->json('data');
+
+    expect($file['headcount'])->toBeGreaterThan(0)
+        ->and($file['students'])->not->toBeEmpty();
+
+    $this->withToken($token)
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}/roster")
         ->assertOk()
-        ->json('data.students');
-
-    expect($roster)->not->toBeEmpty();
+        ->assertJsonMissingPath('data.students.0.invoice');
 
     $this->withToken($token)
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
-            'date' => '2026-09-15',
+            'date' => '2026-09-14',
             'session' => 'full_day',
             'records' => [[
-                'enrollment_id' => $roster[0]['enrollment_id'],
+                'enrollment_id' => '11111111-1111-4111-8111-111111111111',
+                'status' => 'present',
+                'client_reference' => '33333333-3333-4333-8333-333333333333',
+            ]],
+        ])
+        ->assertNotFound();
+
+    $courses = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/attendance/mine?".http_build_query([
+            'date' => '2026-09-14',
+        ]))
+        ->assertOk()
+        ->json('data');
+
+    $malagasy = collect($courses)->firstWhere('subject', 'Malagasy');
+    expect($malagasy)->not->toBeNull()
+        ->and(collect($courses)->pluck('subject'))->not->toContain('Mathématiques');
+
+    $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
+            'classroom_id' => $classroomId,
+            'date' => '2026-09-14',
+        ]))
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Choisissez le cours.')
+        ->assertJsonPath('data', []);
+
+    $roll = $this->withToken($token)
+        ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
+            'classroom_id' => $classroomId,
+            'date' => '2026-09-14',
+            'timetable_slot_id' => $malagasy['timetable_slot_id'],
+        ]))
+        ->assertOk()
+        ->assertJsonPath('requires_course', true)
+        ->json('data');
+
+    expect($roll)->not->toBeEmpty()
+        ->and($roll[0])->toHaveKey('student_number')
+        ->and($roll[0]['student_number'])->not->toBeNull();
+
+    $this->withToken($token)
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'session' => 'period',
+            'timetable_slot_id' => $malagasy['timetable_slot_id'],
+            'records' => [[
+                'enrollment_id' => $roll[0]['enrollment_id'],
                 'status' => 'present',
                 'client_reference' => '33333333-3333-4333-8333-333333333333',
             ]],
         ])
         ->assertCreated();
 
-    $this->flushHeaders();
+    $this->withoutToken();
+
+    $mathsAccount = UserAccount::query()
+        ->whereRaw('lower(email) = ?', ['teacher.maths.antsahabe@fanabe.test'])
+        ->firstOrFail();
+
+    $this->actingAs($mathsAccount, 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms")
+        ->assertOk()
+        ->assertJsonPath('data', []);
+
+    $this->actingAs($mathsAccount, 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}")
+        ->assertNotFound();
+
+    $hajaCourses = $this->actingAs($mathsAccount, 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/attendance/mine?".http_build_query([
+            'date' => '2026-09-14',
+        ]))
+        ->assertOk()
+        ->json('data');
+
+    $maths = collect($hajaCourses)->firstWhere('subject', 'Mathématiques');
+    expect($maths)->not->toBeNull()
+        ->and(collect($hajaCourses)->pluck('subject')->all())->toBe(['Mathématiques']);
+
+    $this->actingAs($mathsAccount, 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'timetable_slot_id' => $malagasy['timetable_slot_id'],
+            'records' => [[
+                'enrollment_id' => $roll[0]['enrollment_id'],
+                'status' => 'absent',
+                'reason' => 'Maladie',
+            ]],
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($mathsAccount, 'sanctum')
+        ->postJson("/api/v1/schools/{$schoolId}/attendance", [
+            'date' => '2026-09-14',
+            'timetable_slot_id' => $maths['timetable_slot_id'],
+            'records' => [[
+                'enrollment_id' => $roll[0]['enrollment_id'],
+                'status' => 'present',
+            ]],
+        ])
+        ->assertCreated();
+
+    $this->withoutToken();
 
     $directionAccount = UserAccount::query()
         ->whereRaw('lower(email) = ?', ['direction.antsahabe@fanabe.test'])
@@ -100,7 +221,7 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
             'date' => '2026-09-15',
             'session' => 'full_day',
             'records' => [[
-                'enrollment_id' => $roster[0]['enrollment_id'],
+                'enrollment_id' => $roll[0]['enrollment_id'],
                 'status' => 'absent',
             ]],
         ])

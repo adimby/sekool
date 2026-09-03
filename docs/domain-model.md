@@ -261,13 +261,14 @@ UNIQUE (school_id, person_id, role) WHERE revoked_at IS NULL
 |---|---|---|
 | `school_id`, `school_year_id`, `classroom_id` | `uuid` | Clés composites |
 | `person_id` | `uuid` | → plan plateforme |
-| `student_number` | `varchar` | Numéro **interne** à l'école, distinct du Person ID |
+| `student_number` | `varchar` | Numéro **dans la classe** (1, 2, 3…), distinct du Person ID |
 | `status` | `enum` | `pre_registered` / `active` / `suspended` / `transferred_out` / `graduated` / `withdrawn` |
 | `enrolled_on`, `ended_on`, `exit_reason` | | |
 
 ```sql
 UNIQUE (school_id, school_year_id, person_id)   -- une inscription par année et par école
-UNIQUE (school_id, student_number)
+UNIQUE (school_id, classroom_id, student_number) WHERE student_number IS NOT NULL AND classroom_id IS NOT NULL
+UNIQUE (school_id, student_number) WHERE student_number IS NOT NULL AND classroom_id IS NULL
 FOREIGN KEY (school_id, classroom_id) REFERENCES classrooms (school_id, id)
 INDEX (school_id, status, school_year_id)
 -- Une seule inscription active à la fois dans TOUT le réseau FANABE (D-19) :
@@ -306,10 +307,11 @@ Volontairement dans le plan plateforme : cette période n'appartient à aucun é
 
 ### `attendance_records`
 
-`school_id`, `enrollment_id`, `date`, `session` (`morning` / `afternoon` / `full_day`), `status` (`present` / `absent` / `late` / `excused`), `minutes_late`, `reason`, `recorded_by_person_id`, `recorded_via` (`web` / `offline_sync`), `client_reference` (idempotence de la file hors ligne, `Q-07`).
+`school_id`, `enrollment_id`, `date`, `session` (`morning` / `afternoon` / `full_day` / `period`), `timetable_slot_id` (nullable — collège / lycée), `status` (`present` / `absent` / `late` / `excused`), `minutes_late`, `reason`, `recorded_by_person_id`, `recorded_via` (`web` / `offline_sync`), `client_reference` (idempotence de la file hors ligne, `Q-07`).
 
 ```sql
-UNIQUE (school_id, enrollment_id, date, session)
+UNIQUE (school_id, enrollment_id, date, session) WHERE timetable_slot_id IS NULL
+UNIQUE (school_id, enrollment_id, date, timetable_slot_id) WHERE timetable_slot_id IS NOT NULL
 UNIQUE (school_id, client_reference) WHERE client_reference IS NOT NULL
 INDEX  (school_id, date, status)     -- compteurs du cockpit
 ```
