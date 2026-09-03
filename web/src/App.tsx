@@ -5992,6 +5992,9 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
   }
 
   async function loadDuties(date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return
+    }
     const payload = await api<{ data: AttendanceCourse[] }>(
       `/api/v1/schools/${schoolId}/attendance/mine?${new URLSearchParams({ date }).toString()}`,
       auth,
@@ -6041,6 +6044,7 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
 
   useEffect(() => {
     if (tab !== 'appel') return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) return
     setStarted(null)
     setStudents([])
     setMarks({})
