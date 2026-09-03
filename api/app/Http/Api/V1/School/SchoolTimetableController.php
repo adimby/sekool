@@ -18,7 +18,22 @@ final class SchoolTimetableController extends Controller
     {
         $query = TimetableSlot::query()->with(['classroom.gradeLevel', 'teacher']);
 
-        if (! SchoolGate::isDirection($request)) {
+        if (SchoolGate::isDirection($request)) {
+            // Whole establishment.
+        } elseif (SchoolGate::isTeacher($request)) {
+            $personId = $request->user()?->person_id;
+            if (! is_string($personId) || $personId === '') {
+                $query->whereRaw('false');
+            } else {
+                $query->where(function ($inner) use ($personId): void {
+                    $inner->where('teacher_person_id', $personId)
+                        ->orWhereHas(
+                            'substitutions',
+                            fn ($subs) => $subs->where('substitute_person_id', $personId),
+                        );
+                });
+            }
+        } else {
             $ids = SchoolGate::visibleClassrooms($request)->pluck('id');
             $query->whereIn('classroom_id', $ids);
         }
@@ -87,7 +102,7 @@ final class SchoolTimetableController extends Controller
     private function guardView(Request $request, string $classroomId): Classroom
     {
         $model = Classroom::query()->find($classroomId);
-        if ($model === null || ! SchoolGate::canViewClassroom($request, $model)) {
+        if ($model === null || ! SchoolGate::canViewClassFile($request, $model)) {
             abort(response()->json(['message' => 'Not found.'], 404));
         }
 

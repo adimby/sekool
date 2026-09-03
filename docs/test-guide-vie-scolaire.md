@@ -6,8 +6,8 @@ Comptes démo (mot de passe `password`) :
 |---|---|---|
 | Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
-| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Classe, Kits — Malagasy 6ème A |
-| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel, Classe — Mathématiques 6ème A (pas titulaire) |
+| Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Kits — Malagasy 6ème A (pas le dossier de classe) |
+| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel — Mathématiques 6ème A (pas titulaire, pas le dossier) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
 Ouvrir l’interface (Vite `http://127.0.0.1:5173` en local). Après une action, un **bandeau vert** confirme ; un **bandeau rouge** signale une erreur.
@@ -21,7 +21,7 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 1. Se connecter en **direction**.
 2. **Attendu :** onglets Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices. Pas d’onglet Appel.
 3. Se déconnecter, se connecter en **professeur**.
-4. **Attendu :** onglets Appel, Classe, Kits.
+4. **Attendu :** onglets Appel, Kits. Pas d’onglet Classe (le dossier est à la direction).
 5. Se déconnecter, se connecter en **parent**.
 6. **Attendu :** onglets Enfants, Kits, Messages, Compte.
 
@@ -43,21 +43,23 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 ## 3. Appel avec motif et justificatif
 
-En collège, les élèves restent en salle ; le professeur change. Nivo (titulaire) fait l’appel de **Malagasy**, pas des Maths.
+En collège, les élèves restent en salle ; le professeur change. Nivo (titulaire) fait l’appel de **Malagasy**, pas des Maths. L’effectif n’apparaît qu’après **Démarrer**.
 
-1. Titulaire → **Appel**, classe **6ème A**, date un **jour de semaine**.
-2. **Attendu :** un menu **Cours** (Malagasy 07:30). Colonne **N°** devant les noms.
-3. Pour **Hery** : pastille **A** (absent).
-4. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
-5. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
-6. **Enregistrer**.
-7. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
-8. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
-9. **Attendu :** message d’erreur demandant un motif.
-10. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
-11. Se déconnecter. Connexion **Maths** (`teacher.maths.antsahabe@fanabe.test`).
-12. **Attendu :** 6ème A, cours **Mathématiques** 08:30. Pas le créneau Malagasy. Hery a son n°.
-13. Enregistrer l’appel Maths (tous présents). **Attendu :** OK. Le titulaire n’a pas pointé ce cours.
+1. Titulaire → **Appel**, date un **jour de semaine**.
+2. **Attendu :** liste **Mes cours** (Malagasy 07:30 6ème A, éventuellement appel du jour sur GS / 5ème / Tle sans EDT). Pas de menu de toute la classe. Pas le créneau Maths.
+3. **Démarrer** sur Malagasy.
+4. **Attendu :** colonne **N°** devant les noms. Uniquement ce cours.
+5. Pour **Hery** : pastille **A** (absent).
+6. **Attendu :** un menu Motif et un champ Justificatif s’affichent.
+7. Motif **Maladie**, justificatif `Certificat médical vu à l’accueil`.
+8. **Enregistrer**.
+9. **Attendu :** bandeau « Présence enregistrée… familles sont prévenues ».
+10. Pour un autre élève (pas Hery) : pastille **A**, laisser Motif vide, **Enregistrer**.
+11. **Attendu :** message d’erreur demandant un motif.
+12. Pastille **E** (excusé) + motif **Raison familiale** : l’enregistrement passe ; **pas** de nouveau message d’absence pour cet élève.
+13. Se déconnecter. Connexion **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+14. **Attendu :** Mes cours = **Mathématiques** 08:30 seulement. Pas d’onglet Classe. **Démarrer** puis Hery a son n°.
+15. Enregistrer l’appel Maths (tous présents). **Attendu :** OK. Le titulaire n’a pas pointé ce cours.
 
 ---
 
@@ -106,7 +108,9 @@ En collège, les élèves restent en salle ; le professeur change. Nivo (titulai
 
 ## 8. Notes (déjà en place)
 
-1. Professeur → **Classe** → 6ème A → section **Notes**.
+Le dossier de classe est à la **direction** (plus d’onglet Classe côté professeur).
+
+1. Direction → **Classes** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
 3. Parent → **Enfants** → section **Notes**.
 4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
@@ -115,9 +119,9 @@ En collège, les élèves restent en salle ; le professeur change. Nivo (titulai
 
 ## 9. Devoirs et cahier journal (Vague B)
 
-Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
+Sur **Hery** (6ème A). La direction (ou l’API professeur s’il enseigne) écrit ; le parent lit. L’écran professeur n’ouvre plus le dossier.
 
-1. Professeur → **Classe** → **6ème A**.
+1. Direction → **Classes** → **6ème A**.
 2. Section **Devoirs** : titre `Exercices Malagasy`, date dans quelques jours, consigne `Faire les exercices 1 à 4 page 12`. **Publier le devoir**.
 3. **Attendu :** bandeau « Devoir publié… » (pas de SMS). Le devoir apparaît dans la liste.
 4. Section **Cahier journal** : titre `Journée calme`, date du jour, résumé `La classe a travaillé le poème`. **Publier le journal**.
@@ -131,7 +135,7 @@ Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
 
 ## 10. Discipline sans score (Vague B)
 
-1. Professeur → **Classe** → **6ème A** → section **Discipline**.
+1. Direction → **Classes** → **6ème A** → section **Discipline**.
 2. Élève **Hery**, constat `Bavardage répété pendant le cours`, mesure **Retenue**, **Enregistrer la mesure**.
 3. **Attendu :** bandeau « Mesure enregistrée… ». Ligne Hery · Retenue. Pas de note, pas de palier.
 4. Parent Andry → **Enfants** → Hery → **Discipline**.
@@ -150,7 +154,7 @@ Sur **Hery** (6ème A). Le titulaire écrit ; le parent lit.
 5. **Attendu :** `Portes ouvertes 6ème A`.
 6. Un parent d’une autre classe (si disponible) ne voit pas cet événement.
 
-Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire de publication (réservé à la direction).
+Le titulaire n’a plus le dossier de classe ; les événements se consultent côté direction / famille.
 
 ---
 
@@ -158,7 +162,7 @@ Le titulaire voit les événements de sa classe mais **n’a pas** le formulaire
 
 Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le catalogue (Langage, Vivre ensemble…) s’affiche quand même. Pour un élève réel, inscrire un enfant en GS ou s’appuyer sur les tests Pest `CompetencyLivretTest`.
 
-1. Direction ou titulaire → **Classes** / **Classe** → **GS A**.
+1. Direction → **Classes** → **GS A**.
 2. **Attendu :** section **Livret**, pas de section Notes. Aucun champ photo.
 3. S’il y a un élève : choisir l’élève, commentaire optionnel, bouton **Acquis** sur « S’exprimer à l’oral ».
 4. **Attendu :** bandeau de confirmation ; le niveau **Acquis** s’affiche. Pas une note chiffrée.
@@ -171,7 +175,7 @@ Le groupe **GS A** existe dans la démo mais peut n’avoir aucun élève. Le ca
 
 Sur **Hery** (6ème A). Ce n’est pas un LSU.
 
-1. Professeur → **Classe** → **6ème A** → section **Notes**.
+1. Direction → **Classes** → **6ème A** → section **Notes**.
 2. Choisir Hery dans le sélecteur de notes (le relevé se charge en dessous).
 3. **Attendu :** mention « Ce relevé est un document FANABE. Ce n’est pas un LSU. » et le compte d’absences sur 30 jours.
 4. Appréciation `Travail régulier. Continuer ainsi.` → **Enregistrer l’appréciation**.
@@ -296,10 +300,10 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 
 ## 23. Appel par cours collège (Vague H)
 
-1. Titulaire Nivo → **Appel** → 6ème A. Choisir un jour de semaine.
-2. **Attendu :** cours Malagasy (pas Maths). Colonne N°. Les élèves restent en salle.
-3. Connexion **Maths** (Haja). **Attendu :** seulement le créneau Mathématiques. Pas titulaire.
-4. Un samedi sans cours : « Pas de cours à cette date dans cette classe. »
+1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**. Pas d’onglet Classe.
+2. **Démarrer** Malagasy. **Attendu :** N° + noms. Pas Maths.
+3. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. Pas titulaire. **Démarrer** puis appel.
+4. Un samedi sans cours : « Pas de cours à cette date. »
 
 ---
 

@@ -5,6 +5,7 @@ namespace App\Http\Api\V1\School;
 use App\Domain\Academic\Actions\CreateClassroom;
 use App\Domain\Academic\Actions\UpdateClassroom;
 use App\Domain\Academic\Models\Classroom;
+use App\Domain\Academic\Models\TimetableSlot;
 use App\Domain\Academic\Support\ClassroomFilePayload;
 use App\Domain\Finance\Models\Invoice;
 use App\Domain\School\Support\SchoolGate;
@@ -57,7 +58,7 @@ final class ClassroomController extends Controller
     public function show(Request $request, string $school, string $classroom): JsonResponse
     {
         $model = Classroom::query()->find($classroom);
-        if ($model === null || ! SchoolGate::canViewClassroom($request, $model)) {
+        if ($model === null || ! SchoolGate::canViewClassFile($request, $model)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
@@ -82,8 +83,30 @@ final class ClassroomController extends Controller
 
     public function roster(Request $request, string $school, string $classroom): JsonResponse
     {
+        $data = $request->validate([
+            'date' => ['nullable', 'date'],
+            'timetable_slot_id' => ['nullable', 'uuid'],
+        ]);
+
         $model = Classroom::query()->find($classroom);
-        if ($model === null || ! SchoolGate::canViewClassroom($request, $model)) {
+        if ($model === null) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $slot = null;
+        $date = $data['date'] ?? null;
+        $slotId = $data['timetable_slot_id'] ?? null;
+        if ($slotId !== null) {
+            $slot = TimetableSlot::query()->find($slotId);
+            if ($slot === null || (string) $slot->classroom_id !== (string) $model->id) {
+                return response()->json(['message' => 'Not found.'], 404);
+            }
+            if ($date === null) {
+                return response()->json(['message' => 'Choisissez le cours.'], 422);
+            }
+        }
+
+        if (! SchoolGate::canReadAttendanceRoster($request, $model, $slot, $date)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 

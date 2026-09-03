@@ -2,6 +2,7 @@
 
 namespace App\Domain\School\Support;
 
+use App\Domain\Academic\Enums\GradeStage;
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\TimetableSlot;
 use App\Domain\Academic\Support\ClassroomCycle;
@@ -146,6 +147,18 @@ final class SchoolGate
             ->all();
     }
 
+    /**
+     * Dossier complet (effectif, EDT, conseil, notes). Direction only.
+     * A subject teacher must not open the whole class.
+     */
+    public static function canViewClassFile(Request $request, Classroom $classroom): bool
+    {
+        return self::isDirection($request);
+    }
+
+    /**
+     * Homework / discipline / notes write paths: still the teachers of that class.
+     */
     public static function canViewClassroom(Request $request, Classroom $classroom): bool
     {
         if (self::isDirection($request)) {
@@ -153,6 +166,19 @@ final class SchoolGate
         }
 
         return self::teaches($request, $classroom);
+    }
+
+    public static function canReadAttendanceRoster(
+        Request $request,
+        Classroom $classroom,
+        ?TimetableSlot $slot = null,
+        ?string $date = null,
+    ): bool {
+        if (self::isDirection($request)) {
+            return true;
+        }
+
+        return self::canTakeAttendance($request, $classroom, $slot, $date);
     }
 
     public static function canTakeAttendance(
@@ -260,15 +286,39 @@ final class SchoolGate
         if (self::isTeacher($request) && is_string($personId) && $personId !== '') {
             return $query->where(function (Builder $inner) use ($personId): void {
                 $inner->where('main_teacher_person_id', $personId)
-                    ->orWhereHas('teachers', fn (Builder $teachers) => $teachers->where('person_id', $personId))
-                    ->orWhereHas('timetableSlots', fn (Builder $slots) => $slots->where('teacher_person_id', $personId))
-                    ->orWhereHas(
-                        'timetableSlots.substitutions',
-                        fn (Builder $subs) => $subs->where('substitute_person_id', $personId),
-                    );
+                    ->orWhere(function (Builder $assigned) use ($personId): void {
+                        $assigned->whereHas('teachers', fn (Builder $teachers) => $teachers->where('person_id', $personId))
+                            ->where(function (Builder $day) {
+                                $day->whereHas(
+                                    'gradeLevel',
+                                    fn (Builder $grade) => $grade->whereIn('stage', [
+                                        GradeStage::Preschool->value,
+                                        GradeStage::Primary->value,
+                                    ]),
+                                )->orWhereDoesntHave('timetableSlots');
+                            });
+                    });
             });
         }
 
         return $query->whereRaw('false');
+    }
+
+    /**
+     * Classes where the teacher takes a day roll (maternelle / primaire, or collège without EDT yet).
+     *
+     * @return Builder<Classroom>
+     */
+    public static function dayAttendanceClassrooms(Request $request): Builder
+    {
+        return self::visibleClassrooms($request)->where(function (Builder $query): void {
+            $query->whereHas(
+                'gradeLevel',
+                fn (Builder $grade) => $grade->whereIn('stage', [
+                    GradeStage::Preschool->value,
+                    GradeStage::Primary->value,
+                ]),
+            )->orWhereDoesntHave('timetableSlots');
+        });
     }
 }

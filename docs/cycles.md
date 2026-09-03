@@ -142,6 +142,8 @@ Sur la fiche **preschool** uniquement, section **Récupération** à partir des 
 | Collège / lycée | Professeur du créneau, ou remplaçant du jour | Cours (`timetable_slot_id`) |
 
 - Effectif numéroté (`enrollments.student_number`) : la colonne **N°** apparaît sur l’appel.
+- L’espace professeur n’ouvre **pas** le dossier de classe (effectif, EDT, notes). Direction seulement.
+- L’appel commence par **Mes cours** du jour, puis **Démarrer** : l’effectif n’est chargé que pour ce créneau (ou l’appel du jour en maternelle / primaire).
 - Une classe collège / lycée **sans EDT** encore : appel du jour, pour ne pas bloquer la mise en place.
 - Une absence le même jour, plusieurs cours : **un seul** avis famille (pas de SMS).
 - Le titulaire ne pointe pas le cours d’un autre professeur. Un enseignant de maths ne pointe pas le Malagasy.

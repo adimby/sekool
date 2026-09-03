@@ -9,6 +9,7 @@ use App\Domain\Academic\Models\AttendanceRecord;
 use App\Domain\Academic\Models\Classroom;
 use App\Domain\Academic\Models\TimetableSlot;
 use App\Domain\Academic\Support\ClassroomCycle;
+use App\Domain\Academic\Support\TeacherDutyCourses;
 use App\Domain\Academic\Support\TimetableDuty;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -20,6 +21,21 @@ use Illuminate\Support\Facades\DB;
 
 final class AttendanceController extends Controller
 {
+    public function mine(Request $request): JsonResponse
+    {
+        if (! SchoolGate::isTeacher($request)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+        ]);
+
+        return response()->json([
+            'data' => TeacherDutyCourses::forDate($request, $data['date']),
+        ]);
+    }
+
     public function index(Request $request, string $school): JsonResponse
     {
         $data = $request->validate([
@@ -30,15 +46,47 @@ final class AttendanceController extends Controller
         ]);
 
         $classroom = Classroom::query()->with('gradeLevel')->find($data['classroom_id']);
-        if ($classroom === null || ! SchoolGate::canViewClassroom($request, $classroom)) {
+        if ($classroom === null) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
         $session = AttendanceSession::tryFrom($data['session'] ?? AttendanceSession::FullDay->value)
             ?? AttendanceSession::FullDay;
         $slotId = $data['timetable_slot_id'] ?? null;
+        $slot = null;
         if ($slotId !== null) {
+            $slot = TimetableSlot::query()->find($slotId);
+            if ($slot === null || (string) $slot->classroom_id !== (string) $classroom->id) {
+                return response()->json(['message' => 'Cours introuvable.'], 404);
+            }
             $session = AttendanceSession::Period;
+        }
+
+        $courses = TeacherDutyCourses::forClassroom($classroom, $data['date'], $request);
+        $requiresCourse = ClassroomCycle::requiresCourseForAttendance($classroom);
+
+        if (SchoolGate::isDirection($request)) {
+            // Direction may consult the roll; it cannot POST attendance.
+        } elseif (SchoolGate::isTeacher($request)) {
+            if ($slot !== null) {
+                if (TimetableDuty::isCancelled($slot, $data['date'])) {
+                    return response()->json(['message' => 'Ce cours est annulé.'], 403);
+                }
+                if (! SchoolGate::canTakeAttendance($request, $classroom, $slot, $data['date'])) {
+                    return response()->json(['message' => 'L’appel se fait par le professeur du cours.'], 403);
+                }
+            } elseif ($requiresCourse) {
+                return response()->json([
+                    'message' => 'Choisissez le cours.',
+                    'requires_course' => true,
+                    'courses' => $courses,
+                    'data' => [],
+                ], 422);
+            } elseif (! SchoolGate::canTakeAttendance($request, $classroom, null, $data['date'])) {
+                return response()->json(['message' => 'Not found.'], 404);
+            }
+        } else {
+            return response()->json(['message' => 'Not found.'], 404);
         }
 
         $enrollments = Enrollment::query()
@@ -60,10 +108,9 @@ final class AttendanceController extends Controller
         }
 
         $records = $recordsQuery->get()->keyBy('enrollment_id');
-        $courses = $this->coursesFor($classroom, $data['date']);
 
         return response()->json([
-            'requires_course' => ClassroomCycle::requiresCourseForAttendance($classroom),
+            'requires_course' => $requiresCourse,
             'courses' => $courses,
             'data' => $enrollments->map(function (Enrollment $enrollment) use ($records): array {
                 $record = $records->get($enrollment->id);
@@ -207,36 +254,5 @@ final class AttendanceController extends Controller
                 'timetable_slot_id' => $row->timetable_slot_id,
             ])->values(),
         ], 201);
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function coursesFor(Classroom $classroom, string $date): array
-    {
-        $weekday = TimetableDuty::weekdayOf($date);
-
-        return TimetableSlot::query()
-            ->where('classroom_id', $classroom->id)
-            ->where('weekday', $weekday)
-            ->orderBy('starts_at')
-            ->get()
-            ->map(function (TimetableSlot $slot) use ($date): array {
-                $effective = TimetableDuty::effectiveTeacherPersonId($slot, $date);
-                $cancelled = $effective === null && TimetableDuty::isCancelled($slot, $date);
-
-                return [
-                    'id' => $slot->id,
-                    'subject' => $slot->subject,
-                    'starts_at' => substr((string) $slot->starts_at, 0, 5),
-                    'ends_at' => substr((string) $slot->ends_at, 0, 5),
-                    'room' => $slot->room,
-                    'teacher_person_id' => $effective,
-                    'scheduled_teacher_person_id' => $slot->teacher_person_id,
-                    'cancelled' => $cancelled,
-                ];
-            })
-            ->values()
-            ->all();
     }
 }

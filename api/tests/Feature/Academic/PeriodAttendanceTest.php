@@ -139,7 +139,38 @@ it('lets a subject teacher record attendance on their slot, not the titulaire’
         ->json();
 
     expect($index['data'][0])->toHaveKey('student_number')
-        ->and(collect($index['courses'])->pluck('subject')->all())->toContain('Malagasy', 'Mathématiques');
+        ->and(collect($index['courses'])->pluck('subject')->all())->toBe(['Mathématiques']);
+
+    $this->actingAs($maths['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
+        ->assertNotFound();
+
+    $this->actingAs($maths['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
+            'classroom_id' => $classroom['id'],
+            'date' => $monday->toDateString(),
+        ]))
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Choisissez le cours.')
+        ->assertJsonPath('data', []);
+
+    $this->actingAs($maths['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/attendance?".http_build_query([
+            'classroom_id' => $classroom['id'],
+            'date' => $monday->toDateString(),
+            'timetable_slot_id' => $malagasyId,
+        ]))
+        ->assertForbidden();
+
+    $mine = $this->actingAs($maths['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/attendance/mine?".http_build_query([
+            'date' => $monday->toDateString(),
+        ]))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($mine)->pluck('subject')->all())->toBe(['Mathématiques'])
+        ->and(collect($mine)->pluck('classroom_name')->unique()->all())->toBe(['6ème A']);
 
     $this->actingAs($family['parentAccount'], 'sanctum')
         ->getJson("/api/v1/parent/children/{$family['student']->id}/attendance?".http_build_query([
@@ -213,7 +244,17 @@ it('lets a substitute take the roll and forbids attendance on a cancelled course
     $this->actingAs($substitute['account'], 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms")
         ->assertOk()
-        ->assertJsonPath('data.0.id', $classroom['id']);
+        ->assertJsonPath('data', []);
+
+    $this->actingAs($substitute['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}")
+        ->assertNotFound();
+
+    $this->actingAs($substitute['account'], 'sanctum')
+        ->getJson("/api/v1/schools/{$schoolId}/attendance/mine?".http_build_query(['date' => $monday]))
+        ->assertOk()
+        ->assertJsonPath('data.0.timetable_slot_id', $slotId)
+        ->assertJsonPath('data.0.subject', 'Malagasy');
 
     $this->actingAs($substitute['account'], 'sanctum')
         ->postJson("/api/v1/schools/{$schoolId}/attendance", [
