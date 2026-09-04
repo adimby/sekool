@@ -11,6 +11,7 @@ use App\Domain\Identity\Support\PrivilegedAccount;
 use App\Domain\Platform\Tenancy\TenantContext;
 use App\Domain\School\Enums\SchoolRole;
 use App\Domain\School\Models\SchoolRoleAssignment;
+use App\Domain\School\Support\SchoolCapabilities;
 use Illuminate\Support\Collection;
 
 final class SessionPayload
@@ -34,7 +35,7 @@ final class SessionPayload
     {
         $account->loadMissing('person');
 
-        [$assignments, $titulaireSchoolIds] = TenantContext::runWithRlsBypass(function () use ($account): array {
+        [$assignments, $titulaireSchoolIds, $enseigneSchoolIds] = TenantContext::runWithRlsBypass(function () use ($account): array {
             $assignments = SchoolRoleAssignment::query()
                 ->withoutGlobalScopes()
                 ->where('person_id', $account->person_id)
@@ -42,26 +43,42 @@ final class SessionPayload
                 ->with('school')
                 ->get();
 
+            $personId = $account->person_id;
+
             $titulaireSchoolIds = Classroom::query()
                 ->withoutGlobalScopes()
-                ->where('main_teacher_person_id', $account->person_id)
+                ->where('main_teacher_person_id', $personId)
                 ->pluck('school_id')
                 ->unique()
                 ->values()
                 ->all();
 
-            return [$assignments, $titulaireSchoolIds];
+            $enseigneSchoolIds = Classroom::query()
+                ->withoutGlobalScopes()
+                ->where(function ($query) use ($personId): void {
+                    $query->where('main_teacher_person_id', $personId)
+                        ->orWhereHas('teachers', fn ($teachers) => $teachers->where('person_id', $personId))
+                        ->orWhereHas('timetableSlots', fn ($slots) => $slots->where('teacher_person_id', $personId));
+                })
+                ->pluck('school_id')
+                ->unique()
+                ->values()
+                ->all();
+
+            return [$assignments, $titulaireSchoolIds, $enseigneSchoolIds];
         });
 
         $schools = $assignments
             ->groupBy('school_id')
-            ->map(function (Collection $rows) use ($titulaireSchoolIds): array {
+            ->map(function (Collection $rows) use ($titulaireSchoolIds, $enseigneSchoolIds): array {
                 $assignment = $rows->first();
                 $roles = $rows
                     ->map(fn (SchoolRoleAssignment $row): string => $row->role->value)
                     ->unique()
                     ->values()
                     ->all();
+                $titulaire = in_array($assignment->school_id, $titulaireSchoolIds, true);
+                $enseigne = in_array($assignment->school_id, $enseigneSchoolIds, true);
 
                 return [
                     'id' => $assignment->school_id,
@@ -69,7 +86,9 @@ final class SessionPayload
                     'code' => $assignment->school?->code,
                     'role' => self::primaryRole($roles),
                     'roles' => $roles,
-                    'titulaire' => in_array($assignment->school_id, $titulaireSchoolIds, true),
+                    'titulaire' => $titulaire,
+                    'enseigne' => $enseigne,
+                    'capabilities' => SchoolCapabilities::for($roles, $titulaire, $enseigne),
                 ];
             })
             ->values();
@@ -91,6 +110,14 @@ final class SessionPayload
                     PersonRoleType::Parent->value,
                     PersonRoleType::Guardian->value,
                     PersonRoleType::FinancialContact->value,
+                ], true);
+            }),
+            'is_guardian' => $openRoles->contains(function (mixed $role): bool {
+                $value = $role instanceof PersonRoleType ? $role->value : (string) $role;
+
+                return in_array($value, [
+                    PersonRoleType::Parent->value,
+                    PersonRoleType::Guardian->value,
                 ], true);
             }),
             'is_student' => $openRoles->contains(fn (mixed $role): bool => $role === PersonRoleType::Student || $role === PersonRoleType::Student->value),

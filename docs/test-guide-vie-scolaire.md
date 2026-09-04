@@ -6,8 +6,9 @@ Comptes démo (mot de passe `password`) :
 |---|---|---|
 | Plateforme | `plateforme@fanabe.test` | Écoles (annuaire) et fusions d’identité (TOTP). Pas d’écolage. |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
+| Caisse | `caisse.antsahabe@fanabe.test` | Finance, Caisse, Kits (TOTP). Pas les familles. |
 | Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Vie scolaire, Kits — titulaire (dossier de l’année) + Malagasy |
-| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel — Mathématiques 6ème A (pas titulaire, pas le dossier) |
+| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel et Notes — Mathématiques 6ème A (pas titulaire, pas le dossier) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
 Ouvrir l’interface (Vite `http://127.0.0.1:5173` en local). Après une action, un **bandeau vert** confirme ; un **bandeau rouge** signale une erreur.
@@ -20,14 +21,16 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 1. Se connecter en **direction**.
 2. **Attendu :** onglets Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices. Pas d’onglet Appel.
-3. Se déconnecter, se connecter en **professeur**.
-4. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction).
-5. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
-6. **Attendu :** onglet **Appel** seulement. Pas d’onglet Vie scolaire, pas d’onglet Kits. Pas le dossier 6ème A.
-7. Se déconnecter, se connecter en **parent**.
-8. **Attendu :** onglets Enfants, Kits, Messages, Compte.
-9. Se déconnecter, se connecter en **plateforme** (`plateforme@fanabe.test`, TOTP).
-10. **Attendu :** onglets **Écoles** et **Fusions**. Bannière : la plateforme ne voit pas l’écolage. Liste des établissements (nom, ville, plan) sans montant ni élève.
+3. Se déconnecter, se connecter en **caisse** (`caisse.antsahabe@fanabe.test`, TOTP).
+4. **Attendu :** espace **Caisse**, onglets Finance, Caisse, Kits. Pas Aujourd’hui, pas Familles, pas Classes, pas Indices.
+5. Se déconnecter, se connecter en **professeur**.
+6. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction). Pas d’onglet Notes (les notes sont dans Vie scolaire).
+7. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+8. **Attendu :** onglets **Appel** et **Notes**. Pas d’onglet Vie scolaire, pas d’onglet Kits. Pas le dossier 6ème A.
+9. Se déconnecter, se connecter en **parent**.
+10. **Attendu :** onglets Enfants, Kits, Messages, Compte.
+11. Se déconnecter, se connecter en **plateforme** (`plateforme@fanabe.test`, TOTP).
+12. **Attendu :** onglets **Écoles** et **Fusions**. Bannière : la plateforme ne voit pas l’écolage. Liste des établissements (nom, ville, plan) sans montant ni élève.
 
 ---
 
@@ -112,12 +115,14 @@ En collège, les élèves restent en salle ; le professeur change. Nivo (titulai
 
 ## 8. Notes (déjà en place)
 
-Le titulaire saisit depuis **Vie scolaire**. La direction peut aussi depuis **Classes**.
+Le titulaire saisit depuis **Vie scolaire**. Le professeur de matière saisit depuis **Notes**. La direction peut aussi depuis **Classes**.
 
 1. Titulaire → **Vie scolaire** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
-3. Parent → **Enfants** → section **Notes**.
-4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
+3. Maths (`teacher.maths.antsahabe@fanabe.test`) → **Notes** → 6ème A.
+4. **Attendu :** carnet (élèves + notes), pas le dossier Vie scolaire. Saisir une note Maths.
+5. Parent → **Enfants** → section **Notes**.
+6. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
 
 ---
 
@@ -307,7 +312,7 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**.
 2. **Démarrer** Malagasy. **Attendu :** N° + noms. Pas Maths.
 3. Nivo → **Vie scolaire** → 6ème A. **Attendu :** tableau de bord (effectif, enseignants, EDT, devoirs, discipline). Pas de bouton Radier.
-4. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. **Pas** d’onglet Vie scolaire ni Kits. **Démarrer** puis appel.
+4. Connexion **Maths** (Haja). **Attendu :** Appel (Mathématiques) et **Notes**. **Pas** d’onglet Vie scolaire ni Kits. **Démarrer** puis appel.
 5. Un samedi sans cours : « Pas de cours à cette date. »
 
 ---

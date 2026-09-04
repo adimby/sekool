@@ -79,10 +79,11 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/years', [SchoolYearController::class, 'index']);
         Route::get('/schools/{school}/years/{year}', [SchoolYearController::class, 'show']);
         Route::get('/schools/{school}/network', [SchoolNetworkController::class, 'show']);
+        Route::get('/schools/{school}/classrooms', [ClassroomController::class, 'index']);
+        Route::get('/schools/{school}/grade-levels', [GradeLevelController::class, 'index']);
     });
 
     Route::middleware('school.role:classroom')->group(function (): void {
-        Route::get('/schools/{school}/classrooms', [ClassroomController::class, 'index']);
         Route::get('/schools/{school}/classrooms/{classroom}', [ClassroomController::class, 'show']);
         Route::get('/schools/{school}/classrooms/{classroom}/roster', [ClassroomController::class, 'roster']);
         Route::get('/schools/{school}/attendance/mine', [AttendanceController::class, 'mine']);
@@ -96,9 +97,6 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/classrooms/{classroom}/competencies', [CompetencyController::class, 'index']);
         Route::post('/schools/{school}/classrooms/{classroom}/competencies', [CompetencyController::class, 'store']);
         Route::get('/schools/{school}/certificates', [CertificateController::class, 'index']);
-        Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
-        Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
-        Route::post('/schools/{school}/kit-definitions/copy-year', [SchoolKitController::class, 'copyYear']);
         Route::get('/schools/{school}/classrooms/{classroom}/posts', [ClassPostController::class, 'index']);
         Route::post('/schools/{school}/classrooms/{classroom}/posts', [ClassPostController::class, 'store']);
         Route::get('/schools/{school}/classrooms/{classroom}/discipline', [DisciplinaryCaseController::class, 'index']);
@@ -109,13 +107,18 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/classrooms/{classroom}/exams', [ExamSessionController::class, 'index']);
     });
 
+    Route::middleware('school.role:kits')->group(function (): void {
+        Route::get('/schools/{school}/kit-definitions', [SchoolKitController::class, 'index']);
+        Route::post('/schools/{school}/kit-definitions', [SchoolKitController::class, 'store']);
+        Route::post('/schools/{school}/kit-definitions/copy-year', [SchoolKitController::class, 'copyYear']);
+    });
+
     Route::middleware('school.role:teacher')->group(function (): void {
         Route::post('/schools/{school}/attendance', [AttendanceController::class, 'store']);
     });
 
     Route::middleware('school.role:direction')->group(function (): void {
         Route::post('/schools/{school}/years', [SchoolYearController::class, 'store']);
-        Route::get('/schools/{school}/grade-levels', [GradeLevelController::class, 'index']);
         Route::post('/schools/{school}/grade-levels', [GradeLevelController::class, 'store']);
         Route::post('/schools/{school}/grade-levels/packs', [GradeLevelController::class, 'applyPacks']);
         Route::post('/schools/{school}/classrooms', [ClassroomController::class, 'store']);
@@ -144,7 +147,6 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::get('/schools/{school}/people/{person}', [PeopleController::class, 'show']);
         Route::patch('/schools/{school}/people/{person}', [PeopleController::class, 'update']);
         Route::get('/schools/{school}/people/{person}/academic-history', AcademicHistoryController::class);
-        Route::get('/schools/{school}/enrollments', [EnrollmentController::class, 'index']);
         Route::post('/schools/{school}/enrollments', [EnrollmentController::class, 'store']);
         Route::post('/schools/{school}/enrollments/{enrollment}/assign-classroom', AssignClassroomController::class);
         Route::post('/schools/{school}/share-tokens/redeem', ShareTokenRedeemController::class);
@@ -154,10 +156,6 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
         Route::post('/schools/{school}/transfers/{transfer}/approve', [TransferController::class, 'approve']);
         Route::post('/schools/{school}/transfers/{transfer}/refuse', [TransferController::class, 'refuse']);
         Route::get('/schools/{school}/cockpit', CockpitController::class);
-        Route::get('/schools/{school}/collection/queue', [CollectionController::class, 'queue']);
-        Route::post('/schools/{school}/collection/tasks/{task}/relance', [CollectionController::class, 'relance']);
-        Route::post('/schools/{school}/collection/tasks/{task}/resolve', [CollectionController::class, 'resolve']);
-        Route::post('/schools/{school}/collection/tasks/{task}/dismiss', [CollectionController::class, 'dismiss']);
         Route::get('/schools/{school}/enrollments/{enrollment}/risk', [RiskAssessmentController::class, 'show']);
         Route::post('/schools/{school}/enrollments/{enrollment}/risk/override', [RiskAssessmentController::class, 'override']);
         Route::post('/schools/{school}/workflows/run', WorkflowRunController::class);
@@ -194,14 +192,22 @@ Route::middleware(['auth:sanctum', SetTenantContext::class])->group(function ():
     });
 
     Route::middleware('school.role:finance')->group(function (): void {
-        Route::post('/schools/{school}/enrollments/{enrollment}/invoices', [InvoiceController::class, 'store']);
+        Route::get('/schools/{school}/enrollments', [EnrollmentController::class, 'index']);
         Route::get('/schools/{school}/enrollments/{enrollment}/invoice', [InvoiceController::class, 'show']);
         Route::get('/schools/{school}/fee-schedules', [FeeScheduleController::class, 'index']);
         Route::get('/schools/{school}/fee-schedules/{schedule}', [FeeScheduleController::class, 'show']);
-        Route::post('/schools/{school}/payments', [PaymentController::class, 'store']);
         Route::get('/schools/{school}/payments/export', [PaymentController::class, 'export']);
         Route::get('/schools/{school}/expenses', [SchoolExpenseController::class, 'index']);
+        Route::get('/schools/{school}/collection/queue', [CollectionController::class, 'queue']);
+    });
+
+    Route::middleware('school.role:finance.write')->group(function (): void {
+        Route::post('/schools/{school}/enrollments/{enrollment}/invoices', [InvoiceController::class, 'store']);
+        Route::post('/schools/{school}/payments', [PaymentController::class, 'store']);
         Route::post('/schools/{school}/expenses', [SchoolExpenseController::class, 'store']);
+        Route::post('/schools/{school}/collection/tasks/{task}/relance', [CollectionController::class, 'relance']);
+        Route::post('/schools/{school}/collection/tasks/{task}/resolve', [CollectionController::class, 'resolve']);
+        Route::post('/schools/{school}/collection/tasks/{task}/dismiss', [CollectionController::class, 'dismiss']);
     });
 });
 

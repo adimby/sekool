@@ -1,3 +1,18 @@
+type SchoolCapabilities = {
+  accueil: boolean
+  famille: boolean
+  classe: boolean
+  finance: boolean
+  caisse: boolean
+  kits: boolean
+  indices: boolean
+  appel: boolean
+  vie: boolean
+  notes: boolean
+  titulaire: boolean
+  enseigne: boolean
+}
+
 type School = {
   id: string
   name: string
@@ -5,6 +20,8 @@ type School = {
   role: string
   roles?: string[]
   titulaire?: boolean
+  enseigne?: boolean
+  capabilities?: Partial<SchoolCapabilities>
 }
 
 export type Session = {
@@ -18,6 +35,7 @@ export type Session = {
   }
   schools: School[]
   is_parent: boolean
+  is_guardian?: boolean
   is_student?: boolean
   is_platform_admin?: boolean
   schoolId?: string
@@ -26,6 +44,21 @@ export type Session = {
 export type Workspace = 'platform' | 'direction' | 'teacher' | 'parent' | 'student'
 
 const KEY = 'fanabe.session'
+
+const EMPTY_CAPS: SchoolCapabilities = {
+  accueil: false,
+  famille: false,
+  classe: false,
+  finance: false,
+  caisse: false,
+  kits: false,
+  indices: false,
+  appel: false,
+  vie: false,
+  notes: false,
+  titulaire: false,
+  enseigne: false,
+}
 
 export function loadSession(): Session | null {
   const raw = sessionStorage.getItem(KEY)
@@ -51,13 +84,53 @@ export function schoolRoles(school: School): string[] {
   return school.roles?.length ? school.roles : school.role ? [school.role] : []
 }
 
+export function currentSchool(session: Session): School | undefined {
+  return session.schools.find((row) => row.id === session.schoolId) ?? session.schools[0]
+}
+
+function isOrgRole(role: string): boolean {
+  return role === 'school_owner' || role === 'school_admin' || role === 'principal'
+}
+
+export function schoolCapabilities(session: Session): SchoolCapabilities {
+  const school = currentSchool(session)
+  if (!school) {
+    return EMPTY_CAPS
+  }
+  if (school.capabilities) {
+    return { ...EMPTY_CAPS, ...school.capabilities }
+  }
+  const roles = schoolRoles(school)
+  const org = roles.some(isOrgRole)
+  const ownerAdmin = roles.some((role) => role === 'school_owner' || role === 'school_admin')
+  const accountant = roles.includes('accountant')
+  const teacher = roles.includes('teacher')
+  const titulaire = Boolean(school.titulaire)
+  const enseigne = Boolean(school.enseigne) || titulaire
+
+  return {
+    accueil: org,
+    famille: org,
+    classe: org,
+    finance: org || accountant,
+    caisse: ownerAdmin || accountant,
+    kits: org || accountant || titulaire,
+    indices: org,
+    appel: teacher,
+    vie: teacher && titulaire,
+    notes: teacher && enseigne && !titulaire,
+    titulaire,
+    enseigne,
+  }
+}
+
 export function workspacesOf(session: Session): Workspace[] {
   const roles = session.schools.flatMap(schoolRoles)
   const list: Workspace[] = []
   if (session.is_platform_admin) {
     list.push('platform')
   }
-  if (roles.some((role) => ['school_owner', 'school_admin', 'principal'].includes(role))) {
+  if (roles.some((role) => isOrgRole(role) || role === 'accountant')) {
     list.push('direction')
   }
   if (roles.includes('teacher')) {
@@ -70,6 +143,24 @@ export function workspacesOf(session: Session): Workspace[] {
     list.push('student')
   }
   return list
+}
+
+const WORKSPACE_LABEL: Record<Workspace, string> = {
+  platform: 'Plateforme',
+  direction: 'Direction',
+  teacher: 'Cours',
+  parent: 'Famille',
+  student: 'Élève',
+}
+
+export function workspaceLabel(session: Session, space: Workspace): string {
+  if (space === 'direction') {
+    const roles = schoolRoles(currentSchool(session) ?? { id: '', name: '', code: '', role: '' })
+    if (roles.includes('accountant') && !roles.some(isOrgRole)) {
+      return 'Caisse'
+    }
+  }
+  return WORKSPACE_LABEL[space]
 }
 
 export function defaultWorkspace(session: Session): Workspace {

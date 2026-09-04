@@ -33,6 +33,13 @@ final class SchoolGate
         SchoolRole::Accountant->value,
     ];
 
+    /** Record payments, expenses, invoices, collection actions — not the principal. */
+    public const FINANCE_WRITE = [
+        SchoolRole::Owner->value,
+        SchoolRole::Admin->value,
+        SchoolRole::Accountant->value,
+    ];
+
     public const TEACHER = [
         SchoolRole::Teacher->value,
     ];
@@ -42,6 +49,14 @@ final class SchoolGate
         SchoolRole::Admin->value,
         SchoolRole::Principal->value,
         SchoolRole::Teacher->value,
+    ];
+
+    public const KITS = [
+        SchoolRole::Owner->value,
+        SchoolRole::Admin->value,
+        SchoolRole::Principal->value,
+        SchoolRole::Teacher->value,
+        SchoolRole::Accountant->value,
     ];
 
     public const STAFF = [
@@ -91,8 +106,10 @@ final class SchoolGate
         $roles = match ($group) {
             'direction' => self::DIRECTION,
             'finance' => self::FINANCE,
+            'finance.write' => self::FINANCE_WRITE,
             'teacher' => self::TEACHER,
             'classroom' => self::CLASSROOM,
+            'kits' => self::KITS,
             'staff' => self::STAFF,
             default => [],
         };
@@ -194,6 +211,10 @@ final class SchoolGate
         }
 
         if (self::isTitulaireOf($request, $classroom)) {
+            return true;
+        }
+
+        if ($slot === null && self::teaches($request, $classroom)) {
             return true;
         }
 
@@ -309,18 +330,8 @@ final class SchoolGate
         if (self::isTeacher($request) && is_string($personId) && $personId !== '') {
             return $query->where(function (Builder $inner) use ($personId): void {
                 $inner->where('main_teacher_person_id', $personId)
-                    ->orWhere(function (Builder $assigned) use ($personId): void {
-                        $assigned->whereHas('teachers', fn (Builder $teachers) => $teachers->where('person_id', $personId))
-                            ->where(function (Builder $day) {
-                                $day->whereHas(
-                                    'gradeLevel',
-                                    fn (Builder $grade) => $grade->whereIn('stage', [
-                                        GradeStage::Preschool->value,
-                                        GradeStage::Primary->value,
-                                    ]),
-                                )->orWhereDoesntHave('timetableSlots');
-                            });
-                    });
+                    ->orWhereHas('teachers', fn (Builder $teachers) => $teachers->where('person_id', $personId))
+                    ->orWhereHas('timetableSlots', fn (Builder $slots) => $slots->where('teacher_person_id', $personId));
             });
         }
 

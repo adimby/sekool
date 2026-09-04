@@ -51,6 +51,11 @@ it('lets the Antsahabe maths teacher log in after bootstrap', function () {
     ])->assertOk()
         ->assertJsonPath('schools.0.role', 'teacher')
         ->assertJsonPath('schools.0.titulaire', false)
+        ->assertJsonPath('schools.0.enseigne', true)
+        ->assertJsonPath('schools.0.capabilities.appel', true)
+        ->assertJsonPath('schools.0.capabilities.vie', false)
+        ->assertJsonPath('schools.0.capabilities.notes', true)
+        ->assertJsonPath('schools.0.capabilities.kits', false)
         ->assertJsonPath('person.first_name', 'Haja');
 
     expect(Schema::hasTable('timetable_substitutions'))->toBeTrue()
@@ -75,6 +80,8 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
     ])->assertOk()
         ->assertJsonPath('schools.0.role', 'teacher')
         ->assertJsonPath('schools.0.titulaire', true)
+        ->assertJsonPath('schools.0.capabilities.vie', true)
+        ->assertJsonPath('schools.0.capabilities.notes', false)
         ->assertJsonPath('is_student', false);
 
     $schoolId = $teacher->json('schools.0.id');
@@ -172,7 +179,7 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
     $this->actingAs($mathsAccount, 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms")
         ->assertOk()
-        ->assertJsonPath('data', []);
+        ->assertJsonPath('data.0.name', '6ème A');
 
     $this->actingAs($mathsAccount, 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroomId}")
@@ -228,6 +235,18 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
             ]],
         ])
         ->assertForbidden();
+});
+
+it('lets the Antsahabe cashier log in after bootstrap', function () {
+    $this->artisan('demo:bootstrap')->assertSuccessful();
+
+    $this->loginJson('caisse.antsahabe@fanabe.test')
+        ->assertJsonPath('schools.0.role', 'accountant')
+        ->assertJsonPath('schools.0.capabilities.accueil', false)
+        ->assertJsonPath('schools.0.capabilities.finance', true)
+        ->assertJsonPath('schools.0.capabilities.caisse', true)
+        ->assertJsonPath('schools.0.capabilities.kits', true)
+        ->assertJsonPath('person.first_name', 'Rina');
 });
 
 it('lets Fanja open a read-only student space after bootstrap', function () {

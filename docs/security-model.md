@@ -158,7 +158,7 @@ Une réponse manquante à n'importe laquelle des quatre ⇒ refus.
 Deux points à souligner :
 
 - **`platform_admin` ne lit pas les dossiers d'élèves.** Il administre la plateforme : tenants, abonnements, incidents, fusions d'identité. L'annuaire (nom, ville, plan, statut, contacts de l'établissement) est visible ; **l'écolage, les factures, les paiements et les dossiers d'élèves ne le sont pas.** Un changement de statut ou de plan exige un motif, journalisé. Tout accès à un dossier réel est une opération exceptionnelle, motivée, journalisée et notifiée à l'établissement. Un administrateur qui peut tout lire est une faille permanente.
-- **Les menus suivent les droits.** Un onglet invisible n'est pas un écran vide : un enseignant qui n'est pas titulaire ne voit pas Vie scolaire ni Kits. Un rôle sans accès à une ressource ne la voit pas dans la navigation.
+- **Les menus suivent les droits.** Un onglet invisible n'est pas un écran vide. Owner / admin : Accueil, Familles, Classes, Finance, Caisse, Kits, Indices. Principal : les mêmes **sauf Caisse** (lecture des factures et barèmes, pas d'encaissement). Comptable : Finance, Caisse, Kits seulement — jamais les dossiers familles. Titulaire : Appel, Vie scolaire, Kits. Professeur de matière : Appel et Notes, pas le dossier de classe. Contact financier : Enfants et Kits, pas Messages ni bulletin. `staff` : aucun menu.
 - **Un parent ne voit jamais un score.** Ni le sien, ni un niveau de risque (§9.2, `A-04`). Le score sert à prioriser le travail de l'école, pas à qualifier une famille auprès d'elle-même.
 
 ### 4.3 Périmètre du parent

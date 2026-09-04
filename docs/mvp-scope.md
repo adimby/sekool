@@ -185,7 +185,7 @@ School Reliability (visible du seul établissement concerné), Relationship Heal
 
 **Vague H — Appel par cours (collège / lycée).** Les élèves restent en salle, les professeurs tournent. L’appel d’une classe `middle` / `high` qui a un EDT se fait par créneau (`timetable_slot_id`), par le professeur du cours ou le remplaçant du jour. Un enseignant de matière ne voit pas le dossier : **Mes cours** + **Démarrer**. Le **titulaire** a un tableau de bord **Vie scolaire** (effectif, EDT, notes, devoirs, historique de l’année), sans radiation ni écolage. Maternelle / primaire : appel du jour. Numéro d’élève. Un avis famille par jour d’absence. Pas de SMS.
 
-**Menus et super-admin.** Un onglet n’apparaît que si le rôle y a droit : Haja (Maths, non titulaire) voit **Appel** seulement. Le `platform_admin` crée des établissements et met à jour l’annuaire (statut / plan avec motif journalisé). Il **ne lit pas** l’écolage, les factures ni les dossiers d’élèves.
+**Menus et super-admin.** Un onglet n’apparaît que si le rôle y a droit : Haja (Maths, non titulaire) voit **Appel** et **Notes**. Le comptable voit **Finance / Caisse / Kits**, pas les familles. Le principal n’a pas **Caisse**. Le `platform_admin` crée des établissements et met à jour l’annuaire (statut / plan avec motif journalisé). Il **ne lit pas** l’écolage, les factures ni les dossiers d’élèves.
 
 ---
 
