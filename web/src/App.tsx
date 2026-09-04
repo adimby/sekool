@@ -600,6 +600,7 @@ export default function App() {
   }, [session?.token])
 
   useEffect(() => {
+    if (!session) return
     const allowed = teacherNavItems(session)
     if (allowed.length > 0 && !allowed.some((item) => item.id === teacherTab)) {
       setTeacherTab(allowed[0].id)
@@ -607,6 +608,7 @@ export default function App() {
   }, [session, teacherTab])
 
   useEffect(() => {
+    if (!session) return
     const allowed = directionNavItems(session)
     if (allowed.length > 0 && !allowed.some((item) => item.id === directionTab)) {
       setDirectionTab(allowed[0].id)
@@ -614,6 +616,7 @@ export default function App() {
   }, [session, directionTab])
 
   useEffect(() => {
+    if (!session) return
     const allowed = parentNavItems(session)
     if (allowed.length > 0 && !allowed.some((item) => item.id === parentTab)) {
       setParentTab(allowed[0].id)
