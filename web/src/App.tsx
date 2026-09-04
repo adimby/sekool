@@ -7,6 +7,8 @@ import {
   isTotpChallenge,
   loadSession,
   saveSession,
+  schoolCapabilities,
+  workspaceLabel,
   workspacesOf,
   type Session,
   type TotpChallenge,
@@ -67,6 +69,30 @@ type IdentityMergeRow = {
   decided_at?: string | null
   surviving: IdentityPersonRow | null
   duplicate: IdentityPersonRow | null
+}
+
+type PlatformSchoolAdmin = {
+  person_id: string
+  role: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+}
+
+type PlatformSchoolRow = {
+  id: string
+  name: string
+  short_name?: string | null
+  code: string
+  city?: string | null
+  region?: string | null
+  phone_e164?: string | null
+  email?: string | null
+  status: string
+  plan: string
+  created_at?: string | null
+  admins: PlatformSchoolAdmin[]
+  temporary_password?: string
 }
 
 type AttendanceRow = {
@@ -480,8 +506,9 @@ type ReliabilityOverview = {
 }
 
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
-type TeacherTab = 'appel' | 'vie' | 'kits'
+type TeacherTab = 'appel' | 'vie' | 'notes' | 'kits'
 type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
+type PlatformTab = 'ecoles' | 'fusions'
 
 const PAGE_SIZE = 40
 
@@ -498,7 +525,13 @@ const DIRECTION_NAV: Array<{ id: DirectionTab; label: string }> = [
 const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'appel', label: 'Appel' },
   { id: 'vie', label: 'Vie scolaire' },
+  { id: 'notes', label: 'Notes' },
   { id: 'kits', label: 'Kits' },
+]
+
+const PLATFORM_NAV: Array<{ id: PlatformTab; label: string }> = [
+  { id: 'ecoles', label: 'Écoles' },
+  { id: 'fusions', label: 'Fusions' },
 ]
 
 const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
@@ -508,12 +541,26 @@ const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
   { id: 'compte', label: 'Compte' },
 ]
 
-const WORKSPACE_LABEL: Record<Workspace, string> = {
-  platform: 'Plateforme',
-  direction: 'Direction',
-  teacher: 'Cours',
-  parent: 'Famille',
-  student: 'Élève',
+function directionNavItems(session: Session): Array<{ id: DirectionTab; label: string }> {
+  const caps = schoolCapabilities(session)
+  return DIRECTION_NAV.filter((item) => caps[item.id])
+}
+
+function teacherNavItems(session: Session): Array<{ id: TeacherTab; label: string }> {
+  const caps = schoolCapabilities(session)
+  return TEACHER_NAV.filter((item) => caps[item.id])
+}
+
+function parentNavItems(session: Session): Array<{ id: ParentTab; label: string }> {
+  return PARENT_NAV.filter((item) => {
+    if (item.id === 'messages') {
+      return session.is_guardian !== false
+    }
+    if (item.id === 'kits') {
+      return session.is_parent
+    }
+    return true
+  })
 }
 
 export default function App() {
@@ -525,6 +572,56 @@ export default function App() {
   const [directionTab, setDirectionTab] = useState<DirectionTab>('accueil')
   const [teacherTab, setTeacherTab] = useState<TeacherTab>('appel')
   const [parentTab, setParentTab] = useState<ParentTab>('enfants')
+  const [platformTab, setPlatformTab] = useState<PlatformTab>('ecoles')
+
+  useEffect(() => {
+    if (!session?.token) {
+      return
+    }
+    let cancelled = false
+    api<Session>('/api/v1/me', { token: session.token, schoolId: session.schoolId })
+      .then((me) => {
+        if (cancelled) {
+          return
+        }
+        setSession((current) => {
+          if (current === null) {
+            return current
+          }
+          const next = { ...current, ...me, token: current.token, schoolId: current.schoolId }
+          saveSession(next)
+          return next
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [session?.token])
+
+  useEffect(() => {
+    if (!session) return
+    const allowed = teacherNavItems(session)
+    if (allowed.length > 0 && !allowed.some((item) => item.id === teacherTab)) {
+      setTeacherTab(allowed[0].id)
+    }
+  }, [session, teacherTab])
+
+  useEffect(() => {
+    if (!session) return
+    const allowed = directionNavItems(session)
+    if (allowed.length > 0 && !allowed.some((item) => item.id === directionTab)) {
+      setDirectionTab(allowed[0].id)
+    }
+  }, [session, directionTab])
+
+  useEffect(() => {
+    if (!session) return
+    const allowed = parentNavItems(session)
+    if (allowed.length > 0 && !allowed.some((item) => item.id === parentTab)) {
+      setParentTab(allowed[0].id)
+    }
+  }, [session, parentTab])
 
   function signedIn(next: Session) {
     const schoolId = next.schoolId ?? next.schools[0]?.id
@@ -564,12 +661,12 @@ export default function App() {
                   className={chromeTab(workspace === space)}
                   onClick={() => setWorkspace(space)}
                 >
-                  {WORKSPACE_LABEL[space]}
+                  {workspaceLabel(session, space)}
                 </button>
               ))}
             </nav>
           ) : (
-            <span className="text-xs font-medium text-white/70">{WORKSPACE_LABEL[workspace]}</span>
+            <span className="text-xs font-medium text-white/70">{workspaceLabel(session, workspace)}</span>
           )}
           <div className="ml-auto flex min-w-0 items-center gap-2">
             {session.schools.length > 1 && (workspace === 'direction' || workspace === 'teacher') ? (
@@ -595,7 +692,7 @@ export default function App() {
         </div>
         {workspace === 'direction' ? (
           <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Direction">
-            {DIRECTION_NAV.map((item) => (
+            {directionNavItems(session).map((item) => (
               <button key={item.id} type="button" className={chromeTab(directionTab === item.id)} onClick={() => setDirectionTab(item.id)}>
                 {item.label}
               </button>
@@ -604,8 +701,17 @@ export default function App() {
         ) : null}
         {workspace === 'teacher' ? (
           <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Cours">
-            {TEACHER_NAV.map((item) => (
+            {teacherNavItems(session).map((item) => (
               <button key={item.id} type="button" className={chromeTab(teacherTab === item.id)} onClick={() => setTeacherTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        {workspace === 'platform' ? (
+          <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Plateforme">
+            {PLATFORM_NAV.map((item) => (
+              <button key={item.id} type="button" className={chromeTab(platformTab === item.id)} onClick={() => setPlatformTab(item.id)}>
                 {item.label}
               </button>
             ))}
@@ -613,7 +719,7 @@ export default function App() {
         ) : null}
         {workspace === 'parent' ? (
           <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Famille">
-            {PARENT_NAV.map((item) => (
+            {parentNavItems(session).map((item) => (
               <button key={item.id} type="button" className={chromeTab(parentTab === item.id)} onClick={() => setParentTab(item.id)}>
                 {item.label}
               </button>
@@ -628,7 +734,7 @@ export default function App() {
       ) : workspace === 'student' ? (
         <StudentScreen session={session} />
       ) : workspace === 'platform' ? (
-        <PlatformScreen session={session} />
+        <PlatformScreen session={session} tab={platformTab} />
       ) : (
         <ParentScreen session={session} tab={parentTab} />
       )}
@@ -921,7 +1027,7 @@ function attendanceDetail(row: {
 }
 
 function Banner({ message, onClear }: { message: string; onClear: () => void }) {
-  const error = /impossible|invalide|erreur|appartient pas|server error/i.test(message)
+  const error = /impossible|invalide|erreur|appartient pas|server error|obligatoire pour changer/i.test(message)
   return (
     <p
       role="status"
@@ -1185,6 +1291,7 @@ function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => void }) {
     { label: 'Direction', email: 'direction.antsahabe@fanabe.test' },
     { label: 'Titulaire', email: 'teacher.antsahabe@fanabe.test' },
     { label: 'Maths', email: 'teacher.maths.antsahabe@fanabe.test' },
+    { label: 'Caisse', email: 'caisse.antsahabe@fanabe.test' },
     { label: 'Parent', email: 'parent.andry@fanabe.test' },
     { label: 'Élève', email: 'eleve.fanja@fanabe.test' },
   ]
@@ -1886,6 +1993,7 @@ function FeeSettingsPanel({
   onBusy,
   onMessage,
   onRefresh,
+  canWrite = true,
 }: {
   schoolId: string
   auth: { token: string }
@@ -1897,6 +2005,7 @@ function FeeSettingsPanel({
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
   onRefresh: () => Promise<void>
+  canWrite?: boolean
 }) {
   const [yearId, setYearId] = useState(currentYearId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -1915,6 +2024,7 @@ function FeeSettingsPanel({
   const selected = yearSchedules.find((row) => row.id === selectedId) ?? null
   const previousYears = years.filter((row) => row.id !== (year?.id ?? yearId))
   const locked = Boolean(selected?.locked)
+  const fieldsLocked = locked || !canWrite
 
   useEffect(() => {
     if (currentYearId && (yearId === '' || !years.some((row) => row.id === yearId))) {
@@ -2011,10 +2121,14 @@ function FeeSettingsPanel({
           ))}
         </ul>
         {yearSchedules.length === 0 ? <p className="mt-3 text-xs text-neutral-500">Aucun barème pour {year?.label}.</p> : null}
-        <button type="button" className={`${btnGhost} mt-3 w-full`} onClick={startCreate} disabled={busy}>
-          Nouveau barème
-        </button>
-        {previousYears.length > 0 ? (
+        {canWrite ? (
+          <button type="button" className={`${btnGhost} mt-3 w-full`} onClick={startCreate} disabled={busy}>
+            Nouveau barème
+          </button>
+        ) : (
+          <p className="mt-3 text-xs text-neutral-500">Lecture — la direction paramètre les barèmes.</p>
+        )}
+        {canWrite && previousYears.length > 0 ? (
           <div className="mt-4 space-y-2 border-t border-black/5 pt-3">
             <p className="text-xs font-medium text-neutral-600">Reprendre une année</p>
             <select className={inputClass} value={sourceYearId} onChange={(e) => setSourceYearId(e.target.value)}>
@@ -2093,10 +2207,10 @@ function FeeSettingsPanel({
             ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <Field label="Libellé">
-                <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} disabled={locked} />
+                <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} disabled={fieldsLocked} />
               </Field>
               <Field label="Niveau">
-                <select className={inputClass} value={gradeId} onChange={(e) => setGradeId(e.target.value)} disabled={locked}>
+                <select className={inputClass} value={gradeId} onChange={(e) => setGradeId(e.target.value)} disabled={fieldsLocked}>
                   <option value="">Toute l’école</option>
                   {grades.map((grade) => (
                     <option key={grade.id} value={grade.id}>
@@ -2124,7 +2238,7 @@ function FeeSettingsPanel({
                         <select
                           className={inputClass}
                           value={item.category}
-                          disabled={locked}
+                          disabled={fieldsLocked}
                           onChange={(e) =>
                             setItems((prev) => prev.map((row, i) => (i === index ? { ...row, category: e.target.value } : row)))
                           }
@@ -2140,7 +2254,7 @@ function FeeSettingsPanel({
                         <input
                           className={inputClass}
                           value={item.label}
-                          disabled={locked}
+                          disabled={fieldsLocked}
                           onChange={(e) =>
                             setItems((prev) => prev.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
                           }
@@ -2153,7 +2267,7 @@ function FeeSettingsPanel({
                           min={1}
                           step={1}
                           value={item.amount}
-                          disabled={locked}
+                          disabled={fieldsLocked}
                           onChange={(e) =>
                             setItems((prev) => prev.map((row, i) => (i === index ? { ...row, amount: e.target.value } : row)))
                           }
@@ -2164,7 +2278,7 @@ function FeeSettingsPanel({
                           className={inputClass}
                           type="date"
                           value={item.due_on}
-                          disabled={locked}
+                          disabled={fieldsLocked}
                           onChange={(e) =>
                             setItems((prev) => prev.map((row, i) => (i === index ? { ...row, due_on: e.target.value } : row)))
                           }
@@ -2174,7 +2288,7 @@ function FeeSettingsPanel({
                         <button
                           type="button"
                           className={btnGhost}
-                          disabled={locked || items.length <= 1}
+                          disabled={fieldsLocked || items.length <= 1}
                           onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
                         >
                           Retirer
@@ -2185,7 +2299,7 @@ function FeeSettingsPanel({
                 </tbody>
               </table>
             </div>
-            {!locked ? (
+            {canWrite && !locked ? (
               <button
                 type="button"
                 className={`${btnGhost} mt-2`}
@@ -2196,7 +2310,7 @@ function FeeSettingsPanel({
                 Ajouter une ligne
               </button>
             ) : null}
-            {!locked && selected && !creating ? (
+            {canWrite && !locked && selected && !creating ? (
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <Field label="Ajuster toutes les lignes">
                   <select className={inputClass} value={lineAdjustType} onChange={(e) => setLineAdjustType(e.target.value as typeof lineAdjustType)}>
@@ -2227,6 +2341,7 @@ function FeeSettingsPanel({
                 </button>
               </div>
             ) : null}
+            {canWrite ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {!locked ? (
                 <button
@@ -2308,7 +2423,8 @@ function FeeSettingsPanel({
                 </>
               ) : null}
             </div>
-            {locked ? (
+            ) : null}
+            {canWrite && locked ? (
               <form
                 className="mt-4 space-y-2 border-t border-black/5 pt-3"
                 onSubmit={(event) => {
@@ -3916,6 +4032,7 @@ function ExpensesPanel({
   busy,
   onBusy,
   onMessage,
+  canWrite = true,
 }: {
   schoolId: string
   auth: { token: string }
@@ -3924,6 +4041,7 @@ function ExpensesPanel({
   busy: boolean
   onBusy: (value: boolean) => void
   onMessage: (value: string | null) => void
+  canWrite?: boolean
 }) {
   const [yearId, setYearId] = useState(currentYearId)
   const [rows, setRows] = useState<ExpenseRow[]>([])
@@ -4005,6 +4123,7 @@ function ExpensesPanel({
         <p className="text-[11px] text-neutral-500">{rows.length} ligne(s)</p>
       </Panel>
       <Panel className="min-w-0 p-3">
+        {canWrite ? (
         <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="purchase">Achat</option>
@@ -4036,6 +4155,9 @@ function ExpensesPanel({
             Enregistrer
           </button>
         </form>
+        ) : (
+          <p className="text-xs text-neutral-500">Lecture — l’enregistrement des achats est réservé à la caisse.</p>
+        )}
         <table className="mt-3 w-full text-sm">
           <thead className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wide text-neutral-500">
             <tr>
@@ -4368,20 +4490,135 @@ function KitsPanel({
   )
 }
 
-function PlatformScreen({ session }: { session: Session }) {
+function PlatformScreen({ session, tab }: { session: Session; tab: PlatformTab }) {
+  const [schools, setSchools] = useState<PlatformSchoolRow[]>([])
   const [rows, setRows] = useState<IdentityMergeRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [plan, setPlan] = useState('starter')
+  const [status, setStatus] = useState('active')
+  const [reason, setReason] = useState('')
+  const [city, setCity] = useState('')
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    city: '',
+    region: 'Analamanga',
+    plan: 'starter',
+    admin_first_name: '',
+    admin_last_name: '',
+    admin_email: '',
+    admin_password: '',
+  })
   const auth = useMemo(() => ({ token: session.token }), [session.token])
 
-  async function load() {
+  async function loadSchools() {
+    const payload = await api<{ data: PlatformSchoolRow[] }>('/api/v1/platform/schools', auth)
+    setSchools(payload.data)
+  }
+
+  async function loadMerges() {
     const payload = await api<{ data: IdentityMergeRow[] }>('/api/v1/platform/identity-merges', auth)
     setRows(payload.data)
   }
 
   useEffect(() => {
-    load().catch((error: Error) => setMessage(error.message))
-  }, [auth.token])
+    if (tab === 'ecoles') {
+      loadSchools().catch((error: Error) => setMessage(error.message))
+    } else {
+      loadMerges().catch((error: Error) => setMessage(error.message))
+    }
+  }, [auth.token, tab])
+
+  async function createSchool(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      const admin =
+        form.admin_first_name && form.admin_last_name && form.admin_email
+          ? {
+              first_name: form.admin_first_name,
+              last_name: form.admin_last_name,
+              email: form.admin_email,
+              ...(form.admin_password ? { password: form.admin_password } : {}),
+            }
+          : undefined
+      const payload = await api<{ data: PlatformSchoolRow }>('/api/v1/platform/schools', {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name,
+          code: form.code || undefined,
+          city: form.city || undefined,
+          region: form.region || undefined,
+          plan: form.plan,
+          ...(admin ? { admin } : {}),
+        }),
+      })
+      const created = payload.data
+      setMessage(
+        created.temporary_password
+          ? `École créée. Mot de passe temporaire de la direction : ${created.temporary_password}`
+          : 'École créée. L’écolage et les dossiers restent invisibles à la plateforme.',
+      )
+      setForm({
+        name: '',
+        code: '',
+        city: '',
+        region: 'Analamanga',
+        plan: 'starter',
+        admin_first_name: '',
+        admin_last_name: '',
+        admin_email: '',
+        admin_password: '',
+      })
+      await loadSchools()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Création impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openEdit(school: PlatformSchoolRow) {
+    setEditingId(school.id)
+    setPlan(school.plan)
+    setStatus(school.status)
+    setCity(school.city ?? '')
+    setReason('')
+  }
+
+  async function saveSchool(event: FormEvent) {
+    event.preventDefault()
+    if (!editingId) {
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const current = schools.find((row) => row.id === editingId)
+      const body: Record<string, string> = { city }
+      if (current && (plan !== current.plan || status !== current.status)) {
+        body.plan = plan
+        body.status = status
+        body.reason = reason
+      }
+      await api(`/api/v1/platform/schools/${editingId}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      setMessage('Annuaire mis à jour. Aucune donnée d’écolage n’a été lue.')
+      setEditingId(null)
+      await loadSchools()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mise à jour impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function decide(id: string, action: 'approve' | 'refuse' | 'undo') {
     setBusy(true)
@@ -4391,7 +4628,7 @@ function PlatformScreen({ session }: { session: Session }) {
       setMessage(
         action === 'approve' ? 'Identités fusionnées. Les deux identifiants restent résolvables.' : action === 'refuse' ? 'Demande refusée.' : 'Fusion défaite.',
       )
-      await load()
+      await loadMerges()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Décision impossible.')
     } finally {
@@ -4403,45 +4640,160 @@ function PlatformScreen({ session }: { session: Session }) {
     <main className="mx-auto max-w-3xl space-y-3 px-3 py-4">
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
       <Panel className="p-3">
-        <h1 className="text-sm font-semibold">Fusions d’identité</h1>
-        <p className="mt-1 text-xs text-neutral-600">
-          Réservé à la plateforme, sur demande motivée d’un établissement. Réversible. Les deux identifiants publics restent
-          valides. Aucun dossier scolaire n’est affiché ici.
+        <p className="text-xs leading-relaxed text-neutral-700">
+          FANABE administre les établissements (création, annuaire, abonnement).{' '}
+          <strong>La plateforme ne voit pas l’écolage, les factures, les paiements ni les dossiers d’élèves.</strong> Un
+          changement de statut ou de plan exige un motif, journalisé.
         </p>
       </Panel>
-      <Panel>
-        {rows.length === 0 ? (
-          <p className="px-3 py-4 text-sm text-neutral-600">Aucune demande.</p>
-        ) : (
-          <ul className="divide-y divide-black/5">
-            {rows.map((row) => (
-              <li key={row.id} className="px-3 py-3 text-sm">
-                <p className="font-medium">{mergeStatusLabel(row.status)}</p>
-                <p className="mt-1 text-xs text-neutral-600">Conserver {personPublicLabel(row.surviving)}</p>
-                <p className="text-xs text-neutral-600">Alias {personPublicLabel(row.duplicate)}</p>
-                <p className="mt-1 text-xs text-neutral-500">{row.reason}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {row.status === 'requested' ? (
-                    <>
-                      <button type="button" className={btnPrimary} disabled={busy} onClick={() => void decide(row.id, 'approve')}>
-                        Fusionner
+      {tab === 'ecoles' ? (
+        <>
+          <Panel className="p-3">
+            <h1 className="text-sm font-semibold">Nouvel établissement</h1>
+            <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(event) => void createSchool(event)}>
+              <Field label="Nom">
+                <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </Field>
+              <Field label="Code (optionnel)">
+                <input className={inputClass} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+              </Field>
+              <Field label="Ville">
+                <input className={inputClass} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              </Field>
+              <Field label="Région">
+                <input className={inputClass} value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} />
+              </Field>
+              <Field label="Plan">
+                <select className={inputClass} value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}>
+                  <option value="starter">Starter</option>
+                  <option value="plus">Plus</option>
+                </select>
+              </Field>
+              <div className="sm:col-span-2 mt-1 text-[11px] font-medium text-neutral-500">Direction (premier compte)</div>
+              <Field label="Prénom">
+                <input className={inputClass} value={form.admin_first_name} onChange={(e) => setForm({ ...form, admin_first_name: e.target.value })} />
+              </Field>
+              <Field label="Nom">
+                <input className={inputClass} value={form.admin_last_name} onChange={(e) => setForm({ ...form, admin_last_name: e.target.value })} />
+              </Field>
+              <Field label="Email">
+                <input className={inputClass} type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} />
+              </Field>
+              <Field label="Mot de passe (laissé vide = temporaire)">
+                <input className={inputClass} type="password" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} />
+              </Field>
+              <div className="sm:col-span-2">
+                <button type="submit" className={btnPrimary} disabled={busy || form.name.trim() === ''}>
+                  Créer l’école
+                </button>
+              </div>
+            </form>
+          </Panel>
+          <Panel>
+            {schools.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-neutral-600">Aucun établissement.</p>
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {schools.map((school) => (
+                  <li key={school.id} className="px-3 py-3 text-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{school.name}</p>
+                        <p className="text-xs text-neutral-500">
+                          {school.code} · {school.city ?? 'ville non renseignée'} · {school.plan} · {school.status}
+                        </p>
+                        {school.admins.length > 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">
+                            Direction : {school.admins.map((admin) => admin.email ?? `${admin.first_name} ${admin.last_name}`).join(', ')}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-neutral-500">Pas encore de compte direction.</p>
+                        )}
+                      </div>
+                      <button type="button" className={btnGhost} onClick={() => openEdit(school)}>
+                        Modifier
                       </button>
-                      <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'refuse')}>
-                        Refuser
-                      </button>
-                    </>
-                  ) : null}
-                  {row.status === 'merged' ? (
-                    <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'undo')}>
-                      Défaire
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+                    </div>
+                    {editingId === school.id ? (
+                      <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(event) => void saveSchool(event)}>
+                        <Field label="Ville">
+                          <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} />
+                        </Field>
+                        <Field label="Plan">
+                          <select className={inputClass} value={plan} onChange={(e) => setPlan(e.target.value)}>
+                            <option value="starter">Starter</option>
+                            <option value="plus">Plus</option>
+                          </select>
+                        </Field>
+                        <Field label="Statut">
+                          <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+                            <option value="active">Actif</option>
+                            <option value="suspended">Suspendu</option>
+                          </select>
+                        </Field>
+                        <Field label="Motif (obligatoire si plan ou statut change)">
+                          <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
+                        </Field>
+                        <div className="sm:col-span-2 flex gap-2">
+                          <button type="submit" className={btnPrimary} disabled={busy}>
+                            Enregistrer
+                          </button>
+                          <button type="button" className={btnGhost} onClick={() => setEditingId(null)}>
+                            Annuler
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      ) : (
+        <>
+          <Panel className="p-3">
+            <h1 className="text-sm font-semibold">Fusions d’identité</h1>
+            <p className="mt-1 text-xs text-neutral-600">
+              Réservé à la plateforme, sur demande motivée d’un établissement. Réversible. Les deux identifiants publics restent
+              valides. Aucun dossier scolaire n’est affiché ici.
+            </p>
+          </Panel>
+          <Panel>
+            {rows.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-neutral-600">Aucune demande.</p>
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {rows.map((row) => (
+                  <li key={row.id} className="px-3 py-3 text-sm">
+                    <p className="font-medium">{mergeStatusLabel(row.status)}</p>
+                    <p className="mt-1 text-xs text-neutral-600">Conserver {personPublicLabel(row.surviving)}</p>
+                    <p className="text-xs text-neutral-600">Alias {personPublicLabel(row.duplicate)}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{row.reason}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {row.status === 'requested' ? (
+                        <>
+                          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void decide(row.id, 'approve')}>
+                            Fusionner
+                          </button>
+                          <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'refuse')}>
+                            Refuser
+                          </button>
+                        </>
+                      ) : null}
+                      {row.status === 'merged' ? (
+                        <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'undo')}>
+                          Défaire
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      )}
     </main>
   )
 }
@@ -4456,6 +4808,7 @@ function DirectionScreen({
   onTab: (tab: DirectionTab) => void
 }) {
   const schoolId = session.schoolId ?? session.schools[0].id
+  const caps = schoolCapabilities(session)
   const [people, setPeople] = useState<PersonRow[]>([])
   const [yearId, setYearId] = useState('')
   const [yearLabel, setYearLabel] = useState('2026-2027')
@@ -4527,11 +4880,19 @@ function DirectionScreen({
     setYears(yearsPayload.data)
     setYearId(current?.id ?? '')
     setYearLabel(current?.label ?? '2026-2027')
+    const needsClasses = caps.classe || caps.caisse || caps.kits
+    const needsGrades = caps.classe || caps.finance || caps.kits
     const [classList, gradeList, today, staffList, networkPayload] = await Promise.all([
-      api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth),
-      api<{ data: GradeRow[] }>(`/api/v1/schools/${schoolId}/grade-levels`, auth),
-      api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth),
-      api<{ data: PersonMini[] }>(`/api/v1/schools/${schoolId}/staff`, auth),
+      needsClasses
+        ? api<{ data: ClassroomRow[] }>(`/api/v1/schools/${schoolId}/classrooms`, auth)
+        : Promise.resolve({ data: [] as ClassroomRow[] }),
+      needsGrades
+        ? api<{ data: GradeRow[] }>(`/api/v1/schools/${schoolId}/grade-levels`, auth)
+        : Promise.resolve({ data: [] as GradeRow[] }),
+      caps.accueil ? api<Cockpit>(`/api/v1/schools/${schoolId}/cockpit`, auth) : Promise.resolve(null),
+      caps.classe
+        ? api<{ data: PersonMini[] }>(`/api/v1/schools/${schoolId}/staff`, auth)
+        : Promise.resolve({ data: [] as PersonMini[] }),
       api<{ data: SchoolNetwork | null }>(`/api/v1/schools/${schoolId}/network`, auth).catch(() => ({ data: null })),
     ])
     setClassrooms(classList.data)
@@ -4638,7 +4999,7 @@ function DirectionScreen({
   }, [schoolId, session.token])
 
   useEffect(() => {
-    if (tab === 'accueil' || tab === 'famille') {
+    if ((tab === 'accueil' || tab === 'famille') && caps.famille) {
       Promise.all([
         loadPeople(),
         loadFamilies(),
@@ -4647,19 +5008,19 @@ function DirectionScreen({
         tab === 'accueil' ? loadOutbox() : Promise.resolve(),
       ]).catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'classe') {
+    if (tab === 'classe' && caps.classe) {
       Promise.all([loadEnrollments(), loadTerms()]).catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'caisse') {
+    if (tab === 'caisse' && caps.caisse) {
       loadEnrollments().catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'finance') {
+    if (tab === 'finance' && caps.finance) {
       loadFeeSchedules().catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'indices') {
+    if (tab === 'indices' && caps.indices) {
       loadReliability().catch((error: Error) => setMessage(error.message))
     }
-    if (tab === 'kits') {
+    if (tab === 'kits' && caps.kits) {
       loadEnrollments().catch((error: Error) => setMessage(error.message))
     }
     setQuery('')
@@ -5212,23 +5573,29 @@ function DirectionScreen({
             )}
           </Panel>
           <div className="flex flex-wrap gap-2 text-xs">
-            <button
-              type="button"
-              className={btnGhost}
-              onClick={() => {
-                onTab('famille')
-                setEnrollOpen(true)
-                loadFamilies().catch((error: Error) => setMessage(error.message))
-              }}
-            >
-              Inscrire un élève
-            </button>
-            <button type="button" className={btnGhost} onClick={() => onTab('classe')}>
-              Classes
-            </button>
-            <button type="button" className={btnGhost} onClick={() => onTab('caisse')}>
-              Enregistrer un paiement
-            </button>
+            {caps.famille ? (
+              <button
+                type="button"
+                className={btnGhost}
+                onClick={() => {
+                  onTab('famille')
+                  setEnrollOpen(true)
+                  loadFamilies().catch((error: Error) => setMessage(error.message))
+                }}
+              >
+                Inscrire un élève
+              </button>
+            ) : null}
+            {caps.classe ? (
+              <button type="button" className={btnGhost} onClick={() => onTab('classe')}>
+                Classes
+              </button>
+            ) : null}
+            {caps.caisse ? (
+              <button type="button" className={btnGhost} onClick={() => onTab('caisse')}>
+                Enregistrer un paiement
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -5658,6 +6025,7 @@ function DirectionScreen({
               busy={busy}
               onBusy={setBusy}
               onMessage={setMessage}
+              canWrite={caps.classe}
               onRefresh={async () => {
                 await Promise.all([loadFeeSchedules(), loadCore()])
               }}
@@ -5671,6 +6039,7 @@ function DirectionScreen({
               busy={busy}
               onBusy={setBusy}
               onMessage={setMessage}
+              canWrite={caps.caisse}
             />
           )}
         </div>
@@ -5787,16 +6156,17 @@ function DirectionScreen({
       ) : null}
 
       {tab === 'kits' ? (
-        <KitsPanel
-          schoolId={schoolId}
-          auth={auth}
-          yearId={yearId}
-          years={years}
-          grades={grades}
-          busy={busy}
-          onBusy={setBusy}
-          onMessage={setMessage}
-        />
+          <KitsPanel
+            schoolId={schoolId}
+            auth={auth}
+            yearId={yearId}
+            years={years}
+            grades={grades}
+            busy={busy}
+            onBusy={setBusy}
+            onMessage={setMessage}
+            canManageOrders={caps.classe}
+          />
       ) : null}
 
       {tab === 'indices' ? (
@@ -5952,6 +6322,215 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint: strin
       <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{label}</p>
       <p className="text-lg font-semibold leading-tight">{value}</p>
       <p className="text-[11px] text-neutral-500">{hint}</p>
+    </div>
+  )
+}
+
+function GradeBookPanel({
+  schoolId,
+  auth,
+  classroom,
+  busy,
+  onBusy,
+  onMessage,
+}: {
+  schoolId: string
+  auth: { token: string }
+  classroom: ClassroomRow
+  busy: boolean
+  onBusy: (value: boolean) => void
+  onMessage: (value: string | null) => void
+}) {
+  const classroomId = classroom.id
+  const [students, setStudents] = useState<ClassStudentRow[]>([])
+  const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([])
+  const [grades, setGrades] = useState<Array<{ id: string; enrollment_id: string; subject: string | null; value: number; assessed_on: string | null }>>([])
+  const [gradeStudent, setGradeStudent] = useState('')
+  const [gradeSubject, setGradeSubject] = useState('')
+  const [gradeValue, setGradeValue] = useState('12')
+  const [gradeDate, setGradeDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [newSubject, setNewSubject] = useState('')
+  const [bulletin, setBulletin] = useState<BulletinRow | null>(null)
+  const [overallComment, setOverallComment] = useState('')
+  const [gradeTick, setGradeTick] = useState(0)
+  const enabled = showsGrades(classroom.grade_level?.stage)
+
+  useEffect(() => {
+    if (!enabled) {
+      setStudents([])
+      setGrades([])
+      setSubjects([])
+      return
+    }
+    Promise.all([
+      api<{ data: { students: ClassStudentRow[] } }>(`/api/v1/schools/${schoolId}/classrooms/${classroomId}/roster`, auth),
+      api<{ data: Array<{ id: string; name: string }> }>(`/api/v1/schools/${schoolId}/subjects`, auth),
+      api<{ data: Array<{ id: string; enrollment_id: string; subject: string | null; value: number; assessed_on: string | null }> }>(
+        `/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`,
+        auth,
+      ),
+    ])
+      .then(([roster, subjectList, gradeList]) => {
+        setStudents(roster.data.students)
+        setSubjects(subjectList.data)
+        setGrades(gradeList.data)
+        setGradeSubject((prev) => prev || subjectList.data[0]?.id || '')
+        setGradeStudent((prev) => prev || roster.data.students[0]?.enrollment_id || '')
+      })
+      .catch((error: Error) => onMessage(error.message))
+  }, [enabled, classroomId, schoolId, auth.token, gradeTick])
+
+  useEffect(() => {
+    if (!enabled || !gradeStudent) {
+      setBulletin(null)
+      return
+    }
+    api<{ data: BulletinRow }>(`/api/v1/schools/${schoolId}/enrollments/${gradeStudent}/bulletin`, auth)
+      .then((payload) => {
+        setBulletin(payload.data)
+        setOverallComment(payload.data.overall_comment ?? '')
+      })
+      .catch(() => setBulletin(null))
+  }, [enabled, gradeStudent, schoolId, auth.token, gradeTick])
+
+  async function run(action: () => Promise<void>, ok?: string) {
+    onBusy(true)
+    onMessage(null)
+    try {
+      await action()
+      setGradeTick((n) => n + 1)
+      if (ok) onMessage(ok)
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Action impossible.')
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  if (!enabled) {
+    return (
+      <p className="px-3 py-6 text-sm text-neutral-600">
+        Pas de notes pour ce niveau. Le livret de compétences se gère dans Vie scolaire, réservé au titulaire.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3 px-3 py-3">
+      <p className="text-xs text-neutral-500">
+        Carnet de notes de vos classes. Le dossier complet (devoirs, discipline, EDT) reste au titulaire.
+      </p>
+      {grades.length === 0 ? <p className="text-xs text-neutral-500">Aucune note pour cette classe.</p> : null}
+      <ul className="space-y-1 text-sm">
+        {grades.map((row) => {
+          const student = students.find((item) => item.enrollment_id === row.enrollment_id)
+          return (
+            <li key={row.id} className="flex justify-between gap-2 border-t border-black/5 pt-1.5 first:border-t-0 first:pt-0">
+              <span>
+                {student?.person ? personLabel(student.person) : 'Élève'}
+                <span className="ml-2 text-xs text-neutral-500">{row.subject}</span>
+              </span>
+              <span className="tabular-nums">
+                {row.value}
+                <span className="ml-2 text-xs text-neutral-500">{row.assessed_on ? formatDate(row.assessed_on) : ''}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <form
+        className="flex gap-1"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const name = newSubject.trim()
+          if (!name) return
+          void run(async () => {
+            const created = await api<{ data: { id: string; name: string } }>(`/api/v1/schools/${schoolId}/subjects`, {
+              ...auth,
+              method: 'POST',
+              body: JSON.stringify({ name }),
+            })
+            setNewSubject('')
+            setGradeSubject(created.data.id)
+          }, 'Matière ajoutée.')
+        }}
+      >
+        <input className={inputClass} value={newSubject} onChange={(e) => setNewSubject(e.target.value)} placeholder="Nouvelle matière" />
+        <button type="submit" className={btnGhost} disabled={busy || newSubject.trim() === ''}>
+          Ajouter
+        </button>
+      </form>
+      <form
+        className="grid gap-2 sm:grid-cols-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void run(async () => {
+            await api(`/api/v1/schools/${schoolId}/classrooms/${classroomId}/grades`, {
+              ...auth,
+              method: 'POST',
+              body: JSON.stringify({
+                enrollment_id: gradeStudent,
+                subject_id: gradeSubject,
+                value: Number(gradeValue),
+                assessed_on: gradeDate,
+              }),
+            })
+          }, 'Note enregistrée.')
+        }}
+      >
+        <select className={inputClass} value={gradeStudent} onChange={(e) => setGradeStudent(e.target.value)} required>
+          {students.map((row) => (
+            <option key={row.enrollment_id} value={row.enrollment_id}>
+              {row.person ? personLabel(row.person) : row.enrollment_id}
+            </option>
+          ))}
+        </select>
+        <select className={inputClass} value={gradeSubject} onChange={(e) => setGradeSubject(e.target.value)} required>
+          {subjects.length === 0 ? <option value="">Aucune matière</option> : null}
+          {subjects.map((subject) => (
+            <option key={subject.id} value={subject.id}>
+              {subject.name}
+            </option>
+          ))}
+        </select>
+        <input className={inputClass} type="number" min={0} step="0.5" value={gradeValue} onChange={(e) => setGradeValue(e.target.value)} required />
+        <input className={inputClass} type="date" value={gradeDate} onChange={(e) => setGradeDate(e.target.value)} required />
+        <button type="submit" className={`${btnGhost} sm:col-span-4`} disabled={busy || !gradeStudent || !gradeSubject}>
+          Enregistrer la note
+        </button>
+      </form>
+      {gradeStudent && bulletin ? (
+        <div className="border-t border-black/5 pt-3">
+          <p className="text-xs text-neutral-500">{bulletin.disclaimer ?? 'Ce relevé est un document FANABE. Ce n’est pas un LSU.'}</p>
+          {bulletin.overall_average != null ? (
+            <p className="mt-1 text-sm font-medium">Moyenne {bulletin.overall_average}</p>
+          ) : null}
+          <form
+            className="mt-2 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(async () => {
+                await api(`/api/v1/schools/${schoolId}/enrollments/${gradeStudent}/bulletin/comments`, {
+                  ...auth,
+                  method: 'POST',
+                  body: JSON.stringify({ body: overallComment.trim() }),
+                })
+              }, 'Appréciation enregistrée.')
+            }}
+          >
+            <textarea
+              className={inputClass}
+              rows={3}
+              value={overallComment}
+              onChange={(e) => setOverallComment(e.target.value)}
+              placeholder="Appréciation (sans score, sans « élève en difficulté »)"
+            />
+            <button type="submit" className={btnGhost} disabled={busy || overallComment.trim() === ''}>
+              Enregistrer l’appréciation
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -6427,17 +7006,54 @@ function TeacherScreen({ session, tab }: { session: Session; tab: TeacherTab }) 
         </div>
       ) : null}
 
-      {tab === 'kits' && classrooms.length === 0 ? (
+      {tab === 'notes' && classrooms.length === 0 ? (
+        <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">
+          Aucune classe à noter. L’emploi du temps doit vous assigner un cours.
+        </p>
+      ) : null}
+
+      {tab === 'notes' && classrooms.length > 0 ? (
+        <Panel>
+          <div className="flex flex-wrap items-center gap-2 border-b border-black/5 px-3 py-2">
+            <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
+              {classrooms.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
+            {yearLabel ? <p className="text-xs text-neutral-500">{yearLabel}</p> : null}
+          </div>
+          {currentClass ? (
+            <GradeBookPanel
+              schoolId={schoolId}
+              auth={auth}
+              classroom={currentClass}
+              busy={busy}
+              onBusy={setBusy}
+              onMessage={setMessage}
+            />
+          ) : (
+            <p className="px-3 py-6 text-sm text-neutral-600">Choisissez une classe.</p>
+          )}
+        </Panel>
+      ) : null}
+
+      {tab === 'kits' && titulaireClasses.length === 0 ? (
         <p className="rounded-lg bg-white px-3 py-6 text-center text-sm text-neutral-600">
           Les kits se gèrent pour les classes dont vous êtes titulaire.
         </p>
       ) : null}
 
-      {tab === 'kits' && classrooms.length > 0 ? (
+      {tab === 'kits' && titulaireClasses.length > 0 ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <select className={`${inputClass} w-auto`} value={selectedClassroom} onChange={(e) => setSelectedClassroom(e.target.value)}>
-              {classrooms.map((classroom) => (
+            <select
+              className={`${inputClass} w-auto`}
+              value={titulaireClasses.some((row) => row.id === selectedClassroom) ? selectedClassroom : titulaireClasses[0].id}
+              onChange={(e) => setSelectedClassroom(e.target.value)}
+            >
+              {titulaireClasses.map((classroom) => (
                 <option key={classroom.id} value={classroom.id}>
                   {classroom.name}
                 </option>

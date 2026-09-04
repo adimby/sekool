@@ -4,10 +4,11 @@ Comptes démo (mot de passe `password`) :
 
 | Rôle | Email | Espace |
 |---|---|---|
-| Plateforme | `plateforme@fanabe.test` | Fusions d’identité (TOTP) |
+| Plateforme | `plateforme@fanabe.test` | Écoles (annuaire) et fusions d’identité (TOTP). Pas d’écolage. |
 | Direction | `direction.antsahabe@fanabe.test` | Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices |
+| Caisse | `caisse.antsahabe@fanabe.test` | Finance, Caisse, Kits (TOTP). Pas les familles. |
 | Titulaire | `teacher.antsahabe@fanabe.test` | Appel, Vie scolaire, Kits — titulaire (dossier de l’année) + Malagasy |
-| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel — Mathématiques 6ème A (pas titulaire, pas le dossier) |
+| Maths | `teacher.maths.antsahabe@fanabe.test` | Appel et Notes — Mathématiques 6ème A (pas titulaire, pas le dossier) |
 | Parent | `parent.andry@fanabe.test` | Enfants, Kits, Messages, Compte |
 
 Ouvrir l’interface (Vite `http://127.0.0.1:5173` en local). Après une action, un **bandeau vert** confirme ; un **bandeau rouge** signale une erreur.
@@ -20,12 +21,16 @@ Personnages utiles : **Hery** (6ème A, enfant d’Andry) — garder pour l’ap
 
 1. Se connecter en **direction**.
 2. **Attendu :** onglets Aujourd’hui, Familles, Classes, Finance, Caisse, Kits, Indices. Pas d’onglet Appel.
-3. Se déconnecter, se connecter en **professeur**.
-4. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction).
-5. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
-6. **Attendu :** Appel (et Kits). Vie scolaire indique que le tableau de bord est réservé au titulaire. Pas le dossier 6ème A.
-7. Se déconnecter, se connecter en **parent**.
-8. **Attendu :** onglets Enfants, Kits, Messages, Compte.
+3. Se déconnecter, se connecter en **caisse** (`caisse.antsahabe@fanabe.test`, TOTP).
+4. **Attendu :** espace **Caisse**, onglets Finance, Caisse, Kits. Pas Aujourd’hui, pas Familles, pas Classes, pas Indices.
+5. Se déconnecter, se connecter en **professeur**.
+6. **Attendu :** onglets Appel, Vie scolaire, Kits. Pas d’onglet Classe (organisation : direction). Pas d’onglet Notes (les notes sont dans Vie scolaire).
+7. Se déconnecter, se connecter en **Maths** (`teacher.maths.antsahabe@fanabe.test`).
+8. **Attendu :** onglets **Appel** et **Notes**. Pas d’onglet Vie scolaire, pas d’onglet Kits. Pas le dossier 6ème A.
+9. Se déconnecter, se connecter en **parent**.
+10. **Attendu :** onglets Enfants, Kits, Messages, Compte.
+11. Se déconnecter, se connecter en **plateforme** (`plateforme@fanabe.test`, TOTP).
+12. **Attendu :** onglets **Écoles** et **Fusions**. Bannière : la plateforme ne voit pas l’écolage. Liste des établissements (nom, ville, plan) sans montant ni élève.
 
 ---
 
@@ -110,12 +115,14 @@ En collège, les élèves restent en salle ; le professeur change. Nivo (titulai
 
 ## 8. Notes (déjà en place)
 
-Le titulaire saisit depuis **Vie scolaire**. La direction peut aussi depuis **Classes**.
+Le titulaire saisit depuis **Vie scolaire**. Le professeur de matière saisit depuis **Notes**. La direction peut aussi depuis **Classes**.
 
 1. Titulaire → **Vie scolaire** → 6ème A → section **Notes**.
 2. Saisir une note, **Enregistrer**.
-3. Parent → **Enfants** → section **Notes**.
-4. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
+3. Maths (`teacher.maths.antsahabe@fanabe.test`) → **Notes** → 6ème A.
+4. **Attendu :** carnet (élèves + notes), pas le dossier Vie scolaire. Saisir une note Maths.
+5. Parent → **Enfants** → section **Notes**.
+6. **Attendu :** la moyenne / matière apparaît. GS (maternelle) : pas de notes, livret à la place.
 
 ---
 
@@ -284,7 +291,7 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 2. Panneau **Doublons** : identifiant à conserver, identifiant doublon, motif. **Demander la fusion**.
 3. **Attendu :** statut Demandée. Le titulaire ne peut pas envoyer cette demande.
 4. Se déconnecter. Connexion **Plateforme** (TOTP, pas de SMS).
-5. **Attendu :** la demande, noms et identifiants seulement — pas de notes, pas de bulletin.
+5. **Attendu :** onglets Écoles et Fusions. Dans **Fusions** : la demande, noms et identifiants seulement — pas de notes, pas de bulletin, pas d’écolage.
 6. **Fusionner**.
 7. **Attendu :** les deux identifiants restent valides. **Défaire** rétablit le doublon.
 
@@ -305,12 +312,25 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 1. Titulaire Nivo → **Appel**, jour de semaine. **Attendu :** Mes cours (Malagasy), bouton **Démarrer**.
 2. **Démarrer** Malagasy. **Attendu :** N° + noms. Pas Maths.
 3. Nivo → **Vie scolaire** → 6ème A. **Attendu :** tableau de bord (effectif, enseignants, EDT, devoirs, discipline). Pas de bouton Radier.
-4. Connexion **Maths** (Haja). **Attendu :** seulement Mathématiques. **Vie scolaire** : réservé au titulaire. **Démarrer** puis appel.
+4. Connexion **Maths** (Haja). **Attendu :** Appel (Mathématiques) et **Notes**. **Pas** d’onglet Vie scolaire ni Kits. **Démarrer** puis appel.
 5. Un samedi sans cours : « Pas de cours à cette date. »
 
 ---
 
-## 24. Ce qui ne doit pas arriver
+## 24. Super-admin plateforme (écoles)
+
+1. Connexion **Plateforme**.
+2. **Attendu :** bannière « ne voit pas l’écolage ». Onglet **Écoles** ouvert. Liste (Antsahabe, Ambohipo, Itaosy) : nom, ville, plan — **aucun montant**.
+3. Créer une école (nom `École recette`, ville `Antananarivo`, direction email unique).
+4. **Attendu :** l’école apparaît. Un mot de passe temporaire s’affiche si le champ mot de passe était vide.
+5. Modifier le plan vers Plus **sans** motif.
+6. **Attendu :** erreur (motif obligatoire).
+7. Reprendre avec un motif (`Demande écrite de la direction.`).
+8. **Attendu :** plan Plus. Toujours aucun écolage à l’écran.
+
+---
+
+## 25. Ce qui ne doit pas arriver
 
 - Aucun SMS.
 - Aucun paiement en ligne.
@@ -327,5 +347,6 @@ Le canal papier existe déjà (absence, devoir, composition…). La direction le
 - Le TOTP ne passe jamais par SMS.
 - La caisse n’écrit rien hors ligne.
 - La direction ne fusionne pas elle-même deux identités.
-- La plateforme ne lit pas les dossiers scolaires.
+- La plateforme ne lit pas les dossiers scolaires, ni l’écolage, ni les factures.
+- Un enseignant de matière (non titulaire) ne voit pas les onglets Vie scolaire ni Kits.
 - L’export famille et la révocation d’un certificat exigent une confirmation d’identité.
