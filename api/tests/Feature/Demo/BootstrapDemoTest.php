@@ -50,6 +50,7 @@ it('lets the Antsahabe maths teacher log in after bootstrap', function () {
         'password' => 'password',
     ])->assertOk()
         ->assertJsonPath('schools.0.role', 'teacher')
+        ->assertJsonPath('schools.0.titulaire', false)
         ->assertJsonPath('person.first_name', 'Haja');
 
     expect(Schema::hasTable('timetable_substitutions'))->toBeTrue()
@@ -73,6 +74,7 @@ it('lets the Antsahabe teacher take attendance and forbids the direction from do
         'password' => 'password',
     ])->assertOk()
         ->assertJsonPath('schools.0.role', 'teacher')
+        ->assertJsonPath('schools.0.titulaire', true)
         ->assertJsonPath('is_student', false);
 
     $schoolId = $teacher->json('schools.0.id');

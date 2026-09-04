@@ -2,6 +2,7 @@
 
 namespace App\Http\Api\V1\Auth;
 
+use App\Domain\Academic\Models\Classroom;
 use App\Domain\Identity\Enums\PersonRoleType;
 use App\Domain\Identity\Models\PersonRole;
 use App\Domain\Identity\Models\UserAccount;
@@ -33,16 +34,28 @@ final class SessionPayload
     {
         $account->loadMissing('person');
 
-        $assignments = TenantContext::runWithRlsBypass(fn () => SchoolRoleAssignment::query()
-            ->withoutGlobalScopes()
-            ->where('person_id', $account->person_id)
-            ->whereNull('revoked_at')
-            ->with('school')
-            ->get());
+        [$assignments, $titulaireSchoolIds] = TenantContext::runWithRlsBypass(function () use ($account): array {
+            $assignments = SchoolRoleAssignment::query()
+                ->withoutGlobalScopes()
+                ->where('person_id', $account->person_id)
+                ->whereNull('revoked_at')
+                ->with('school')
+                ->get();
+
+            $titulaireSchoolIds = Classroom::query()
+                ->withoutGlobalScopes()
+                ->where('main_teacher_person_id', $account->person_id)
+                ->pluck('school_id')
+                ->unique()
+                ->values()
+                ->all();
+
+            return [$assignments, $titulaireSchoolIds];
+        });
 
         $schools = $assignments
             ->groupBy('school_id')
-            ->map(function (Collection $rows): array {
+            ->map(function (Collection $rows) use ($titulaireSchoolIds): array {
                 $assignment = $rows->first();
                 $roles = $rows
                     ->map(fn (SchoolRoleAssignment $row): string => $row->role->value)
@@ -56,6 +69,7 @@ final class SessionPayload
                     'code' => $assignment->school?->code,
                     'role' => self::primaryRole($roles),
                     'roles' => $roles,
+                    'titulaire' => in_array($assignment->school_id, $titulaireSchoolIds, true),
                 ];
             })
             ->values();

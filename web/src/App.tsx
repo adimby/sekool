@@ -69,6 +69,30 @@ type IdentityMergeRow = {
   duplicate: IdentityPersonRow | null
 }
 
+type PlatformSchoolAdmin = {
+  person_id: string
+  role: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+}
+
+type PlatformSchoolRow = {
+  id: string
+  name: string
+  short_name?: string | null
+  code: string
+  city?: string | null
+  region?: string | null
+  phone_e164?: string | null
+  email?: string | null
+  status: string
+  plan: string
+  created_at?: string | null
+  admins: PlatformSchoolAdmin[]
+  temporary_password?: string
+}
+
 type AttendanceRow = {
   id: string
   date: string
@@ -482,6 +506,7 @@ type ReliabilityOverview = {
 type DirectionTab = 'accueil' | 'famille' | 'classe' | 'finance' | 'caisse' | 'kits' | 'indices'
 type TeacherTab = 'appel' | 'vie' | 'kits'
 type ParentTab = 'enfants' | 'kits' | 'messages' | 'compte'
+type PlatformTab = 'ecoles' | 'fusions'
 
 const PAGE_SIZE = 40
 
@@ -500,6 +525,20 @@ const TEACHER_NAV: Array<{ id: TeacherTab; label: string }> = [
   { id: 'vie', label: 'Vie scolaire' },
   { id: 'kits', label: 'Kits' },
 ]
+
+const PLATFORM_NAV: Array<{ id: PlatformTab; label: string }> = [
+  { id: 'ecoles', label: 'Écoles' },
+  { id: 'fusions', label: 'Fusions' },
+]
+
+function teacherIsTitulaire(session: Session): boolean {
+  const school = session.schools.find((row) => row.id === session.schoolId) ?? session.schools[0]
+  return Boolean(school?.titulaire)
+}
+
+function teacherNavItems(session: Session): Array<{ id: TeacherTab; label: string }> {
+  return teacherIsTitulaire(session) ? TEACHER_NAV : TEACHER_NAV.filter((item) => item.id === 'appel')
+}
 
 const PARENT_NAV: Array<{ id: ParentTab; label: string }> = [
   { id: 'enfants', label: 'Enfants' },
@@ -525,6 +564,38 @@ export default function App() {
   const [directionTab, setDirectionTab] = useState<DirectionTab>('accueil')
   const [teacherTab, setTeacherTab] = useState<TeacherTab>('appel')
   const [parentTab, setParentTab] = useState<ParentTab>('enfants')
+  const [platformTab, setPlatformTab] = useState<PlatformTab>('ecoles')
+
+  useEffect(() => {
+    if (!session?.token) {
+      return
+    }
+    let cancelled = false
+    api<Session>('/api/v1/me', { token: session.token, schoolId: session.schoolId })
+      .then((me) => {
+        if (cancelled) {
+          return
+        }
+        setSession((current) => {
+          if (current === null) {
+            return current
+          }
+          const next = { ...current, ...me, token: current.token, schoolId: current.schoolId }
+          saveSession(next)
+          return next
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [session?.token])
+
+  useEffect(() => {
+    if (session && !teacherIsTitulaire(session) && (teacherTab === 'vie' || teacherTab === 'kits')) {
+      setTeacherTab('appel')
+    }
+  }, [session, teacherTab])
 
   function signedIn(next: Session) {
     const schoolId = next.schoolId ?? next.schools[0]?.id
@@ -604,8 +675,17 @@ export default function App() {
         ) : null}
         {workspace === 'teacher' ? (
           <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Cours">
-            {TEACHER_NAV.map((item) => (
+            {teacherNavItems(session).map((item) => (
               <button key={item.id} type="button" className={chromeTab(teacherTab === item.id)} onClick={() => setTeacherTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        {workspace === 'platform' ? (
+          <nav className="flex h-9 items-center gap-1 overflow-x-auto border-t border-white/10 px-3" aria-label="Plateforme">
+            {PLATFORM_NAV.map((item) => (
+              <button key={item.id} type="button" className={chromeTab(platformTab === item.id)} onClick={() => setPlatformTab(item.id)}>
                 {item.label}
               </button>
             ))}
@@ -628,7 +708,7 @@ export default function App() {
       ) : workspace === 'student' ? (
         <StudentScreen session={session} />
       ) : workspace === 'platform' ? (
-        <PlatformScreen session={session} />
+        <PlatformScreen session={session} tab={platformTab} />
       ) : (
         <ParentScreen session={session} tab={parentTab} />
       )}
@@ -4368,20 +4448,135 @@ function KitsPanel({
   )
 }
 
-function PlatformScreen({ session }: { session: Session }) {
+function PlatformScreen({ session, tab }: { session: Session; tab: PlatformTab }) {
+  const [schools, setSchools] = useState<PlatformSchoolRow[]>([])
   const [rows, setRows] = useState<IdentityMergeRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [plan, setPlan] = useState('starter')
+  const [status, setStatus] = useState('active')
+  const [reason, setReason] = useState('')
+  const [city, setCity] = useState('')
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    city: '',
+    region: 'Analamanga',
+    plan: 'starter',
+    admin_first_name: '',
+    admin_last_name: '',
+    admin_email: '',
+    admin_password: '',
+  })
   const auth = useMemo(() => ({ token: session.token }), [session.token])
 
-  async function load() {
+  async function loadSchools() {
+    const payload = await api<{ data: PlatformSchoolRow[] }>('/api/v1/platform/schools', auth)
+    setSchools(payload.data)
+  }
+
+  async function loadMerges() {
     const payload = await api<{ data: IdentityMergeRow[] }>('/api/v1/platform/identity-merges', auth)
     setRows(payload.data)
   }
 
   useEffect(() => {
-    load().catch((error: Error) => setMessage(error.message))
-  }, [auth.token])
+    if (tab === 'ecoles') {
+      loadSchools().catch((error: Error) => setMessage(error.message))
+    } else {
+      loadMerges().catch((error: Error) => setMessage(error.message))
+    }
+  }, [auth.token, tab])
+
+  async function createSchool(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage(null)
+    try {
+      const admin =
+        form.admin_first_name && form.admin_last_name && form.admin_email
+          ? {
+              first_name: form.admin_first_name,
+              last_name: form.admin_last_name,
+              email: form.admin_email,
+              ...(form.admin_password ? { password: form.admin_password } : {}),
+            }
+          : undefined
+      const payload = await api<{ data: PlatformSchoolRow }>('/api/v1/platform/schools', {
+        ...auth,
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name,
+          code: form.code || undefined,
+          city: form.city || undefined,
+          region: form.region || undefined,
+          plan: form.plan,
+          ...(admin ? { admin } : {}),
+        }),
+      })
+      const created = payload.data
+      setMessage(
+        created.temporary_password
+          ? `École créée. Mot de passe temporaire de la direction : ${created.temporary_password}`
+          : 'École créée. L’écolage et les dossiers restent invisibles à la plateforme.',
+      )
+      setForm({
+        name: '',
+        code: '',
+        city: '',
+        region: 'Analamanga',
+        plan: 'starter',
+        admin_first_name: '',
+        admin_last_name: '',
+        admin_email: '',
+        admin_password: '',
+      })
+      await loadSchools()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Création impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openEdit(school: PlatformSchoolRow) {
+    setEditingId(school.id)
+    setPlan(school.plan)
+    setStatus(school.status)
+    setCity(school.city ?? '')
+    setReason('')
+  }
+
+  async function saveSchool(event: FormEvent) {
+    event.preventDefault()
+    if (!editingId) {
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const current = schools.find((row) => row.id === editingId)
+      const body: Record<string, string> = { city }
+      if (current && (plan !== current.plan || status !== current.status)) {
+        body.plan = plan
+        body.status = status
+        body.reason = reason
+      }
+      await api(`/api/v1/platform/schools/${editingId}`, {
+        ...auth,
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      setMessage('Annuaire mis à jour. Aucune donnée d’écolage n’a été lue.')
+      setEditingId(null)
+      await loadSchools()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mise à jour impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function decide(id: string, action: 'approve' | 'refuse' | 'undo') {
     setBusy(true)
@@ -4391,7 +4586,7 @@ function PlatformScreen({ session }: { session: Session }) {
       setMessage(
         action === 'approve' ? 'Identités fusionnées. Les deux identifiants restent résolvables.' : action === 'refuse' ? 'Demande refusée.' : 'Fusion défaite.',
       )
-      await load()
+      await loadMerges()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Décision impossible.')
     } finally {
@@ -4403,45 +4598,160 @@ function PlatformScreen({ session }: { session: Session }) {
     <main className="mx-auto max-w-3xl space-y-3 px-3 py-4">
       {message ? <Banner message={message} onClear={() => setMessage(null)} /> : null}
       <Panel className="p-3">
-        <h1 className="text-sm font-semibold">Fusions d’identité</h1>
-        <p className="mt-1 text-xs text-neutral-600">
-          Réservé à la plateforme, sur demande motivée d’un établissement. Réversible. Les deux identifiants publics restent
-          valides. Aucun dossier scolaire n’est affiché ici.
+        <p className="text-xs leading-relaxed text-neutral-700">
+          FANABE administre les établissements (création, annuaire, abonnement).{' '}
+          <strong>La plateforme ne voit pas l’écolage, les factures, les paiements ni les dossiers d’élèves.</strong> Un
+          changement de statut ou de plan exige un motif, journalisé.
         </p>
       </Panel>
-      <Panel>
-        {rows.length === 0 ? (
-          <p className="px-3 py-4 text-sm text-neutral-600">Aucune demande.</p>
-        ) : (
-          <ul className="divide-y divide-black/5">
-            {rows.map((row) => (
-              <li key={row.id} className="px-3 py-3 text-sm">
-                <p className="font-medium">{mergeStatusLabel(row.status)}</p>
-                <p className="mt-1 text-xs text-neutral-600">Conserver {personPublicLabel(row.surviving)}</p>
-                <p className="text-xs text-neutral-600">Alias {personPublicLabel(row.duplicate)}</p>
-                <p className="mt-1 text-xs text-neutral-500">{row.reason}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {row.status === 'requested' ? (
-                    <>
-                      <button type="button" className={btnPrimary} disabled={busy} onClick={() => void decide(row.id, 'approve')}>
-                        Fusionner
+      {tab === 'ecoles' ? (
+        <>
+          <Panel className="p-3">
+            <h1 className="text-sm font-semibold">Nouvel établissement</h1>
+            <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(event) => void createSchool(event)}>
+              <Field label="Nom">
+                <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </Field>
+              <Field label="Code (optionnel)">
+                <input className={inputClass} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+              </Field>
+              <Field label="Ville">
+                <input className={inputClass} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              </Field>
+              <Field label="Région">
+                <input className={inputClass} value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} />
+              </Field>
+              <Field label="Plan">
+                <select className={inputClass} value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}>
+                  <option value="starter">Starter</option>
+                  <option value="plus">Plus</option>
+                </select>
+              </Field>
+              <div className="sm:col-span-2 mt-1 text-[11px] font-medium text-neutral-500">Direction (premier compte)</div>
+              <Field label="Prénom">
+                <input className={inputClass} value={form.admin_first_name} onChange={(e) => setForm({ ...form, admin_first_name: e.target.value })} />
+              </Field>
+              <Field label="Nom">
+                <input className={inputClass} value={form.admin_last_name} onChange={(e) => setForm({ ...form, admin_last_name: e.target.value })} />
+              </Field>
+              <Field label="Email">
+                <input className={inputClass} type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} />
+              </Field>
+              <Field label="Mot de passe (laissé vide = temporaire)">
+                <input className={inputClass} type="password" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} />
+              </Field>
+              <div className="sm:col-span-2">
+                <button type="submit" className={btnPrimary} disabled={busy || form.name.trim() === ''}>
+                  Créer l’école
+                </button>
+              </div>
+            </form>
+          </Panel>
+          <Panel>
+            {schools.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-neutral-600">Aucun établissement.</p>
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {schools.map((school) => (
+                  <li key={school.id} className="px-3 py-3 text-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{school.name}</p>
+                        <p className="text-xs text-neutral-500">
+                          {school.code} · {school.city ?? 'ville non renseignée'} · {school.plan} · {school.status}
+                        </p>
+                        {school.admins.length > 0 ? (
+                          <p className="mt-1 text-xs text-neutral-600">
+                            Direction : {school.admins.map((admin) => admin.email ?? `${admin.first_name} ${admin.last_name}`).join(', ')}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-neutral-500">Pas encore de compte direction.</p>
+                        )}
+                      </div>
+                      <button type="button" className={btnGhost} onClick={() => openEdit(school)}>
+                        Modifier
                       </button>
-                      <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'refuse')}>
-                        Refuser
-                      </button>
-                    </>
-                  ) : null}
-                  {row.status === 'merged' ? (
-                    <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'undo')}>
-                      Défaire
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+                    </div>
+                    {editingId === school.id ? (
+                      <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={(event) => void saveSchool(event)}>
+                        <Field label="Ville">
+                          <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} />
+                        </Field>
+                        <Field label="Plan">
+                          <select className={inputClass} value={plan} onChange={(e) => setPlan(e.target.value)}>
+                            <option value="starter">Starter</option>
+                            <option value="plus">Plus</option>
+                          </select>
+                        </Field>
+                        <Field label="Statut">
+                          <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+                            <option value="active">Actif</option>
+                            <option value="suspended">Suspendu</option>
+                          </select>
+                        </Field>
+                        <Field label="Motif (obligatoire si plan ou statut change)">
+                          <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
+                        </Field>
+                        <div className="sm:col-span-2 flex gap-2">
+                          <button type="submit" className={btnPrimary} disabled={busy}>
+                            Enregistrer
+                          </button>
+                          <button type="button" className={btnGhost} onClick={() => setEditingId(null)}>
+                            Annuler
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      ) : (
+        <>
+          <Panel className="p-3">
+            <h1 className="text-sm font-semibold">Fusions d’identité</h1>
+            <p className="mt-1 text-xs text-neutral-600">
+              Réservé à la plateforme, sur demande motivée d’un établissement. Réversible. Les deux identifiants publics restent
+              valides. Aucun dossier scolaire n’est affiché ici.
+            </p>
+          </Panel>
+          <Panel>
+            {rows.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-neutral-600">Aucune demande.</p>
+            ) : (
+              <ul className="divide-y divide-black/5">
+                {rows.map((row) => (
+                  <li key={row.id} className="px-3 py-3 text-sm">
+                    <p className="font-medium">{mergeStatusLabel(row.status)}</p>
+                    <p className="mt-1 text-xs text-neutral-600">Conserver {personPublicLabel(row.surviving)}</p>
+                    <p className="text-xs text-neutral-600">Alias {personPublicLabel(row.duplicate)}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{row.reason}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {row.status === 'requested' ? (
+                        <>
+                          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void decide(row.id, 'approve')}>
+                            Fusionner
+                          </button>
+                          <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'refuse')}>
+                            Refuser
+                          </button>
+                        </>
+                      ) : null}
+                      {row.status === 'merged' ? (
+                        <button type="button" className={btnGhost} disabled={busy} onClick={() => void decide(row.id, 'undo')}>
+                          Défaire
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      )}
     </main>
   )
 }

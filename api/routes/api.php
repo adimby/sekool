@@ -19,6 +19,7 @@ use App\Http\Api\V1\ParentPortal\ParentMessageController;
 use App\Http\Api\V1\ParentPortal\ShareTokenController;
 use App\Http\Api\V1\ParentPortal\TransferController as ParentTransferController;
 use App\Http\Api\V1\Platform\PlatformIdentityMergeController;
+use App\Http\Api\V1\Platform\PlatformSchoolController;
 use App\Http\Api\V1\PublicVerify\PublicCertificateVerifyController;
 use App\Http\Api\V1\School\AcademicHistoryController;
 use App\Http\Api\V1\School\AssignClassroomController;
@@ -244,6 +245,12 @@ Route::middleware(['auth:sanctum', SetPersonContext::class])->prefix('student')-
 });
 
 Route::middleware(['auth:sanctum', 'platform.admin'])->prefix('platform')->group(function (): void {
+    Route::get('/schools', [PlatformSchoolController::class, 'index']);
+    Route::post('/schools', [PlatformSchoolController::class, 'store']);
+    Route::get('/schools/{school}', [PlatformSchoolController::class, 'show']);
+    Route::patch('/schools/{school}', [PlatformSchoolController::class, 'update']);
+    Route::post('/schools/{school}/admins', [PlatformSchoolController::class, 'storeAdmin']);
+
     Route::get('/identity-merges', [PlatformIdentityMergeController::class, 'index']);
     Route::post('/identity-merges/{merge}/approve', [PlatformIdentityMergeController::class, 'approve']);
     Route::post('/identity-merges/{merge}/refuse', [PlatformIdentityMergeController::class, 'refuse']);

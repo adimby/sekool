@@ -87,6 +87,11 @@ it('lets the class teacher take attendance and hides school-wide directories', f
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.id', $classroom['id']);
 
+    $this->actingAs($teacher['account'], 'sanctum')
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('schools.0.titulaire', true);
+
     expect($this->actingAs($teacher['account'], 'sanctum')
         ->getJson("/api/v1/schools/{$schoolId}/classrooms/{$classroom['id']}/roster")
         ->json('data.students.0'))->not->toHaveKey('invoice');
@@ -200,6 +205,7 @@ it('exposes distinct session flags for teacher and student', function () {
         ->assertOk()
         ->assertJsonPath('schools.0.role', 'teacher')
         ->assertJsonPath('schools.0.roles.0', 'teacher')
+        ->assertJsonPath('schools.0.titulaire', false)
         ->assertJsonPath('is_student', false);
 
     $studentAccount = TenantContext::runWithRlsBypass(fn () => UserAccount::factory()->create([

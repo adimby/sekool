@@ -4,6 +4,7 @@ type School = {
   code: string
   role: string
   roles?: string[]
+  titulaire?: boolean
 }
 
 export type Session = {
