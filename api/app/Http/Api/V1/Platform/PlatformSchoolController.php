@@ -90,6 +90,9 @@ final class PlatformSchoolController extends Controller
             'status' => ['sometimes', Rule::in(['active', 'suspended'])],
             'plan' => ['sometimes', Rule::in(['starter', 'plus'])],
             'reason' => ['required_with:status,plan', 'nullable', 'string', 'min:12', 'max:500'],
+        ], [
+            'reason.required_with' => 'Un motif est obligatoire pour changer le statut ou le plan.',
+            'reason.min' => 'Le motif doit expliquer le changement (au moins 12 caractères).',
         ]);
 
         $reason = $data['reason'] ?? null;

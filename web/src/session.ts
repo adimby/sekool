@@ -86,9 +86,13 @@ export async function api<T>(path: string, init: RequestInit & { token?: string;
     headers.set('Authorization', `Bearer ${init.token}`)
   }
   const response = await fetch(path, { ...init, headers })
-  const payload = (await response.json().catch(() => ({}))) as T & { message?: string }
+  const payload = (await response.json().catch(() => ({}))) as T & {
+    message?: string
+    errors?: Record<string, string[]>
+  }
   if (!response.ok) {
-    const fallback = payload.message ?? `Erreur ${response.status}`
+    const firstError = payload.errors ? Object.values(payload.errors).flat()[0] : undefined
+    const fallback = firstError ?? payload.message ?? `Erreur ${response.status}`
     if (response.status >= 500 || fallback === 'Server Error') {
       throw new Error('Chargement impossible. Réessayez dans un instant.')
     }
